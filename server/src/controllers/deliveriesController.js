@@ -1,0 +1,167 @@
+const pool = require('../config/db');
+
+// Shared SELECT for delivery queries — uses correct vehicle column names
+const DELIVERY_SELECT = `
+  SELECT d.*, 
+         u.name as staff_name, u.mobile as staff_mobile,
+         c.name as customer_name, c.mobile as customer_mobile,
+         v.registration_no, v.brand, v.model
+  FROM deliveries d
+  JOIN users u ON d.staff_id = u.id
+  JOIN users c ON d.customer_id = c.id
+  JOIN job_carts jc ON d.job_cart_id = jc.id
+  JOIN vehicles v ON jc.vehicle_id = v.id
+`;
+
+// ─── LIST ──────────────────────────────────
+exports.list = async (req, res) => {
+  try {
+    const { status } = req.query;
+    let where = '1=1';
+    const params = [];
+    
+    // Filter by role
+    if (req.user.role === 'customer') {
+      where += ' AND d.customer_id = ?';
+      params.push(req.user.id);
+    } else if (req.user.role === 'staff') {
+      where += ' AND d.staff_id = ?';
+      params.push(req.user.id);
+    }
+
+    if (status) {
+      where += ' AND d.status = ?';
+      params.push(status);
+    }
+
+    const [rows] = await pool.query(
+      `${DELIVERY_SELECT} WHERE ${where} ORDER BY d.started_at DESC`,
+      params
+    );
+
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('Deliveries list error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── GET ONE ─────────────────────────────
+exports.getOne = async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `${DELIVERY_SELECT} WHERE d.id = ?`,
+      [req.params.id]
+    );
+
+    if (!rows.length) return res.status(404).json({ success: false, error: 'Delivery not found' });
+    
+    const delivery = rows[0];
+
+    // Auth check
+    if (req.user.role === 'customer' && req.user.id !== delivery.customer_id) {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+    if (req.user.role === 'staff' && req.user.id !== delivery.staff_id) {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+
+    res.json({ success: true, data: delivery });
+  } catch (err) {
+    console.error('Delivery getOne error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── GET ACTIVE DELIVERY (Staff) ─────────
+exports.getActiveDelivery = async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `${DELIVERY_SELECT} WHERE d.staff_id = ? AND d.status = 'in_transit'`,
+      [req.user.id]
+    );
+
+    res.json({ success: true, data: rows.length ? rows[0] : null });
+  } catch (err) {
+    console.error('Delivery active error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── GET MY DELIVERY (Customer) ────────
+exports.getMyDelivery = async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `${DELIVERY_SELECT} WHERE d.customer_id = ? AND d.status = 'in_transit'`,
+      [req.user.id]
+    );
+
+    res.json({ success: true, data: rows.length ? rows[0] : null });
+  } catch (err) {
+    console.error('Delivery my error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── START DELIVERY (Staff only) ───────
+exports.startDelivery = async (req, res) => {
+  try {
+    const { job_cart_id } = req.body;
+    
+    // Check if job cart exists and get customer_id from vehicles join
+    const [jobRows] = await pool.query(
+      `SELECT jc.id, v.customer_id 
+       FROM job_carts jc 
+       JOIN vehicles v ON jc.vehicle_id = v.id
+       WHERE jc.id = ?`,
+      [job_cart_id]
+    );
+    if (!jobRows.length) return res.status(404).json({ success: false, error: 'Job cart not found' });
+    
+    const job = jobRows[0];
+    
+    // Check for existing active delivery
+    const [existing] = await pool.query(
+      'SELECT id FROM deliveries WHERE job_cart_id = ? AND status = "in_transit"',
+      [job_cart_id]
+    );
+    if (existing.length) {
+      return res.status(400).json({ success: false, error: 'Delivery already in progress for this job cart' });
+    }
+
+    const [result] = await pool.query(`
+      INSERT INTO deliveries (job_cart_id, staff_id, customer_id, status)
+      VALUES (?, ?, ?, 'in_transit')
+    `, [job.id, req.user.id, job.customer_id]);
+
+    res.json({ success: true, data: { id: result.insertId }, message: 'Delivery started' });
+  } catch (err) {
+    console.error('Delivery start error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── COMPLETE DELIVERY (Staff only) ────
+exports.completeDelivery = async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM deliveries WHERE id = ?', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ success: false, error: 'Delivery not found' });
+    
+    const delivery = rows[0];
+
+    if (delivery.staff_id !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+
+    if (delivery.status === 'delivered') {
+      return res.status(400).json({ success: false, error: 'Delivery already completed' });
+    }
+
+    await pool.query('UPDATE deliveries SET status = "delivered", delivered_at = NOW() WHERE id = ?', [req.params.id]);
+
+    res.json({ success: true, message: 'Delivery completed' });
+  } catch (err) {
+    console.error('Delivery complete error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};

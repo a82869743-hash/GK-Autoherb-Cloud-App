@@ -1,0 +1,218 @@
+const pool = require('../config/db');
+
+// Get all unique brands (makes)
+exports.getBrands = async (req, res) => {
+  try {
+    const query = 'SELECT DISTINCT make FROM vehicle_master ORDER BY make ASC';
+    const [rows] = await pool.query(query);
+    res.json({ success: true, data: rows.map(r => r.make).filter(Boolean) });
+  } catch (error) {
+    console.error('Error fetching brands:', error);
+    res.status(500).json({ error: 'Server error fetching brands' });
+  }
+};
+
+// Get models for a specific brand
+exports.getModels = async (req, res) => {
+  try {
+    const { brand } = req.query;
+    if (!brand) return res.status(400).json({ error: 'Brand query parameter required' });
+
+    const query = 'SELECT DISTINCT model FROM vehicle_master WHERE make = ? ORDER BY model ASC';
+    const [rows] = await pool.query(query, [brand]);
+    res.json({ success: true, data: rows.map(r => r.model).filter(Boolean) });
+  } catch (error) {
+    console.error('Error fetching models:', error);
+    res.status(500).json({ error: 'Server error fetching models' });
+  }
+};
+
+// Get variants for a specific brand and model
+exports.getVariants = async (req, res) => {
+  try {
+    const { brand, model } = req.query;
+    if (!brand || !model) return res.status(400).json({ error: 'Brand and model query parameters required' });
+
+    const query = 'SELECT DISTINCT variant FROM vehicle_master WHERE make = ? AND model = ? ORDER BY variant ASC';
+    const [rows] = await pool.query(query, [brand, model]);
+    res.json({ success: true, data: rows.map(r => r.variant).filter(Boolean) });
+  } catch (error) {
+    console.error('Error fetching variants:', error);
+    res.status(500).json({ error: 'Server error fetching variants' });
+  }
+};
+
+// Get logged-in user's vehicles
+exports.getVehicles = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    // Note: The schema uses customer_id to link vehicles to users
+    const query = 'SELECT * FROM vehicles WHERE customer_id = ? ORDER BY is_primary DESC, created_at DESC';
+    const [vehicles] = await pool.query(query, [userId]);
+    
+    res.json({ success: true, data: vehicles });
+  } catch (error) {
+    console.error('Error fetching user vehicles:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch vehicles' });
+  }
+};
+
+// ─── ADD CAR ────────────────────────────────────────────────
+// POST /vehicles/add
+// Body: { brand, model, registration_no? }
+// Automatically sets as primary if user has no other cars.
+exports.addCar = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const userId = req.user.id;
+    const { brand, model, registration_no } = req.body;
+
+    // Validate required fields
+    if (!brand || !model) {
+      await conn.rollback();
+      return res.status(400).json({
+        success: false,
+        error: 'Brand and model are required',
+      });
+    }
+
+    // Check how many cars the user has
+    const [existing] = await conn.query(
+      'SELECT COUNT(*) AS count FROM vehicles WHERE customer_id = ?',
+      [userId]
+    );
+    const isFirst = existing[0].count === 0;
+
+    // Insert new car — first car is automatically primary
+    const [result] = await conn.query(
+      `INSERT INTO vehicles (customer_id, brand, model, registration_no, is_primary)
+       VALUES (?, ?, ?, ?, ?)`,
+      [userId, brand.trim(), model.trim(), registration_no?.toUpperCase().trim() || null, isFirst ? 1 : 0]
+    );
+
+    await conn.commit();
+
+    res.status(201).json({
+      success: true,
+      data: {
+        id: result.insertId,
+        brand: brand.trim(),
+        model: model.trim(),
+        registration_no: registration_no?.toUpperCase().trim() || null,
+        is_primary: isFirst ? 1 : 0,
+      },
+      message: 'Car added successfully',
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Add car error:', err);
+    res.status(500).json({ success: false, error: 'Failed to add car' });
+  } finally {
+    conn.release();
+  }
+};
+
+// ─── SET PRIMARY CAR ────────────────────────────────────────
+// PATCH /vehicles/:id/primary
+// Unsets old primary, sets the specified car as primary.
+exports.setPrimary = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const userId = req.user.id;
+    const carId = req.params.id;
+
+    // Verify car belongs to user
+    const [cars] = await conn.query(
+      'SELECT id FROM vehicles WHERE id = ? AND customer_id = ?',
+      [carId, userId]
+    );
+    if (!cars.length) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, error: 'Car not found' });
+    }
+
+    // Unset all primary flags for this user
+    await conn.query(
+      'UPDATE vehicles SET is_primary = 0 WHERE customer_id = ?',
+      [userId]
+    );
+
+    // Set the specified car as primary
+    await conn.query(
+      'UPDATE vehicles SET is_primary = 1 WHERE id = ?',
+      [carId]
+    );
+
+    await conn.commit();
+    res.json({ success: true, message: 'Primary car updated' });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Set primary error:', err);
+    res.status(500).json({ success: false, error: 'Failed to update primary car' });
+  } finally {
+    conn.release();
+  }
+};
+
+// ─── DELETE CAR ─────────────────────────────────────────────
+// DELETE /vehicles/:id
+// Prevents deletion if the car is linked to active job carts.
+exports.deleteCar = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const userId = req.user.id;
+    const carId = req.params.id;
+
+    // Verify car belongs to user
+    const [cars] = await conn.query(
+      'SELECT id, is_primary FROM vehicles WHERE id = ? AND customer_id = ?',
+      [carId, userId]
+    );
+    if (!cars.length) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, error: 'Car not found' });
+    }
+
+    // Check if car has active job carts
+    const [activeJobs] = await conn.query(
+      "SELECT COUNT(*) AS count FROM job_carts WHERE vehicle_id = ? AND status != 'complete'",
+      [carId]
+    );
+    if (activeJobs[0].count > 0) {
+      await conn.rollback();
+      return res.status(422).json({
+        success: false,
+        error: 'Cannot delete a car with active job carts',
+      });
+    }
+
+    const wasPrimary = cars[0].is_primary;
+
+    // Delete the car
+    await conn.query('DELETE FROM vehicles WHERE id = ?', [carId]);
+
+    // If deleted car was primary, promote the next car
+    if (wasPrimary) {
+      await conn.query(
+        'UPDATE vehicles SET is_primary = 1 WHERE customer_id = ? ORDER BY created_at ASC LIMIT 1',
+        [userId]
+      );
+    }
+
+    await conn.commit();
+    res.json({ success: true, message: 'Car deleted successfully' });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Delete car error:', err);
+    res.status(500).json({ success: false, error: 'Failed to delete car' });
+  } finally {
+    conn.release();
+  }
+};
+

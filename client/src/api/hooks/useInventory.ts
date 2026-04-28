@@ -1,0 +1,66 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import api from '../axiosInstance';
+import type { InventoryItem, PaginatedResponse, ApiResponse } from '../../types';
+
+export const useInventory = (params: { search?: string; low_stock?: boolean; page?: number; limit?: number }) =>
+  useQuery({
+    queryKey: ['inventory', params],
+    queryFn: async () => {
+      const res = await api.get<PaginatedResponse<InventoryItem>>('/inventory', { params });
+      return res.data;
+    },
+  });
+
+export const useInventoryItem = (id: number | undefined) =>
+  useQuery({
+    queryKey: ['inventory-item', id],
+    queryFn: async () => {
+      const res = await api.get<ApiResponse<InventoryItem>>(`/inventory/${id}`);
+      return res.data.data;
+    },
+    enabled: !!id,
+  });
+
+export const useCreateInventory = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { product_name: string; unit: string; quantity: number; low_stock_threshold: number }) => {
+      const res = await api.post('/inventory', payload);
+      return res.data.data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory'] }),
+  });
+};
+
+export const useUpdateInventory = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: { id: number; product_name?: string; unit?: string; low_stock_threshold?: number }) => {
+      const res = await api.put(`/inventory/${id}`, body);
+      return res.data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory'] }),
+  });
+};
+
+export const useAdjustQuantity = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, delta }: { id: number; delta: number }) => {
+      const res = await api.patch(`/inventory/${id}/quantity`, { delta });
+      return res.data.data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory'] }),
+  });
+};
+
+export const useDeleteInventory = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const res = await api.delete(`/inventory/${id}`);
+      return res.data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory'] }),
+  });
+};

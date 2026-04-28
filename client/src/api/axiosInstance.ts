@@ -1,0 +1,47 @@
+import axios from 'axios';
+
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL,
+  timeout: 30_000,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+// Attach JWT on every request
+api.interceptors.request.use((config) => {
+  try {
+    const stored = localStorage.getItem('gk-auth-v1');
+    if (stored) {
+      const { state } = JSON.parse(stored);
+      if (state?.token) config.headers.Authorization = `Bearer ${state.token}`;
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return config;
+});
+
+// Response interceptor — auto-logout on 401, friendly error messages
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    // Network error (server down / no connection)
+    if (!err.response) {
+      err.message = 'Unable to connect to server. Please check your connection.';
+      return Promise.reject(err);
+    }
+
+    // Auto-logout on 401 (token expired/invalid)
+    if (err.response.status === 401) {
+      localStorage.removeItem('gk-auth-v1');
+      // Only redirect if not already on login/register
+      const path = window.location.pathname;
+      if (path !== '/login' && path !== '/register') {
+        window.location.href = '/login';
+      }
+    }
+
+    return Promise.reject(err);
+  }
+);
+
+export default api;
