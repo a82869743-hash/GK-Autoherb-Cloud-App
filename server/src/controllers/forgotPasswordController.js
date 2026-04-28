@@ -95,20 +95,12 @@ exports.forgotPassword = async (req, res) => {
       userId: users[0].id,
     });
 
-    // Send OTP via SMS (or log in dev mode)
-    if (process.env.MSG91_AUTH_KEY) {
-      // Production: send via MSG91
-      const messagingService = require('../services/messagingService');
-      await messagingService.sendSMS(`91${mobile}`, process.env.MSG91_OTP_TEMPLATE_ID || '', '0', {
-        otp: otp,
-      });
-      console.log(`[OTP] Sent to ${mobile}`);
-    } else {
-      // Development: log to console
-      console.log(`\n╔══════════════════════════════════════╗`);
-      console.log(`║  OTP for ${mobile}: ${otp}          ║`);
-      console.log(`║  Expires in 5 minutes                ║`);
-      console.log(`╚══════════════════════════════════════╝\n`);
+    // Send OTP via 2Factor.in SMS (or log in dev mode if no API key)
+    const sendOtp = require('../utils/sendOtp');
+    const otpResult = await sendOtp(mobile, otp);
+    if (!otpResult.success && !otpResult.mocked) {
+      console.error(`[OTP] Failed to send to ${mobile} — user will see OTP in dev mode only`);
+      // Do NOT block the flow — OTP is still stored, user can retry
     }
 
     res.json({

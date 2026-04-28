@@ -102,7 +102,30 @@ exports.create = async (req, res) => {
     }
 
     await conn.commit();
-    res.status(201).json({ success: true, data: { id: result.insertId }, message: 'Job cart created' });
+
+    const jobCartId = result.insertId;
+
+    // ── Fire-and-forget SMS notification (TASK 6) ───────────
+    // NEVER block the response — SMS failure is non-critical
+    try {
+      const sendSms = require('../utils/sendSms');
+      const appUrl = process.env.APP_BASE_URL || 'https://gkautobook.cloud';
+      // Look up customer mobile
+      const [custRows] = await pool.query(
+        `SELECT u.mobile, u.name FROM users u JOIN vehicles v ON v.customer_id = u.id WHERE v.id = ?`,
+        [vehicleId]
+      );
+      if (custRows.length && custRows[0].mobile) {
+        const msg = `GK AutoHerb: Your job card #${jobCartId} is ready. Track here: ${appUrl}/customer/job-carts`;
+        sendSms(custRows[0].mobile, msg).catch(err => {
+          console.error('[SMS] Job card notification failed (non-blocking):', err.message);
+        });
+      }
+    } catch (smsErr) {
+      console.error('[SMS] Job card SMS setup failed (non-blocking):', smsErr.message);
+    }
+
+    res.status(201).json({ success: true, data: { id: jobCartId }, message: 'Job cart created' });
   } catch (err) {
     await conn.rollback();
     console.error('Create job cart error:', err);
@@ -367,9 +390,10 @@ exports.complete = async (req, res) => {
 
     await conn.commit();
 
-    // 8. Async WhatsApp/SMS (non-blocking — never fail completion for this)
+    // 8. Async WhatsApp + SMS (non-blocking — never fail completion for this)
     try {
       const messagingService = require('../services/messagingService');
+      const sendSms = require('../utils/sendSms');
       const [custInfo] = await pool.query(
         `SELECT u.name, u.mobile, v.brand, v.model, v.registration_no
          FROM users u JOIN vehicles v ON v.customer_id = u.id
@@ -380,12 +404,17 @@ exports.complete = async (req, res) => {
         const c = custInfo[0];
         const [svcs] = await pool.query('SELECT service_name FROM job_services WHERE job_cart_id = ?', [id]);
         const serviceList = svcs.map(s => s.service_name).join(', ');
-        const messageBody = `Dear ${c.name}, your ${c.brand} ${c.model} (${c.registration_no}) service is complete at GK AutoHerb! Services: ${serviceList}. Total: ₹${grandTotal}. Thank you!`;
-        // Fire-and-forget WhatsApp
+        const messageBody = `Dear ${c.name}, your ${c.brand} ${c.model} (${c.registration_no}) service is complete at GK AutoHerb! Services: ${serviceList}. Total: Rs.${grandTotal}. Thank you!`;
+        
+        // Fire-and-forget WhatsApp (existing)
         messagingService.sendWhatsApp(`91${c.mobile}`, 'job_complete', { body: messageBody }).catch(() => {});
+        
+        // Fire-and-forget 2Factor SMS (new)
+        sendSms(c.mobile, messageBody).catch(() => {});
+        
         // Log to messages_log
         pool.query(
-          `INSERT INTO messages_log (customer_id, mobile, type, channel, status, message_preview) VALUES (?, ?, 'job_complete', 'whatsapp', 'queued', ?)`,
+          `INSERT INTO messages_log (customer_id, mobile, type, channel, status, message_preview) VALUES (?, ?, 'job_complete', 'sms', 'queued', ?)`,
           [customerId, c.mobile, messageBody.substring(0, 100)]
         ).catch(() => {});
       }

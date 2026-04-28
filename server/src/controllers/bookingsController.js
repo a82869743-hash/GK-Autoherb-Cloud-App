@@ -235,10 +235,29 @@ exports.create = async (req, res) => {
 
     await conn.commit();
 
+    const bookingId = result.insertId;
+
+    // ── Fire-and-forget SMS: Booking confirmation (TASK 7) ──
+    try {
+      const sendSms = require('../utils/sendSms');
+      const [custRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [customerId]);
+      const [slotRows] = await pool.query('SELECT slot_date, start_time FROM slots WHERE id = ?', [slot_id]);
+      if (custRows.length && custRows[0].mobile && slotRows.length) {
+        const date = new Date(slotRows[0].slot_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+        const time = slotRows[0].start_time ? slotRows[0].start_time.substring(0, 5) : '';
+        const msg = `GK AutoHerb: Hi ${custRows[0].name}, your booking #${bookingId} is confirmed for ${date} at ${time}. Thank you!`;
+        sendSms(custRows[0].mobile, msg).catch(err => {
+          console.error('[SMS] Booking confirmation failed (non-blocking):', err.message);
+        });
+      }
+    } catch (smsErr) {
+      console.error('[SMS] Booking SMS setup failed (non-blocking):', smsErr.message);
+    }
+
     res.status(201).json({
       success: true,
       data: {
-        id: result.insertId,
+        id: bookingId,
         package_used: packageUsed,
         ...(packageInfo && { package_info: packageInfo }),
       },
