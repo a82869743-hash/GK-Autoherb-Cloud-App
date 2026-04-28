@@ -105,24 +105,19 @@ exports.create = async (req, res) => {
 
     const jobCartId = result.insertId;
 
-    // ── Fire-and-forget SMS notification (TASK 6) ───────────
+    // ── Fire-and-forget SMS notification ──────────────────────
     // NEVER block the response — SMS failure is non-critical
     try {
       const sendSms = require('../utils/sendSms');
-      const appUrl = process.env.APP_BASE_URL || 'https://gkautobook.cloud';
-      // Look up customer mobile
       const [custRows] = await pool.query(
-        `SELECT u.mobile, u.name FROM users u JOIN vehicles v ON v.customer_id = u.id WHERE v.id = ?`,
+        `SELECT u.mobile FROM users u JOIN vehicles v ON v.customer_id = u.id WHERE v.id = ?`,
         [vehicleId]
       );
       if (custRows.length && custRows[0].mobile) {
-        const msg = `GK AutoHerb: Your job card #${jobCartId} is ready. Track here: ${appUrl}/customer/job-carts`;
-        sendSms(custRows[0].mobile, msg).catch(err => {
-          console.error('[SMS] Job card notification failed (non-blocking):', err.message);
-        });
+        sendSms(custRows[0].mobile, jobCartId).catch(() => {});
       }
     } catch (smsErr) {
-      console.error('[SMS] Job card SMS setup failed (non-blocking):', smsErr.message);
+      console.error('[SMS] Job card SMS failed (non-blocking):', smsErr.message);
     }
 
     res.status(201).json({ success: true, data: { id: jobCartId }, message: 'Job cart created' });

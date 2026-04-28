@@ -21,7 +21,7 @@ const pool = require('../config/db');
 const otpStore = new Map();
 
 // Configuration
-const OTP_LENGTH = 6;
+const OTP_LENGTH = 4;
 const OTP_EXPIRY_MS = 5 * 60 * 1000;      // 5 minutes
 const MAX_OTP_ATTEMPTS = 5;                 // Max verify attempts per OTP
 const RESET_TOKEN_EXPIRY = '10m';           // JWT expiry for reset token
@@ -95,12 +95,11 @@ exports.forgotPassword = async (req, res) => {
       userId: users[0].id,
     });
 
-    // Send OTP via 2Factor.in SMS (or log in dev mode if no API key)
+    // Send OTP via 2Factor.in SMS
     const sendOtp = require('../utils/sendOtp');
-    const otpResult = await sendOtp(mobile, otp);
-    if (!otpResult.success && !otpResult.mocked) {
-      console.error(`[OTP] Failed to send to ${mobile} — user will see OTP in dev mode only`);
-      // Do NOT block the flow — OTP is still stored, user can retry
+    const sent = await sendOtp(mobile, otp);
+    if (!sent) {
+      console.error(`[OTP] Failed to send to ${mobile} — OTP is stored, user can retry`);
     }
 
     res.json({
