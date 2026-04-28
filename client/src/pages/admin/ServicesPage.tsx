@@ -90,7 +90,7 @@ export default function ServicesPage() {
   return (
     <>
       <AdminTopBar
-        title="Services & Packages"
+        title="Services"
         subtitle={`${services.length} services`}
         actions={<Button onClick={openAdd} icon={<Plus size={16} />}>Add Service</Button>}
       />
