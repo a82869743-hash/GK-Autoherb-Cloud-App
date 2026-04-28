@@ -3,7 +3,7 @@ const pool = require('../config/db');
 // Helper: fetch related services & products for a package
 async function enrichPackage(pkg) {
   const [services] = await pool.query(
-    `SELECT s.id, s.name, s.price_hatchback, s.price_medium_hatchback, s.price_sedan, s.price_premium_sedan, s.price_suv
+    `SELECT ps.id AS ps_id, ps.total_count, s.id, s.name, s.price_hatchback, s.price_medium_hatchback, s.price_sedan, s.price_premium_sedan, s.price_suv
      FROM package_services ps JOIN services s ON ps.service_id = s.id
      WHERE ps.package_id = ?`, [pkg.id]
   );
@@ -16,10 +16,19 @@ async function enrichPackage(pkg) {
 }
 
 // ─── LIST ───────────────────────────────────
+// Role-based filtering: Admin sees all, Customer/public sees only active + visible
 exports.list = async (req, res) => {
   try {
     const { published_only } = req.query;
+    const userRole = req.user?.role || null;
+
     let where = '1=1';
+
+    // Customer or unauthenticated: only show active + visible packages
+    if (userRole !== 'admin') {
+      where += ' AND is_active = 1 AND visible_to_customer = 1';
+    }
+
     if (published_only === 'true') where += ' AND is_published = 1';
 
     const [rows] = await pool.query(`SELECT * FROM packages WHERE ${where} ORDER BY name ASC`);
@@ -45,32 +54,81 @@ exports.getOne = async (req, res) => {
 };
 
 // ─── CREATE ─────────────────────────────────
+// Supports both old format (service_ids) and new custom builder format (services with total_count)
 exports.create = async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
     const {
-      name, description, price_hatchback = 0, price_medium_hatchback = 0, price_sedan = 0, price_premium_sedan = 0, price_suv = 0,
+      name, description,
+      price_hatchback = 0, price_medium_hatchback = 0, price_sedan = 0, price_premium_sedan = 0, price_suv = 0,
       wash_count = 0, wax_count = 0, is_published = false,
-      service_ids = [], products = []
+      visible_to_customer = true,
+      service_ids = [],       // Legacy format: array of service IDs (no count)
+      services = [],          // New format: array of { service_id, total_count }
+      products = []
     } = req.body;
 
-    if (!name) { await conn.rollback(); return res.status(400).json({ success: false, error: 'Package name is required' }); }
+    // ── Validation ──────────────────────────────────
+    if (!name || !name.trim()) {
+      await conn.rollback();
+      return res.status(400).json({ success: false, error: 'Package name is required' });
+    }
 
+    // Check name uniqueness
+    const [existing] = await conn.query('SELECT id FROM packages WHERE name = ?', [name.trim()]);
+    if (existing.length) {
+      await conn.rollback();
+      return res.status(400).json({ success: false, error: 'A package with this name already exists' });
+    }
+
+    // Validate services from custom builder
+    if (services.length > 0) {
+      for (const svc of services) {
+        if (!svc.service_id) {
+          await conn.rollback();
+          return res.status(400).json({ success: false, error: 'Each service must have a service_id' });
+        }
+        if (!svc.total_count || svc.total_count <= 0) {
+          await conn.rollback();
+          return res.status(400).json({ success: false, error: 'Each service must have a count greater than 0' });
+        }
+      }
+    }
+
+    // ── Insert package ──────────────────────────────
     const [result] = await conn.query(
-      'INSERT INTO packages (name, description, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, wash_count, wax_count, is_published) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, description || null, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, wash_count, wax_count, is_published ? 1 : 0]
+      `INSERT INTO packages (name, description, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, wash_count, wax_count, is_published, visible_to_customer)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name.trim(), description || null, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, wash_count, wax_count, is_published ? 1 : 0, visible_to_customer ? 1 : 0]
     );
     const pkgId = result.insertId;
 
-    // Insert service links
-    for (const sid of service_ids) {
-      await conn.query('INSERT INTO package_services (package_id, service_id) VALUES (?, ?)', [pkgId, sid]);
+    // ── Insert service links (new format with total_count) ──
+    if (services.length > 0) {
+      for (const svc of services) {
+        await conn.query(
+          'INSERT INTO package_services (package_id, service_id, total_count) VALUES (?, ?, ?)',
+          [pkgId, svc.service_id, svc.total_count]
+        );
+      }
+    }
+    // ── Legacy format (just service IDs, total_count defaults to 1) ──
+    else if (service_ids.length > 0) {
+      for (const sid of service_ids) {
+        await conn.query(
+          'INSERT INTO package_services (package_id, service_id) VALUES (?, ?)',
+          [pkgId, sid]
+        );
+      }
     }
 
-    // Insert product links
+    // ── Insert product links ────────────────────────
     for (const p of products) {
-      await conn.query('INSERT INTO package_products (package_id, product_id, quantity) VALUES (?, ?, ?)', [pkgId, p.product_id, p.quantity || 1]);
+      await conn.query(
+        'INSERT INTO package_products (package_id, product_id, quantity) VALUES (?, ?, ?)',
+        [pkgId, p.product_id, p.quantity || 1]
+      );
     }
 
     await conn.commit();
@@ -90,15 +148,24 @@ exports.update = async (req, res) => {
     const { id } = req.params;
     const {
       name, description, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv,
-      wash_count, wax_count, is_published,
-      service_ids, products
+      wash_count, wax_count, is_published, visible_to_customer,
+      service_ids, services, products
     } = req.body;
 
     const [existing] = await conn.query('SELECT id FROM packages WHERE id = ?', [id]);
     if (!existing.length) { await conn.rollback(); return res.status(404).json({ success: false, error: 'Package not found' }); }
 
+    // Check name uniqueness (if changing name)
+    if (name !== undefined) {
+      const [dupe] = await conn.query('SELECT id FROM packages WHERE name = ? AND id != ?', [name.trim(), id]);
+      if (dupe.length) {
+        await conn.rollback();
+        return res.status(400).json({ success: false, error: 'A package with this name already exists' });
+      }
+    }
+
     const updates = []; const params = [];
-    if (name !== undefined) { updates.push('name = ?'); params.push(name); }
+    if (name !== undefined) { updates.push('name = ?'); params.push(name.trim()); }
     if (description !== undefined) { updates.push('description = ?'); params.push(description); }
     if (price_hatchback !== undefined) { updates.push('price_hatchback = ?'); params.push(price_hatchback); }
     if (price_medium_hatchback !== undefined) { updates.push('price_medium_hatchback = ?'); params.push(price_medium_hatchback); }
@@ -108,14 +175,25 @@ exports.update = async (req, res) => {
     if (wash_count !== undefined) { updates.push('wash_count = ?'); params.push(wash_count); }
     if (wax_count !== undefined) { updates.push('wax_count = ?'); params.push(wax_count); }
     if (is_published !== undefined) { updates.push('is_published = ?'); params.push(is_published ? 1 : 0); }
+    if (visible_to_customer !== undefined) { updates.push('visible_to_customer = ?'); params.push(visible_to_customer ? 1 : 0); }
 
     if (updates.length) {
       params.push(id);
       await conn.query(`UPDATE packages SET ${updates.join(', ')} WHERE id = ?`, params);
     }
 
-    // Replace service links
-    if (service_ids !== undefined) {
+    // Replace service links — new format with total_count
+    if (services !== undefined) {
+      await conn.query('DELETE FROM package_services WHERE package_id = ?', [id]);
+      for (const svc of services) {
+        await conn.query(
+          'INSERT INTO package_services (package_id, service_id, total_count) VALUES (?, ?, ?)',
+          [id, svc.service_id, svc.total_count || 1]
+        );
+      }
+    }
+    // Legacy format
+    else if (service_ids !== undefined) {
       await conn.query('DELETE FROM package_services WHERE package_id = ?', [id]);
       for (const sid of service_ids) {
         await conn.query('INSERT INTO package_services (package_id, service_id) VALUES (?, ?)', [id, sid]);
@@ -148,6 +226,20 @@ exports.togglePublish = async (req, res) => {
     res.json({ success: true, message: rows[0].is_published ? 'Package unpublished' : 'Package published' });
   } catch (err) {
     console.error('Package toggle error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── TOGGLE CUSTOMER VISIBILITY ─────────────
+exports.toggleVisibility = async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT visible_to_customer FROM packages WHERE id = ?', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ success: false, error: 'Package not found' });
+    const newVal = rows[0].visible_to_customer ? 0 : 1;
+    await pool.query('UPDATE packages SET visible_to_customer = ? WHERE id = ?', [newVal, req.params.id]);
+    res.json({ success: true, message: newVal ? 'Package now visible to customers' : 'Package hidden from customers' });
+  } catch (err) {
+    console.error('Package visibility toggle error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };

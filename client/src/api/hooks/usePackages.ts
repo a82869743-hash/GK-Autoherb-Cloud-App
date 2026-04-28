@@ -53,6 +53,17 @@ export const useTogglePackage = () => {
   });
 };
 
+export const useTogglePackageVisibility = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const res = await api.patch(`/packages/${id}/visibility`);
+      return res.data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['packages'] }),
+  });
+};
+
 export const useDeletePackage = () => {
   const qc = useQueryClient();
   return useMutation({

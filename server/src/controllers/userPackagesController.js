@@ -11,17 +11,22 @@
  * Tables used:
  *   - user_packages (user_id, package_id, start_date, end_date)
  *   - package_usage (user_package_id, service_name, used_count)
+ *   - package_services (package_id, service_id, total_count)
  *   - packages (wash_count, wax_count, etc.)
  *   - vehicles (is_primary)
  *
  * ⚠️  This file is ADDITIVE — does NOT modify any existing controller.
+ *
+ * SERVICE BREAKDOWN PRIORITY:
+ *   1. DB: package_services JOIN services → { service_name, total_count }
+ *   2. Fallback: PACKAGE_SERVICE_MAP (hardcoded legacy tiers)
+ *   3. Fallback: wash_count / wax_count from packages table
  */
 
 const pool = require('../config/db');
 
-// ─── Service breakdown per package tier ─────────────────────
-// Maps package name → array of { service_name, total_count }
-// This defines how many of each service is included in a package.
+// ─── Legacy service breakdown per package tier ──────────────
+// Used as fallback for old packages that don't have package_services rows.
 const PACKAGE_SERVICE_MAP = {
   'Bronze': [
     { service_name: 'Foam Wash', total_count: 1 },
@@ -46,6 +51,46 @@ const PACKAGE_SERVICE_MAP = {
     { service_name: 'Deep Cleaning', total_count: 1 },
   ],
 };
+
+/**
+ * getServiceBreakdown — DB-first with legacy fallback
+ * Returns array of { service_name, total_count }
+ */
+async function getServiceBreakdown(conn, packageId, packageName) {
+  // Priority 1: Check database (package_services with total_count)
+  const [dbServices] = await conn.query(
+    `SELECT s.name AS service_name, ps.total_count
+     FROM package_services ps
+     JOIN services s ON ps.service_id = s.id
+     WHERE ps.package_id = ?`,
+    [packageId]
+  );
+
+  if (dbServices.length > 0) {
+    return dbServices;
+  }
+
+  // Priority 2: Legacy hardcoded map
+  if (PACKAGE_SERVICE_MAP[packageName]) {
+    return PACKAGE_SERVICE_MAP[packageName];
+  }
+
+  // Priority 3: Generic fallback from wash_count/wax_count
+  const [pkgDetails] = await conn.query(
+    'SELECT wash_count, wax_count FROM packages WHERE id = ?',
+    [packageId]
+  );
+  const fallback = [];
+  if (pkgDetails.length) {
+    if (pkgDetails[0].wash_count > 0) {
+      fallback.push({ service_name: 'Foam Wash', total_count: pkgDetails[0].wash_count });
+    }
+    if (pkgDetails[0].wax_count > 0) {
+      fallback.push({ service_name: 'Wax Coat', total_count: pkgDetails[0].wax_count });
+    }
+  }
+  return fallback;
+}
 
 // ═══════════════════════════════════════════════════════════
 // TASK 4 — ASSIGN PACKAGE TO USER
@@ -90,37 +135,15 @@ exports.assignPackage = async (req, res) => {
     );
     const userPackageId = result.insertId;
 
-    // Step 5: Create package_usage rows based on package tier
+    // Step 5: Create package_usage rows — DB-first with fallback
     const packageName = packages[0].name;
-    const serviceBreakdown = PACKAGE_SERVICE_MAP[packageName];
+    const serviceBreakdown = await getServiceBreakdown(conn, package_id, packageName);
 
-    if (serviceBreakdown) {
-      // Known package tier — use hardcoded service breakdown
-      for (const svc of serviceBreakdown) {
-        await conn.query(
-          'INSERT INTO package_usage (user_package_id, service_name, used_count) VALUES (?, ?, 0)',
-          [userPackageId, svc.service_name]
-        );
-      }
-    } else {
-      // Unknown package — fallback: create generic rows from wash_count/wax_count
-      const [pkgDetails] = await conn.query(
-        'SELECT wash_count, wax_count FROM packages WHERE id = ?', [package_id]
+    for (const svc of serviceBreakdown) {
+      await conn.query(
+        'INSERT INTO package_usage (user_package_id, service_name, used_count) VALUES (?, ?, 0)',
+        [userPackageId, svc.service_name]
       );
-      if (pkgDetails.length) {
-        if (pkgDetails[0].wash_count > 0) {
-          await conn.query(
-            'INSERT INTO package_usage (user_package_id, service_name, used_count) VALUES (?, ?, 0)',
-            [userPackageId, 'Foam Wash']
-          );
-        }
-        if (pkgDetails[0].wax_count > 0) {
-          await conn.query(
-            'INSERT INTO package_usage (user_package_id, service_name, used_count) VALUES (?, ?, 0)',
-            [userPackageId, 'Wax Coat']
-          );
-        }
-      }
     }
 
     await conn.commit();
@@ -147,7 +170,7 @@ exports.assignPackage = async (req, res) => {
 exports.checkAndUseService = async (conn, userId, serviceName) => {
   // Step 1: Check if user has an active package
   const [activePackages] = await conn.query(
-    `SELECT up.id, p.name AS package_name
+    `SELECT up.id, up.package_id, p.name AS package_name
      FROM user_packages up
      JOIN packages p ON p.id = up.package_id
      WHERE up.user_id = ? AND (up.end_date IS NULL OR up.end_date > NOW())
@@ -160,11 +183,12 @@ exports.checkAndUseService = async (conn, userId, serviceName) => {
   }
 
   const userPackageId = activePackages[0].id;
+  const packageId = activePackages[0].package_id;
   const packageName = activePackages[0].package_name;
 
-  // Step 2: Get total_count for this service from PACKAGE_SERVICE_MAP
-  const serviceMap = PACKAGE_SERVICE_MAP[packageName] || [];
-  const serviceEntry = serviceMap.find(s => s.service_name === serviceName);
+  // Step 2: Get total_count for this service — DB-first with fallback
+  const serviceBreakdown = await getServiceBreakdown(conn, packageId, packageName);
+  const serviceEntry = serviceBreakdown.find(s => s.service_name === serviceName);
 
   if (!serviceEntry) {
     return { has_package: true, can_use: false, remaining: 0, reason: 'Service not in package' };
@@ -234,8 +258,8 @@ exports.getActivePackage = async (req, res) => {
 
     const activePackage = packages[0];
 
-    // Step 2: Get usage + compute remaining from PACKAGE_SERVICE_MAP
-    const serviceMap = PACKAGE_SERVICE_MAP[activePackage.package_name] || [];
+    // Step 2: Get usage + compute remaining — DB-first with fallback
+    const serviceMap = await getServiceBreakdown(pool, activePackage.package_id, activePackage.package_name);
     const [usageRows] = await pool.query(
       'SELECT service_name, used_count FROM package_usage WHERE user_package_id = ?',
       [activePackage.id]
@@ -281,9 +305,9 @@ exports.listUserPackages = async (req, res) => {
       ORDER BY up.created_at DESC
     `, [userId]);
 
-    // Enrich each package with usage data
+    // Enrich each package with usage data — DB-first with fallback
     for (const pkg of packages) {
-      const serviceMap = PACKAGE_SERVICE_MAP[pkg.package_name] || [];
+      const serviceMap = await getServiceBreakdown(pool, pkg.package_id, pkg.package_name);
       const [usageRows] = await pool.query(
         'SELECT service_name, used_count FROM package_usage WHERE user_package_id = ?',
         [pkg.id]
@@ -331,7 +355,8 @@ exports.getDashboardPackageData = async (userId) => {
   let activePackage = null;
   if (activePackages.length) {
     const pkg = activePackages[0];
-    const serviceMap = PACKAGE_SERVICE_MAP[pkg.package_name] || [];
+    // DB-first service breakdown with legacy fallback
+    const serviceMap = await getServiceBreakdown(pool, pkg.package_id, pkg.package_name);
     const [usageRows] = await pool.query(
       'SELECT service_name, used_count FROM package_usage WHERE user_package_id = ?',
       [pkg.id]

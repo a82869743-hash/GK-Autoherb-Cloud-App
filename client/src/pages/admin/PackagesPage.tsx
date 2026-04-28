@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Plus, Package as PackageIcon, Edit2, Trash2, ToggleLeft, ToggleRight, Loader2 } from 'lucide-react';
-import { usePackages, useCreatePackage, useUpdatePackage, useTogglePackage, useDeletePackage } from '../../api/hooks/usePackages';
+import { Plus, Package as PackageIcon, Edit2, Trash2, ToggleLeft, ToggleRight, Loader2, Eye, EyeOff, Minus } from 'lucide-react';
+import { usePackages, useCreatePackage, useUpdatePackage, useTogglePackage, useTogglePackageVisibility, useDeletePackage } from '../../api/hooks/usePackages';
 import { useServices } from '../../api/hooks/useServices';
 import { useInventory } from '../../api/hooks/useInventory';
 import AdminTopBar from '../../components/layout/AdminTopBar';
@@ -26,6 +26,12 @@ const emptyPrices = () => ({
   price_hatchback: 0, price_medium_hatchback: 0, price_sedan: 0, price_premium_sedan: 0, price_suv: 0,
 });
 
+// Type for a service row in the custom builder
+interface ServiceRow {
+  service_id: number | '';
+  total_count: number;
+}
+
 export default function PackagesPage() {
   const toast = useUIStore((s) => s.toast);
   const { data: pkgs, isLoading } = usePackages();
@@ -35,6 +41,7 @@ export default function PackagesPage() {
   const createMut = useCreatePackage();
   const updateMut = useUpdatePackage();
   const toggleMut = useTogglePackage();
+  const visibilityMut = useTogglePackageVisibility();
   const deleteMut = useDeletePackage();
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -46,25 +53,43 @@ export default function PackagesPage() {
   const [washCount, setWashCount] = useState(0);
   const [waxCount, setWaxCount] = useState(0);
   const [active, setActive] = useState(true);
+  const [visibleToCustomer, setVisibleToCustomer] = useState(true);
   
-  // Maps to store selected services/products
-  const [selectedServices, setSelectedServices] = useState<Set<number>>(new Set());
-  const [selectedProducts, setSelectedProducts] = useState<any[]>([]); // array of { product_id, quantity }
+  // Dynamic services list for custom package builder
+  const [serviceRows, setServiceRows] = useState<ServiceRow[]>([]);
+  
+  // Legacy: selected services (checkboxes, no count)
+  const [selectedProducts, setSelectedProducts] = useState<any[]>([]);
 
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  const packages = pkgs || [];
+  const packages = pkgs?.data || [];
   const services = servicesData?.data || [];
   const inventory = inventoryData?.data || [];
 
   const updatePrice = (key: string, val: number) => setPrices(prev => ({ ...prev, [key]: val }));
 
+  const addServiceRow = () => {
+    setServiceRows([...serviceRows, { service_id: '', total_count: 1 }]);
+  };
+
+  const removeServiceRow = (idx: number) => {
+    setServiceRows(serviceRows.filter((_, i) => i !== idx));
+  };
+
+  const updateServiceRow = (idx: number, field: keyof ServiceRow, value: any) => {
+    const next = [...serviceRows];
+    (next[idx] as any)[field] = value;
+    setServiceRows(next);
+  };
+
   const openAdd = () => {
     setEditItem(null); 
     setName(''); setDesc(''); setPrices(emptyPrices()); 
     setWashCount(0); setWaxCount(0); setActive(true);
-    setSelectedServices(new Set());
+    setVisibleToCustomer(true);
+    setServiceRows([{ service_id: '', total_count: 1 }]);
     setSelectedProducts([]);
     setModalOpen(true);
   };
@@ -81,10 +106,14 @@ export default function PackagesPage() {
     });
     setWashCount(pkg.wash_count); setWaxCount(pkg.wax_count);
     setActive(!!pkg.is_published);
+    setVisibleToCustomer(pkg.visible_to_customer !== undefined ? !!pkg.visible_to_customer : true);
     
-    // Init associated services
-    const sIds = new Set<number>((pkg.services || []).map((s: any) => s.id));
-    setSelectedServices(sIds);
+    // Init service rows from enriched package data
+    const svcRows: ServiceRow[] = (pkg.services || []).map((s: any) => ({
+      service_id: s.id,
+      total_count: s.total_count || 1,
+    }));
+    setServiceRows(svcRows.length > 0 ? svcRows : []);
     
     // Init associated products
     const pArr = (pkg.products || []).map((p: any) => ({ product_id: p.product_id, quantity: p.quantity }));
@@ -94,16 +123,36 @@ export default function PackagesPage() {
   };
 
   const handleSave = async () => {
-    if (!name.trim()) { toast('error', 'Name is required'); return; }
+    if (!name.trim()) { toast('error', 'Package name is required'); return; }
+    
+    // Validate service rows
+    const validServiceRows = serviceRows.filter(r => r.service_id !== '');
+    for (const row of validServiceRows) {
+      if (!row.total_count || row.total_count <= 0) {
+        toast('error', 'Each service must have a count greater than 0');
+        return;
+      }
+    }
+
     try {
-      const payload = {
+      const payload: any = {
         name, description: desc, 
         ...prices,
         wash_count: washCount, wax_count: waxCount,
         is_published: active,
-        service_ids: Array.from(selectedServices),
-        products: selectedProducts
+        visible_to_customer: visibleToCustomer,
+        products: selectedProducts,
       };
+
+      // Use new format: services with total_count
+      if (validServiceRows.length > 0) {
+        payload.services = validServiceRows.map(r => ({
+          service_id: r.service_id,
+          total_count: r.total_count,
+        }));
+      } else {
+        payload.services = [];
+      }
 
       if (editItem) {
         await updateMut.mutateAsync({ id: editItem.id, ...payload });
@@ -120,6 +169,10 @@ export default function PackagesPage() {
     try { await toggleMut.mutateAsync(id); } catch { toast('error', 'Failed to toggle'); }
   };
 
+  const handleVisibilityToggle = async (id: number) => {
+    try { await visibilityMut.mutateAsync(id); } catch { toast('error', 'Failed to toggle visibility'); }
+  };
+
   const handleDelete = async () => {
     if (!deleteId) return;
     try { await deleteMut.mutateAsync(deleteId); toast('success', 'Package deleted'); }
@@ -132,13 +185,13 @@ export default function PackagesPage() {
       <AdminTopBar
         title="Packages"
         subtitle={`${packages.length} packages`}
-        actions={<Button onClick={openAdd} icon={<Plus size={16} />}>Add Package</Button>}
+        actions={<Button onClick={openAdd} icon={<Plus size={16} />}>Create Package</Button>}
       />
 
       {isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[1,2,3].map(i => <SkeletonCard key={i} />)}</div>
       ) : !packages.length ? (
-        <EmptyState icon={PackageIcon} title="No Packages" description="Create your first package bundle" actionLabel="+ Add Package" onAction={openAdd} />
+        <EmptyState icon={PackageIcon} title="No Packages" description="Create your first package bundle" actionLabel="+ Create Package" onAction={openAdd} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {packages.map((pkg: any) => (
@@ -149,6 +202,19 @@ export default function PackagesPage() {
                   {pkg.description && <p className="text-xs text-[#5f5e5e] mt-1 line-clamp-2">{pkg.description}</p>}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  {/* Customer Visibility Toggle */}
+                  <button
+                    onClick={() => handleVisibilityToggle(pkg.id)}
+                    className={`p-1.5 rounded transition-colors ${pkg.visible_to_customer ? 'hover:bg-blue-50' : 'hover:bg-gray-100'}`}
+                    title={pkg.visible_to_customer ? 'Visible to customers — click to hide' : 'Hidden from customers — click to show'}
+                  >
+                    {pkg.visible_to_customer ? (
+                      <Eye size={16} className="text-blue-500" />
+                    ) : (
+                      <EyeOff size={16} className="text-gray-400" />
+                    )}
+                  </button>
+                  {/* Publish Toggle */}
                   <button onClick={() => handleToggle(pkg.id)} className="p-1.5 rounded hover:bg-gray-100 transition-colors" title={pkg.is_published ? 'Unpublish' : 'Publish'}>
                     {pkg.is_published ? <ToggleRight size={18} className="text-green-600" /> : <ToggleLeft size={18} className="text-gray-400" />}
                   </button>
@@ -156,7 +222,28 @@ export default function PackagesPage() {
                   <button onClick={() => { setDeleteId(pkg.id); setDeleteOpen(true); }} className="p-1.5 rounded hover:bg-red-50 transition-colors"><Trash2 size={14} className="text-gray-400" /></button>
                 </div>
               </div>
+
+              {/* Visibility Badge */}
+              {!pkg.visible_to_customer && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-50 text-orange-600 border border-orange-200 text-[9px] font-bold uppercase tracking-wider rounded-md mb-2">
+                  <EyeOff size={10} /> Hidden from Customers
+                </span>
+              )}
               
+              {/* Service counts (from custom builder) */}
+              {pkg.services?.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-1.5">Included Services</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {pkg.services.map((s: any) => (
+                      <span key={s.id || s.ps_id} className="px-2 py-0.5 bg-[#f6f3f2] rounded text-[10px] font-bold text-[#5f5e5e] border border-gray-100">
+                        {s.name} × {s.total_count || 1}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-4 mb-3 text-[11px] font-medium text-gray-500">
                 <span>Free Washes: {pkg.wash_count || 0}</span>
                 <span>Free Waxes: {pkg.wax_count || 0}</span>
@@ -175,14 +262,15 @@ export default function PackagesPage() {
         </div>
       )}
 
-      {/* Add/Edit Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editItem ? 'Edit Package' : 'Add Package'} size="lg"
+      {/* Add/Edit Modal — Custom Package Builder */}
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editItem ? 'Edit Package' : 'Create Custom Package'} size="lg"
         footer={<><Button variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button><Button onClick={handleSave} loading={createMut.isPending || updateMut.isPending}>{editItem ? 'Save' : 'Create'}</Button></>}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Left Column — Basic Info */}
           <div className="space-y-4">
             <h4 className="font-semibold text-gray-700">Basic Info</h4>
-            <Input label="Package Name" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Premium Protection" />
+            <Input label="Package Name" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Silver Plus" />
             <Textarea label="Description" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Brief description" />
             
             <div>
@@ -198,31 +286,86 @@ export default function PackagesPage() {
               <Input label="Included Free Washes" type="number" value={washCount || ''} onChange={e => setWashCount(parseInt(e.target.value) || 0)} />
               <Input label="Included Free Waxes" type="number" value={waxCount || ''} onChange={e => setWaxCount(parseInt(e.target.value) || 0)} />
             </div>
+
+            {/* Published toggle */}
             <label className="flex items-center gap-3 cursor-pointer pt-2">
               <button type="button" onClick={() => setActive(!active)} className={`w-10 h-5 rounded-full transition-colors ${active ? 'bg-green-500' : 'bg-gray-300'}`}>
                 <div className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform ${active ? 'translate-x-5' : 'translate-x-0.5'}`} />
               </button>
               <span className="text-xs font-bold uppercase tracking-wider text-[#5f5e5e]">{active ? 'Published' : 'Draft'}</span>
             </label>
+
+            {/* Customer Visibility toggle */}
+            <label className="flex items-center gap-3 cursor-pointer">
+              <button type="button" onClick={() => setVisibleToCustomer(!visibleToCustomer)} className={`w-10 h-5 rounded-full transition-colors ${visibleToCustomer ? 'bg-blue-500' : 'bg-gray-300'}`}>
+                <div className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform ${visibleToCustomer ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+              <span className="text-xs font-bold uppercase tracking-wider text-[#5f5e5e]">
+                {visibleToCustomer ? 'Visible to Customers' : 'Hidden from Customers'}
+              </span>
+            </label>
           </div>
 
+          {/* Right Column — Services & Products */}
           <div className="space-y-6">
+            {/* ── Custom Service Builder ─────────────────────── */}
             <div>
-              <h4 className="font-semibold text-gray-700 mb-2">Included Services</h4>
-              <div className="h-40 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50 flex flex-col gap-1">
-                {services.map((s: any) => (
-                  <label key={s.id} className="flex items-center gap-2 p-1.5 hover:bg-gray-100 rounded text-sm cursor-pointer">
-                    <input type="checkbox" checked={selectedServices.has(s.id)} onChange={(e) => {
-                      const next = new Set(selectedServices);
-                      if (e.target.checked) next.add(s.id); else next.delete(s.id);
-                      setSelectedServices(next);
-                    }}/>
-                    {s.name}
-                  </label>
+              <div className="flex justify-between items-end mb-2">
+                <h4 className="font-semibold text-gray-700">Package Services</h4>
+                <button type="button" onClick={addServiceRow} className="text-xs text-[#D32F2F] font-semibold flex items-center gap-0.5 hover:underline">
+                  <Plus size={12} /> Add Service
+                </button>
+              </div>
+              <p className="text-[10px] text-gray-400 mb-3">Select a service and how many times it's included in this package.</p>
+              
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {serviceRows.map((row, idx) => (
+                  <div key={idx} className="flex gap-2 items-center animate-fade-in-up" style={{ animationDelay: `${idx * 0.03}s`, animationFillMode: 'forwards' }}>
+                    {/* Service dropdown */}
+                    <select
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 transition-all"
+                      value={row.service_id}
+                      onChange={e => updateServiceRow(idx, 'service_id', parseInt(e.target.value) || '')}
+                    >
+                      <option value="">Select Service…</option>
+                      {services.map((s: any) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                    {/* Count input */}
+                    <div className="relative w-24">
+                      <input
+                        type="number"
+                        min="1"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 transition-all"
+                        placeholder="Count"
+                        value={row.total_count}
+                        onChange={e => updateServiceRow(idx, 'total_count', parseInt(e.target.value) || 1)}
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-gray-400 font-bold">×</span>
+                    </div>
+                    {/* Remove button */}
+                    <button
+                      type="button"
+                      onClick={() => removeServiceRow(idx)}
+                      className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                    >
+                      <Minus size={16} />
+                    </button>
+                  </div>
                 ))}
+                {serviceRows.length === 0 && (
+                  <div className="text-center py-6 border-2 border-dashed border-gray-200 rounded-lg">
+                    <p className="text-xs text-gray-400 italic mb-2">No services added yet</p>
+                    <button type="button" onClick={addServiceRow} className="text-xs text-[#D32F2F] font-bold hover:underline">
+                      + Add your first service
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
+            {/* ── Inventory Products ──────────────────────────── */}
             <div>
               <div className="flex justify-between items-end mb-2">
                 <h4 className="font-semibold text-gray-700">Included Inventory Products</h4>
@@ -249,7 +392,7 @@ export default function PackagesPage() {
                     <button type="button" onClick={() => setSelectedProducts(selectedProducts.filter((_, i) => i !== idx))} className="text-red-500 hover:bg-red-50 p-1.5 rounded"><Trash2 size={16}/></button>
                   </div>
                 ))}
-                {selectedProducts.length === 0 && <p className="text-xs text-gray-500 italic">No products tied to package (reductions will not happen automatically).</p>}
+                {selectedProducts.length === 0 && <p className="text-xs text-gray-500 italic">No products tied to package.</p>}
               </div>
             </div>
           </div>
