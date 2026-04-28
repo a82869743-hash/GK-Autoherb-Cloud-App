@@ -5,12 +5,22 @@ const jwt = require('jsonwebtoken');
  * Sets req.user = { id, role, name, mobile }
  */
 const protect = (req, res, next) => {
+  // 1. Try Authorization header first
+  let token = null;
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  }
+
+  // 2. Fallback: ?token= query param (used for invoice PDF download in new tab)
+  if (!token && req.query.token) {
+    token = req.query.token;
+  }
+
+  if (!token) {
     return res.status(401).json({ success: false, error: 'No authentication token provided' });
   }
 
-  const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;

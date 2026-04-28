@@ -39,8 +39,9 @@ export default function CustomerJobCartsPage() {
     const token = localStorage.getItem('gk-auth-v1');
     const parsed = token ? JSON.parse(token) : null;
     const jwt = parsed?.state?.token;
+    const apiBase = import.meta.env.VITE_API_URL || '/api';
     window.open(
-      `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'}/job-carts/${cartId}/invoice?token=${jwt}`,
+      `${apiBase}/job-carts/${cartId}/invoice?token=${jwt}`,
       '_blank'
     );
   };
