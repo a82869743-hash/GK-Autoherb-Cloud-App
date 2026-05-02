@@ -57,6 +57,65 @@ exports.initCronJobs = () => {
       console.error('[CRON] Error in attendance task:', err);
     }
   });
+
+  // 3. BOOKING EXPIRY — Expire pending_approval bookings after 5 min
+  // Runs every minute
+  cron.schedule('* * * * *', async () => {
+    try {
+      // Find expired pending bookings
+      const [expiredBookings] = await pool.query(`
+        SELECT id, slot_id, customer_id, is_free_wash
+        FROM bookings
+        WHERE status = 'pending_approval'
+          AND expires_at IS NOT NULL
+          AND expires_at < NOW()
+      `);
+
+      if (expiredBookings.length === 0) return;
+
+      console.log(`[CRON] Expiring ${expiredBookings.length} pending bookings`);
+
+      for (const booking of expiredBookings) {
+        const conn = await pool.getConnection();
+        try {
+          await conn.beginTransaction();
+
+          // Mark as expired
+          await conn.query(
+            "UPDATE bookings SET status = 'expired', expires_at = NULL WHERE id = ? AND status = 'pending_approval'",
+            [booking.id]
+          );
+
+          // Restore slot count
+          await conn.query(
+            'UPDATE slots SET booked_count = GREATEST(0, booked_count - 1) WHERE id = ?',
+            [booking.slot_id]
+          );
+
+          // Restore free wash if applicable
+          if (booking.is_free_wash) {
+            await conn.query(
+              'UPDATE loyalty SET free_washes = free_washes + 1 WHERE customer_id = ?',
+              [booking.customer_id]
+            );
+          }
+
+          await conn.commit();
+          console.log(`[CRON] Booking #${booking.id} expired — slot ${booking.slot_id} freed`);
+        } catch (e) {
+          await conn.rollback();
+          console.error(`[CRON] Failed to expire booking #${booking.id}:`, e.message);
+        } finally {
+          conn.release();
+        }
+      }
+    } catch (err) {
+      // Only log if it's an actual error, not "table doesn't exist yet"
+      if (err.code !== 'ER_BAD_FIELD_ERROR' && err.code !== 'ER_NO_SUCH_TABLE') {
+        console.error('[CRON] Error in booking expiry task:', err);
+      }
+    }
+  });
   
   console.log('[CRON] Jobs initialized successfully');
 };

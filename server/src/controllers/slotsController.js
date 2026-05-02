@@ -52,7 +52,7 @@ exports.create = async (req, res) => {
   }
 };
 
-// ─── BULK CREATE SLOTS ─────────────────────
+// ─── BULK CREATE SLOTS (FIXED: timezone + dedup) ─────────
 exports.bulkCreate = async (req, res) => {
   try {
     const { from_date, to_date, start_time, end_time, slot_duration_minutes = 60, max_capacity = 1 } = req.body;
@@ -60,24 +60,47 @@ exports.bulkCreate = async (req, res) => {
       return res.status(400).json({ success: false, error: 'All fields are required' });
     }
 
-    const startDate = new Date(from_date);
-    const endDate = new Date(to_date);
     const duration = parseInt(slot_duration_minutes);
+    if (duration <= 0 || duration > 480) {
+      return res.status(400).json({ success: false, error: 'Slot duration must be between 1 and 480 minutes' });
+    }
+
     let created = 0;
     let skipped = 0;
 
-    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-      const dateStr = d.toISOString().split('T')[0];
+    // FIX: Use string-based date iteration to avoid UTC timezone shift.
+    // Previously `new Date(from_date)` shifted to UTC midnight which could
+    // produce wrong dates in IST (+05:30) timezone.
+    const dates = getDateRange(from_date, to_date);
 
-      // Parse start/end times
-      const [startH, startM] = start_time.split(':').map(Number);
-      const [endH, endM] = end_time.split(':').map(Number);
-      const startMinutes = startH * 60 + startM;
-      const endMinutes = endH * 60 + endM;
+    // Parse start/end times
+    const [startH, startM] = start_time.split(':').map(Number);
+    const [endH, endM] = end_time.split(':').map(Number);
+    const startMinutes = startH * 60 + startM;
+    const endMinutes = endH * 60 + endM;
 
+    // FIX: Pre-fetch existing slots in the date range to prevent duplication
+    const [existingSlots] = await pool.query(
+      'SELECT slot_date, start_time FROM slots WHERE slot_date BETWEEN ? AND ?',
+      [from_date, to_date]
+    );
+    const existingSet = new Set(
+      existingSlots.map(s => {
+        const d = typeof s.slot_date === 'string' ? s.slot_date : s.slot_date.toISOString().split('T')[0];
+        return `${d}_${s.start_time}`;
+      })
+    );
+
+    for (const dateStr of dates) {
       for (let t = startMinutes; t + duration <= endMinutes; t += duration) {
         const slotStart = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}:00`;
         const slotEnd = `${String(Math.floor((t + duration) / 60)).padStart(2, '0')}:${String((t + duration) % 60).padStart(2, '0')}:00`;
+
+        // Skip if slot already exists (dedup guard)
+        if (existingSet.has(`${dateStr}_${slotStart}`)) {
+          skipped++;
+          continue;
+        }
 
         try {
           await pool.query(
@@ -85,12 +108,15 @@ exports.bulkCreate = async (req, res) => {
             [dateStr, slotStart, slotEnd, max_capacity]
           );
           created++;
+          existingSet.add(`${dateStr}_${slotStart}`);
         } catch (e) {
           if (e.code === 'ER_DUP_ENTRY') skipped++;
           else throw e;
         }
       }
     }
+
+    console.log(`[SLOTS] Bulk create: ${created} created, ${skipped} skipped (${from_date} → ${to_date})`);
 
     res.status(201).json({
       success: true,
@@ -143,3 +169,24 @@ exports.delete = async (req, res) => {
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };
+
+// ─── HELPER: Generate date range as string array (IST-safe) ─────
+function getDateRange(fromStr, toStr) {
+  const dates = [];
+  // Parse YYYY-MM-DD parts directly to avoid timezone issues
+  const [fy, fm, fd] = fromStr.split('-').map(Number);
+  const [ty, tm, td] = toStr.split('-').map(Number);
+
+  // Use UTC dates to avoid DST/timezone shifts, but only extract the date part
+  let current = new Date(Date.UTC(fy, fm - 1, fd));
+  const end = new Date(Date.UTC(ty, tm - 1, td));
+
+  while (current <= end) {
+    const y = current.getUTCFullYear();
+    const m = String(current.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(current.getUTCDate()).padStart(2, '0');
+    dates.push(`${y}-${m}-${d}`);
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+  return dates;
+}

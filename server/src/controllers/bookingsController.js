@@ -40,21 +40,34 @@ exports.list = async (req, res) => {
         svc.name AS service_name,
         pkg.name AS package_name,
         jc.id AS job_cart_id,
-        jc.status AS job_cart_status
+        jc.status AS job_cart_status,
+        v.brand AS linked_vehicle_brand, v.model AS linked_vehicle_model,
+        v.registration_no AS linked_vehicle_reg_no,
+        approver.name AS approved_by_name
       FROM bookings b
       JOIN slots s ON b.slot_id = s.id
       JOIN users u ON b.customer_id = u.id
       LEFT JOIN services svc ON b.service_id = svc.id
       LEFT JOIN packages pkg ON b.package_id = pkg.id
       LEFT JOIN job_carts jc ON jc.booking_id = b.id
+      LEFT JOIN vehicles v ON b.vehicle_id = v.id
+      LEFT JOIN users approver ON b.approved_by = approver.id
       WHERE ${where}
       ORDER BY s.slot_date DESC, s.start_time DESC
       LIMIT ? OFFSET ?
     `, [...params, parseInt(limit), offset]);
 
+    // Enrich with vehicle data — prefer linked vehicle, fall back to text fields
+    const enriched = rows.map(r => ({
+      ...r,
+      vehicle_brand: r.linked_vehicle_brand || r.vehicle_brand,
+      vehicle_model: r.linked_vehicle_model || r.vehicle_model,
+      vehicle_reg_no: r.linked_vehicle_reg_no || r.vehicle_reg_no,
+    }));
+
     res.json({
       success: true,
-      data: rows,
+      data: enriched,
       pagination: { page: parseInt(page), limit: parseInt(limit), total: countRows[0].total },
     });
   } catch (err) {
@@ -73,13 +86,18 @@ exports.getOne = async (req, res) => {
         svc.name AS service_name,
         pkg.name AS package_name,
         jc.id AS job_cart_id,
-        jc.status AS job_cart_status
+        jc.status AS job_cart_status,
+        v.brand AS linked_vehicle_brand, v.model AS linked_vehicle_model,
+        v.registration_no AS linked_vehicle_reg_no,
+        approver.name AS approved_by_name
       FROM bookings b
       JOIN slots s ON b.slot_id = s.id
       JOIN users u ON b.customer_id = u.id
       LEFT JOIN services svc ON b.service_id = svc.id
       LEFT JOIN packages pkg ON b.package_id = pkg.id
       LEFT JOIN job_carts jc ON jc.booking_id = b.id
+      LEFT JOIN vehicles v ON b.vehicle_id = v.id
+      LEFT JOIN users approver ON b.approved_by = approver.id
       WHERE b.id = ?
     `, [req.params.id]);
 
@@ -88,7 +106,21 @@ exports.getOne = async (req, res) => {
       return res.status(403).json({ success: false, error: 'Not authorized' });
     }
 
-    res.json({ success: true, data: rows[0] });
+    const row = rows[0];
+    row.vehicle_brand = row.linked_vehicle_brand || row.vehicle_brand;
+    row.vehicle_model = row.linked_vehicle_model || row.vehicle_model;
+    row.vehicle_reg_no = row.linked_vehicle_reg_no || row.vehicle_reg_no;
+
+    // Fetch linked services for multi-service bookings
+    const [linkedServices] = await pool.query(`
+      SELECT bs.service_id, s.name, s.duration_minutes
+      FROM booking_services bs
+      JOIN services s ON bs.service_id = s.id
+      WHERE bs.booking_id = ?
+    `, [req.params.id]);
+    row.linked_services = linkedServices;
+
+    res.json({ success: true, data: row });
   } catch (err) {
     console.error('Booking getOne error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -152,16 +184,16 @@ exports.vehicleHistory = async (req, res) => {
   }
 };
 
-// ─── CREATE BOOKING (ATOMIC) ────────────────
-// UPDATED: Integrates package usage deduction (Task 5 + Task 6)
+// ─── CREATE BOOKING (ATOMIC — with approval workflow) ────
+// UPDATED: status = pending_approval, expires in 5 min, vehicle linking, multi-service
 exports.create = async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
     const {
-      slot_id, service_id, package_id,
-      vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category,
+      slot_id, service_id, service_ids, package_id,
+      vehicle_id, vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category,
       is_free_wash = false, use_package = false, notes
     } = req.body;
 
@@ -183,7 +215,37 @@ exports.create = async (req, res) => {
     if (slot.is_blocked) { await conn.rollback(); return res.status(409).json({ success: false, error: 'Slot is blocked' }); }
     if (slot.booked_count >= slot.max_capacity) { await conn.rollback(); return res.status(409).json({ success: false, error: 'Slot is fully booked' }); }
 
-    // 2. Free wash validation
+    // 2. Resolve vehicle data — prefer vehicle_id lookup, fallback to text fields
+    let resolvedBrand = vehicle_brand || null;
+    let resolvedModel = vehicle_model || null;
+    let resolvedRegNo = vehicle_reg_no || null;
+    let resolvedVehicleId = vehicle_id || null;
+
+    if (vehicle_id) {
+      const [vRows] = await conn.query(
+        'SELECT id, brand, model, registration_no FROM vehicles WHERE id = ?', [vehicle_id]
+      );
+      if (vRows.length) {
+        resolvedBrand = vRows[0].brand;
+        resolvedModel = vRows[0].model;
+        resolvedRegNo = vRows[0].registration_no;
+        resolvedVehicleId = vRows[0].id;
+      }
+    }
+
+    // 3. Calculate total duration for multi-service bookings
+    let totalDuration = null;
+    const allServiceIds = service_ids && service_ids.length > 0 ? service_ids : (service_id ? [service_id] : []);
+    
+    if (allServiceIds.length > 0) {
+      const [durations] = await conn.query(
+        `SELECT SUM(duration_minutes) AS total FROM services WHERE id IN (?)`,
+        [allServiceIds]
+      );
+      totalDuration = durations[0]?.total || null;
+    }
+
+    // 4. Free wash validation
     if (is_free_wash) {
       const [loyalty] = await conn.query('SELECT free_washes FROM loyalty WHERE customer_id = ?', [customerId]);
       if (!loyalty.length || loyalty[0].free_washes <= 0) {
@@ -196,18 +258,15 @@ exports.create = async (req, res) => {
       );
     }
 
-    // ─── TASK 5: Package Usage Deduction ─────────────────────
-    // Check if user wants to use package credits for this booking
+    // 5. Package Usage Deduction
     let packageUsed = false;
     let packageInfo = null;
+    const primaryServiceId = service_id || (allServiceIds.length > 0 ? allServiceIds[0] : null);
 
-    if (use_package && service_id && !is_free_wash) {
-      // Look up the service name from service_id
-      const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [service_id]);
+    if (use_package && primaryServiceId && !is_free_wash) {
+      const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [primaryServiceId]);
       if (svcRows.length) {
         const serviceName = svcRows[0].name;
-
-        // Use the package controller's check-and-use logic
         const userPkgCtrl = require('./userPackagesController');
         const result = await userPkgCtrl.checkAndUseService(conn, customerId, serviceName);
 
@@ -219,25 +278,42 @@ exports.create = async (req, res) => {
             remaining: result.remaining,
           };
         }
-        // If can't use package, fall through to normal booking
       }
     }
 
-    // 3. Increment booked_count
+    // 6. Increment booked_count
     await conn.query('UPDATE slots SET booked_count = booked_count + 1 WHERE id = ?', [slot_id]);
 
-    // 4. Insert booking
+    // 7. Insert booking — status = pending_approval, expires in 5 minutes
     const [result] = await conn.query(
-      `INSERT INTO bookings (customer_id, slot_id, service_id, package_id, vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category, status, is_free_wash, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?, ?)`,
-      [customerId, slot_id, service_id || null, package_id || null, vehicle_brand || null, vehicle_model || null, vehicle_reg_no || null, vehicle_category || null, is_free_wash ? 1 : 0, notes || null]
+      `INSERT INTO bookings 
+       (customer_id, vehicle_id, slot_id, service_id, package_id, 
+        vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category, total_duration,
+        status, is_free_wash, notes, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_approval', ?, ?, DATE_ADD(NOW(), INTERVAL 5 MINUTE))`,
+      [
+        customerId, resolvedVehicleId, slot_id,
+        primaryServiceId || null, package_id || null,
+        resolvedBrand, resolvedModel, resolvedRegNo, vehicle_category || null, totalDuration,
+        is_free_wash ? 1 : 0, notes || null
+      ]
     );
-
-    await conn.commit();
 
     const bookingId = result.insertId;
 
-    // ── Fire-and-forget SMS: Booking confirmation (TASK 7) ──
+    // 8. Insert booking_services for multi-service
+    if (allServiceIds.length > 0) {
+      for (const sid of allServiceIds) {
+        await conn.query(
+          'INSERT INTO booking_services (booking_id, service_id) VALUES (?, ?)',
+          [bookingId, sid]
+        );
+      }
+    }
+
+    await conn.commit();
+
+    // 9. Fire-and-forget SMS (non-blocking)
     try {
       const sendSms = require('../utils/sendSms');
       const [custRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [customerId]);
@@ -245,29 +321,126 @@ exports.create = async (req, res) => {
       if (custRows.length && custRows[0].mobile && slotRows.length) {
         const date = new Date(slotRows[0].slot_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
         const time = slotRows[0].start_time ? slotRows[0].start_time.substring(0, 5) : '';
-        const msg = `GK AutoHerb: Hi ${custRows[0].name}, your booking #${bookingId} is confirmed for ${date} at ${time}. Thank you!`;
+        const msg = `GK AutoHerb: Hi ${custRows[0].name}, your booking #${bookingId} is pending approval for ${date} at ${time}. We'll confirm shortly!`;
         sendSms(custRows[0].mobile, msg).catch(err => {
-          console.error('[SMS] Booking confirmation failed (non-blocking):', err.message);
+          console.error('[SMS] Booking notification failed (non-blocking):', err.message);
         });
       }
     } catch (smsErr) {
       console.error('[SMS] Booking SMS setup failed (non-blocking):', smsErr.message);
     }
 
+    console.log(`[BOOKING] #${bookingId} created — pending_approval, customer=${customerId}, slot=${slot_id}`);
+
     res.status(201).json({
       success: true,
       data: {
         id: bookingId,
+        status: 'pending_approval',
         package_used: packageUsed,
         ...(packageInfo && { package_info: packageInfo }),
       },
       message: packageUsed
-        ? `Booking confirmed — used ${packageInfo.package_name} package credit (${packageInfo.remaining} remaining)`
-        : 'Booking confirmed',
+        ? `Booking submitted — used ${packageInfo.package_name} credit (${packageInfo.remaining} left). Awaiting admin approval.`
+        : 'Booking submitted — awaiting admin approval',
     });
   } catch (err) {
     await conn.rollback();
     console.error('Booking create error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  } finally {
+    conn.release();
+  }
+};
+
+// ─── APPROVE BOOKING (Admin) ────────────────
+exports.approve = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const { id } = req.params;
+    const { booking_notes } = req.body;
+
+    const [bookings] = await conn.query('SELECT * FROM bookings WHERE id = ?', [id]);
+    if (!bookings.length) { await conn.rollback(); return res.status(404).json({ success: false, error: 'Booking not found' }); }
+
+    const booking = bookings[0];
+    if (booking.status !== 'pending_approval') {
+      await conn.rollback();
+      return res.status(422).json({ success: false, error: `Cannot approve a ${booking.status} booking` });
+    }
+
+    await conn.query(
+      `UPDATE bookings SET status = 'confirmed', booking_notes = ?, approved_by = ?, approved_at = NOW(), expires_at = NULL WHERE id = ?`,
+      [booking_notes || null, req.user.id, id]
+    );
+
+    await conn.commit();
+
+    // Fire-and-forget confirmation SMS
+    try {
+      const sendSms = require('../utils/sendSms');
+      const [custRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [booking.customer_id]);
+      const [slotRows] = await pool.query('SELECT slot_date, start_time FROM slots WHERE id = ?', [booking.slot_id]);
+      if (custRows.length && custRows[0].mobile && slotRows.length) {
+        const date = new Date(slotRows[0].slot_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+        const time = slotRows[0].start_time ? slotRows[0].start_time.substring(0, 5) : '';
+        const msg = `GK AutoHerb: Hi ${custRows[0].name}, your booking #${id} for ${date} at ${time} is CONFIRMED! See you soon.`;
+        sendSms(custRows[0].mobile, msg).catch(() => {});
+      }
+    } catch { /* non-blocking */ }
+
+    console.log(`[BOOKING] #${id} approved by admin ${req.user.id}`);
+    res.json({ success: true, message: 'Booking approved' });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Booking approve error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  } finally {
+    conn.release();
+  }
+};
+
+// ─── REJECT BOOKING (Admin) ────────────────
+exports.reject = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const { id } = req.params;
+    const { booking_notes } = req.body;
+
+    const [bookings] = await conn.query('SELECT * FROM bookings WHERE id = ?', [id]);
+    if (!bookings.length) { await conn.rollback(); return res.status(404).json({ success: false, error: 'Booking not found' }); }
+
+    const booking = bookings[0];
+    if (booking.status !== 'pending_approval' && booking.status !== 'confirmed') {
+      await conn.rollback();
+      return res.status(422).json({ success: false, error: `Cannot reject a ${booking.status} booking` });
+    }
+
+    // Reject booking
+    await conn.query(
+      `UPDATE bookings SET status = 'rejected', booking_notes = ?, approved_by = ?, approved_at = NOW(), expires_at = NULL WHERE id = ?`,
+      [booking_notes || 'Rejected by admin', req.user.id, id]
+    );
+
+    // Restore slot count
+    await conn.query('UPDATE slots SET booked_count = GREATEST(0, booked_count - 1) WHERE id = ?', [booking.slot_id]);
+
+    // Restore free wash if applicable
+    if (booking.is_free_wash) {
+      await conn.query(
+        'UPDATE loyalty SET free_washes = free_washes + 1 WHERE customer_id = ?',
+        [booking.customer_id]
+      );
+    }
+
+    await conn.commit();
+    console.log(`[BOOKING] #${id} rejected by admin ${req.user.id}`);
+    res.json({ success: true, message: 'Booking rejected' });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Booking reject error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
   } finally {
     conn.release();
@@ -285,7 +458,10 @@ exports.cancel = async (req, res) => {
     if (!bookings.length) { await conn.rollback(); return res.status(404).json({ success: false, error: 'Booking not found' }); }
 
     const booking = bookings[0];
-    if (booking.status !== 'confirmed') { await conn.rollback(); return res.status(422).json({ success: false, error: 'Only confirmed bookings can be cancelled' }); }
+    if (!['confirmed', 'pending_approval'].includes(booking.status)) {
+      await conn.rollback();
+      return res.status(422).json({ success: false, error: 'Only confirmed or pending bookings can be cancelled' });
+    }
 
     // Customer can only cancel own
     if (req.user.role === 'customer' && booking.customer_id !== req.user.id) {
@@ -294,7 +470,7 @@ exports.cancel = async (req, res) => {
     }
 
     // 1. Cancel booking
-    await conn.query("UPDATE bookings SET status = 'cancelled' WHERE id = ?", [id]);
+    await conn.query("UPDATE bookings SET status = 'cancelled', expires_at = NULL WHERE id = ?", [id]);
 
     // 2. Restore slot count
     await conn.query('UPDATE slots SET booked_count = GREATEST(0, booked_count - 1) WHERE id = ?', [booking.slot_id]);

@@ -238,3 +238,119 @@ exports.generatePDFReport = async (fromDate, toDate) => {
     if (browser) await browser.close();
   }
 };
+
+// ─── Generate Sales Excel Report (new) ──────
+exports.generateSalesExcel = async (fromDate, toDate, data) => {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'GK AutoHerb';
+
+  // Summary sheet
+  const summarySheet = workbook.addWorksheet('Summary');
+  summarySheet.columns = [
+    { header: 'Metric', key: 'metric', width: 30 },
+    { header: 'Amount (₹)', key: 'amount', width: 20 },
+  ];
+  summarySheet.getRow(1).font = { bold: true };
+
+  const s = data.summary;
+  summarySheet.addRow({ metric: `Sales Report: ${fromDate} to ${toDate}`, amount: '' });
+  summarySheet.addRow({ metric: '', amount: '' });
+  summarySheet.addRow({ metric: 'Job Revenue', amount: parseFloat(s.job_revenue) });
+  summarySheet.addRow({ metric: 'B2B Sales', amount: parseFloat(s.b2b_sales) });
+  summarySheet.addRow({ metric: 'B2C Sales', amount: parseFloat(s.b2c_sales) });
+  summarySheet.addRow({ metric: 'Total Income', amount: parseFloat(s.total_income) });
+  summarySheet.addRow({ metric: '', amount: '' });
+  summarySheet.addRow({ metric: 'Purchases', amount: parseFloat(s.purchases) });
+  summarySheet.addRow({ metric: 'Staff Payments', amount: parseFloat(s.staff_payments) });
+  summarySheet.addRow({ metric: 'Total Expenses', amount: parseFloat(s.total_expenses) });
+  summarySheet.addRow({ metric: '', amount: '' });
+  summarySheet.addRow({ metric: 'NET PROFIT', amount: parseFloat(s.total_income) - parseFloat(s.total_expenses) });
+
+  // Daily sheet
+  const dailySheet = workbook.addWorksheet('Daily Breakdown');
+  dailySheet.columns = [
+    { header: 'Date', key: 'date', width: 14 },
+    { header: 'Income (₹)', key: 'income', width: 15 },
+    { header: 'Expenses (₹)', key: 'expenses', width: 15 },
+    { header: 'Net (₹)', key: 'net', width: 15 },
+  ];
+  dailySheet.getRow(1).font = { bold: true };
+  data.daily.forEach(d => {
+    dailySheet.addRow({
+      date: d.date,
+      income: parseFloat(d.income),
+      expenses: parseFloat(d.expenses),
+      net: parseFloat(d.net),
+    });
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+};
+
+// ─── Generate Inventory Excel Report (new) ──
+exports.generateInventoryExcel = async (data) => {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'GK AutoHerb';
+
+  const stockSheet = workbook.addWorksheet('Current Stock');
+  stockSheet.columns = [
+    { header: 'Product', key: 'product_name', width: 30 },
+    { header: 'Unit', key: 'unit', width: 10 },
+    { header: 'Quantity', key: 'quantity', width: 12 },
+    { header: 'Low Threshold', key: 'low_stock_threshold', width: 15 },
+    { header: 'Status', key: 'status', width: 12 },
+  ];
+  stockSheet.getRow(1).font = { bold: true };
+  data.stock.forEach(s => {
+    stockSheet.addRow({
+      ...s,
+      status: s.is_low_stock ? '⚠ LOW' : 'OK',
+    });
+  });
+
+  const usageSheet = workbook.addWorksheet('Usage (30 Days)');
+  usageSheet.columns = [
+    { header: 'Product', key: 'product_name', width: 30 },
+    { header: 'Total Used', key: 'total_used', width: 15 },
+  ];
+  usageSheet.getRow(1).font = { bold: true };
+  data.usage_last_30_days.forEach(u => usageSheet.addRow(u));
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+};
+
+// ─── Generate Job Card Excel Report (new) ───
+exports.generateJobCardExcel = async (data) => {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'GK AutoHerb';
+
+  const sheet = workbook.addWorksheet('Job Cards');
+  sheet.columns = [
+    { header: 'ID', key: 'id', width: 8 },
+    { header: 'Date', key: 'visit_date', width: 14 },
+    { header: 'Vehicle', key: 'vehicle', width: 25 },
+    { header: 'Customer', key: 'customer_name', width: 20 },
+    { header: 'Services', key: 'services_done', width: 40 },
+    { header: 'Status', key: 'status', width: 12 },
+    { header: 'Amount (₹)', key: 'total_amount', width: 15 },
+    { header: 'Invoice', key: 'invoice_number', width: 18 },
+  ];
+  sheet.getRow(1).font = { bold: true };
+
+  data.jobs.forEach(j => {
+    sheet.addRow({
+      ...j,
+      vehicle: `${j.brand} ${j.model} (${j.registration_no})`,
+      total_amount: parseFloat(j.total_amount || 0),
+    });
+  });
+
+  // Summary row
+  sheet.addRow({});
+  sheet.addRow({ id: '', visit_date: '', vehicle: 'TOTAL', customer_name: `${data.total_jobs} jobs`, services_done: '', status: '', total_amount: data.total_revenue, invoice_number: '' });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+};

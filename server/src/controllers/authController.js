@@ -9,7 +9,7 @@ const generateToken = (user) => {
   return jwt.sign(
     { id: user.id, role: user.role, name: user.name, mobile: user.mobile },
     process.env.JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: '1d' }
   );
 };
 
@@ -231,5 +231,55 @@ exports.changePassword = async (req, res) => {
   } catch (err) {
     console.error('ChangePassword error:', err);
     res.status(500).json({ success: false, error: 'Password change failed' });
+  }
+};
+
+/**
+ * POST /auth/admin/create-customer
+ * Auth: Admin only
+ * Body: { name, mobile, email?, password? }
+ * Creates a customer account manually (admin flow)
+ */
+exports.adminCreateCustomer = async (req, res) => {
+  try {
+    const { name, mobile, email, password } = req.body;
+
+    if (!name || !mobile) {
+      return res.status(400).json({ success: false, error: 'Name and mobile are required' });
+    }
+
+    // Check if mobile already exists
+    const [existing] = await pool.query('SELECT id FROM users WHERE mobile = ?', [mobile]);
+    if (existing.length > 0) {
+      return res.status(409).json({ success: false, error: 'Mobile already registered' });
+    }
+
+    // Generate default password if not provided
+    const defaultPassword = password || mobile.slice(-4) + 'GKA';
+    const password_hash = await bcrypt.hash(defaultPassword, 10);
+
+    const [result] = await pool.query(
+      'INSERT INTO users (name, mobile, email, password_hash, role) VALUES (?, ?, ?, ?, ?)',
+      [name.trim(), mobile, email || null, password_hash, 'customer']
+    );
+
+    const userId = result.insertId;
+
+    // Create loyalty record
+    await pool.query('INSERT INTO loyalty (customer_id) VALUES (?)', [userId]);
+
+    console.log(`[AUTH] Admin created customer #${userId}: ${name} (${mobile})`);
+
+    res.status(201).json({
+      success: true,
+      data: { id: userId, name: name.trim(), mobile, role: 'customer' },
+      message: `Customer created. Default password: ${defaultPassword}`,
+    });
+  } catch (err) {
+    console.error('adminCreateCustomer error:', err);
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ success: false, error: 'Mobile already registered' });
+    }
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 };

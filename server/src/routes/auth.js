@@ -20,4 +20,8 @@ router.get('/me', authMiddleware, authController.getMe);
 router.put('/profile', authMiddleware, authController.updateProfile);
 router.post('/change-password', authMiddleware, authController.changePassword);
 
+// Admin routes
+const role = require('../middleware/role');
+router.post('/admin/create-customer', authMiddleware, role(['admin']), authController.adminCreateCustomer);
+
 module.exports = router;

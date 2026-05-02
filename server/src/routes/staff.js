@@ -3,8 +3,11 @@ const auth = require('../middleware/auth');
 const role = require('../middleware/role');
 const ctrl = require('../controllers/staffController');
 
-// Staff self-service route (must be before /:id routes)
-router.get('/my-payments', auth, role(['staff']), ctrl.getMyPayments);
+// Staff self-service routes (must be before /:id routes)
+router.get('/my-payments',    auth, role(['staff']), ctrl.getMyPayments);
+router.post('/check-in',      auth, role(['staff']), ctrl.checkIn);
+router.post('/check-out',     auth, role(['staff']), ctrl.checkOut);
+router.get('/my-attendance',  auth, role(['staff']), ctrl.getMyAttendance);
 
 router.get('/',               auth, role(['admin']), ctrl.list);
 router.get('/:id',            auth, role(['admin']), ctrl.getOne);

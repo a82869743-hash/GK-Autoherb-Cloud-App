@@ -87,6 +87,9 @@ app.use('/api/vehicles',   require('./routes/vehicles'));
 
 // ─── New Feature Routes ─────────────────────────────────────
 app.use('/api/user-packages', require('./routes/userPackages'));
+app.use('/api/reports',       require('./routes/reports'));
+app.use('/api/billing',       require('./routes/billing'));
+app.use('/api/vendors',       require('./routes/vendors'));
 
 // ─── Socket.io Auth + GPS ───────────────────────────
 const jwt = require('jsonwebtoken');

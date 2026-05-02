@@ -11,4 +11,8 @@ router.get('/:id',        auth, role(['admin', 'customer']), ctrl.getOne);
 router.post('/',          auth, role(['customer', 'admin']), ctrl.create);
 router.patch('/:id/cancel', auth, role(['admin', 'customer']), ctrl.cancel);
 
+// ─── Approval Workflow (Admin only) ─────────────────────
+router.patch('/:id/approve', auth, role(['admin']), ctrl.approve);
+router.patch('/:id/reject',  auth, role(['admin']), ctrl.reject);
+
 module.exports = router;

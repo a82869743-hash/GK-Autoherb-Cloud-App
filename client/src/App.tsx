@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
+import { useInactivityTimer } from './utils/useInactivityTimer';
 import AdminLayout from './components/layout/AdminLayout';
 import CustomerLayout from './components/layout/CustomerLayout';
 import StaffLayout from './components/layout/StaffLayout';
@@ -75,6 +76,9 @@ const Placeholder = ({ title }: { title: string }) => (
 export default function App() {
   const { isAuthenticated, user } = useAuthStore();
 
+  // Auto-logout after 30 min inactivity
+  useInactivityTimer();
+
   const getDefaultRedirect = () => {
     if (!isAuthenticated || !user) return '/login';
     const redirects: Record<string, string> = {
@@ -122,6 +126,10 @@ export default function App() {
         <Route path="import" element={<ImportPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="loyalty" element={<LoyaltyAwardPage />} />
+        {/* ─── New Admin Routes ─── */}
+        <Route path="reports" element={<Placeholder title="Reports" />} />
+        <Route path="billing" element={<Placeholder title="Manual Billing" />} />
+        <Route path="vendors" element={<Placeholder title="Vendor Management" />} />
       </Route>
 
       {/* Customer routes */}

@@ -139,6 +139,9 @@ export interface Service {
   price_sedan: number;
   price_premium_sedan: number;
   price_suv: number;
+  duration_minutes: number;
+  category_id?: number;
+  category_name?: string;
   is_active: boolean;
 }
 
@@ -179,7 +182,7 @@ export interface Slot {
   bookings?: Booking[];
 }
 
-export type BookingStatus = 'confirmed' | 'cancelled' | 'completed';
+export type BookingStatus = 'pending_approval' | 'confirmed' | 'cancelled' | 'completed' | 'expired' | 'rejected';
 
 export interface Booking {
   id: number;
@@ -188,12 +191,20 @@ export interface Booking {
   slot: Slot;
   service?: Service;
   package?: Package;
+  vehicle_id?: number;
   vehicle_brand?: string;
   vehicle_model?: string;
   vehicle_reg_no?: string;
+  total_duration?: number;
   status: BookingStatus;
   is_free_wash: boolean;
   notes?: string;
+  booking_notes?: string;
+  expires_at?: string;
+  approved_by?: number;
+  approved_by_name?: string;
+  approved_at?: string;
+  linked_services?: { service_id: number; name: string; duration_minutes: number }[];
   created_at: string;
 }
 
@@ -398,4 +409,47 @@ export interface ToastItem {
   id: string;
   type: ToastType;
   message: string;
+}
+
+// ═══════════════════════════════════════════
+// MANUAL BILLING
+// ═══════════════════════════════════════════
+export interface ManualBill {
+  id: number;
+  customer_id?: number;
+  customer_name?: string;
+  customer_mobile?: string;
+  amount: number;
+  description?: string;
+  services_json?: string;
+  payment_method: 'cash' | 'upi' | 'card' | 'bank_transfer' | 'other';
+  created_by: number;
+  created_by_name?: string;
+  created_at: string;
+}
+
+// ═══════════════════════════════════════════
+// VENDORS
+// ═══════════════════════════════════════════
+export interface Vendor {
+  id: number;
+  name: string;
+  phone?: string;
+  email?: string;
+  service_type?: string;
+  address?: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+// ═══════════════════════════════════════════
+// SERVICE CATEGORIES
+// ═══════════════════════════════════════════
+export interface ServiceCategory {
+  id: number;
+  name: string;
+  description?: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
 }

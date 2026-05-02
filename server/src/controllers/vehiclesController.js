@@ -46,7 +46,6 @@ exports.getVariants = async (req, res) => {
 exports.getVehicles = async (req, res) => {
   try {
     const userId = req.user.id;
-    // Note: The schema uses customer_id to link vehicles to users
     const query = 'SELECT * FROM vehicles WHERE customer_id = ? ORDER BY is_primary DESC, created_at DESC';
     const [vehicles] = await pool.query(query, [userId]);
     
@@ -54,6 +53,61 @@ exports.getVehicles = async (req, res) => {
   } catch (error) {
     console.error('Error fetching user vehicles:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch vehicles' });
+  }
+};
+
+// ─── GET ALL VEHICLES (Admin) ───────────────────────────────
+// Returns all vehicles with customer info — for admin job card vehicle dropdown
+exports.getAllVehicles = async (req, res) => {
+  try {
+    const { search, page = 1, limit = 50 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    let where = '1=1';
+    const params = [];
+
+    if (search) {
+      where += ' AND (v.registration_no LIKE ? OR v.brand LIKE ? OR v.model LIKE ? OR u.name LIKE ? OR u.mobile LIKE ?)';
+      const s = `%${search}%`;
+      params.push(s, s, s, s, s);
+    }
+
+    const [rows] = await pool.query(`
+      SELECT v.*, u.name AS customer_name, u.mobile AS customer_mobile, u.email AS customer_email
+      FROM vehicles v
+      JOIN users u ON v.customer_id = u.id
+      WHERE ${where}
+      ORDER BY v.created_at DESC
+      LIMIT ? OFFSET ?
+    `, [...params, parseInt(limit), offset]);
+
+    const [countRows] = await pool.query(
+      `SELECT COUNT(*) AS total FROM vehicles v JOIN users u ON v.customer_id = u.id WHERE ${where}`,
+      params
+    );
+
+    res.json({
+      success: true,
+      data: rows,
+      pagination: { page: parseInt(page), limit: parseInt(limit), total: countRows[0].total },
+    });
+  } catch (err) {
+    console.error('getAllVehicles error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── GET VEHICLES BY CUSTOMER (Admin) ───────────────────────
+exports.getByCustomer = async (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const [vehicles] = await pool.query(
+      'SELECT * FROM vehicles WHERE customer_id = ? ORDER BY is_primary DESC, created_at DESC',
+      [customerId]
+    );
+    res.json({ success: true, data: vehicles });
+  } catch (err) {
+    console.error('getByCustomer error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 };
 
@@ -116,7 +170,6 @@ exports.addCar = async (req, res) => {
 
 // ─── SET PRIMARY CAR ────────────────────────────────────────
 // PATCH /vehicles/:id/primary
-// Unsets old primary, sets the specified car as primary.
 exports.setPrimary = async (req, res) => {
   const conn = await pool.getConnection();
   try {
@@ -160,7 +213,6 @@ exports.setPrimary = async (req, res) => {
 
 // ─── DELETE CAR ─────────────────────────────────────────────
 // DELETE /vehicles/:id
-// Prevents deletion if the car is linked to active job carts.
 exports.deleteCar = async (req, res) => {
   const conn = await pool.getConnection();
   try {
@@ -215,4 +267,3 @@ exports.deleteCar = async (req, res) => {
     conn.release();
   }
 };
-

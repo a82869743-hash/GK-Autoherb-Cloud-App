@@ -277,3 +277,93 @@ exports.getMyPayments = async (req, res) => {
   }
 };
 
+// ─── STAFF CHECK-IN ─────────────────────────
+exports.checkIn = async (req, res) => {
+  try {
+    const staffId = req.user.id;
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Check if already checked in today
+    const [existing] = await pool.query(
+      'SELECT id, check_in_time FROM staff_attendance WHERE staff_id = ? AND att_date = ?',
+      [staffId, today]
+    );
+
+    if (existing.length && existing[0].check_in_time) {
+      return res.status(422).json({ success: false, error: 'Already checked in today' });
+    }
+
+    if (existing.length) {
+      // Update existing record (e.g., absentee cron created it)
+      await pool.query(
+        "UPDATE staff_attendance SET status = 'present', check_in_time = NOW(), note = 'Self check-in' WHERE id = ?",
+        [existing[0].id]
+      );
+    } else {
+      // Create new record
+      await pool.query(
+        "INSERT INTO staff_attendance (staff_id, att_date, status, check_in_time, note) VALUES (?, ?, 'present', NOW(), 'Self check-in')",
+        [staffId, today]
+      );
+    }
+
+    console.log(`[STAFF] Check-in: staff ${staffId} at ${new Date().toISOString()}`);
+    res.json({ success: true, message: 'Checked in successfully' });
+  } catch (err) {
+    console.error('Staff check-in error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── STAFF CHECK-OUT ────────────────────────
+exports.checkOut = async (req, res) => {
+  try {
+    const staffId = req.user.id;
+    const today = new Date().toISOString().slice(0, 10);
+
+    const [existing] = await pool.query(
+      'SELECT id, check_in_time, check_out_time FROM staff_attendance WHERE staff_id = ? AND att_date = ?',
+      [staffId, today]
+    );
+
+    if (!existing.length || !existing[0].check_in_time) {
+      return res.status(422).json({ success: false, error: 'Must check in before checking out' });
+    }
+    if (existing[0].check_out_time) {
+      return res.status(422).json({ success: false, error: 'Already checked out today' });
+    }
+
+    await pool.query(
+      'UPDATE staff_attendance SET check_out_time = NOW() WHERE id = ?',
+      [existing[0].id]
+    );
+
+    console.log(`[STAFF] Check-out: staff ${staffId} at ${new Date().toISOString()}`);
+    res.json({ success: true, message: 'Checked out successfully' });
+  } catch (err) {
+    console.error('Staff check-out error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── GET MY ATTENDANCE (staff self-service) ──
+exports.getMyAttendance = async (req, res) => {
+  try {
+    const { from_date, to_date } = req.query;
+    let where = 'staff_id = ?';
+    const params = [req.user.id];
+
+    if (from_date) { where += ' AND att_date >= ?'; params.push(from_date); }
+    if (to_date) { where += ' AND att_date <= ?'; params.push(to_date); }
+
+    const [rows] = await pool.query(
+      `SELECT * FROM staff_attendance WHERE ${where} ORDER BY att_date DESC`,
+      params
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('getMyAttendance error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
