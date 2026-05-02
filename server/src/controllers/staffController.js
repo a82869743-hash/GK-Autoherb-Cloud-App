@@ -137,7 +137,7 @@ exports.update = async (req, res) => {
 // ─── MARK ATTENDANCE ────────────────────────
 exports.markAttendance = async (req, res) => {
   try {
-    const { status, note, att_date } = req.body;
+    const { status, note, att_date, check_in_time, check_out_time } = req.body;
     const staffId = req.params.id;
     const date = att_date || new Date().toISOString().slice(0, 10);
 
@@ -149,12 +149,16 @@ exports.markAttendance = async (req, res) => {
     const [staff] = await pool.query('SELECT id FROM users WHERE id = ? AND role = ?', [staffId, 'staff']);
     if (!staff.length) return res.status(404).json({ success: false, error: 'Staff not found' });
 
-    // Upsert attendance
+    // Build timestamps from date + time (e.g. "2026-05-02" + "09:30" → "2026-05-02 09:30:00")
+    const checkIn = check_in_time ? `${date} ${check_in_time}:00` : null;
+    const checkOut = check_out_time ? `${date} ${check_out_time}:00` : null;
+
+    // Upsert attendance with check-in/out times
     await pool.query(
-      `INSERT INTO staff_attendance (staff_id, att_date, status, note)
-       VALUES (?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE status = VALUES(status), note = VALUES(note)`,
-      [staffId, date, status, note || null]
+      `INSERT INTO staff_attendance (staff_id, att_date, status, note, check_in_time, check_out_time)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE status = VALUES(status), note = VALUES(note), check_in_time = VALUES(check_in_time), check_out_time = VALUES(check_out_time)`,
+      [staffId, date, status, note || null, checkIn, checkOut]
     );
 
     res.json({ success: true, message: 'Attendance marked' });

@@ -1,105 +1,75 @@
 const axios = require('axios');
 
+/**
+ * ─── MESSAGING SERVICE (2FACTOR.IN) ──────────────────────────
+ * 
+ * Sends transactional SMS via 2Factor.in API.
+ * All DLT templates must be pre-registered on the DLT portal.
+ *
+ * ENV required:
+ *   MSG91_AUTH_KEY   — Your 2Factor.in API key
+ *   MSG91_SENDER_ID  — Approved 6-char DLT sender ID (default: GKAHER)
+ */
+
 class MessagingService {
   constructor() {
-    this.msg91BaseUrl = 'https://control.msg91.com/api/v5';
-    this.authKey = process.env.MSG91_AUTH_KEY;
-    this.senderId = process.env.MSG91_SENDER_ID || 'GKAUTO';
+    this.apiKey = process.env.MSG91_AUTH_KEY;
+    this.senderId = process.env.MSG91_SENDER_ID || 'GKAHER';
   }
 
   /**
-   * Send WhatsApp Message via MSG91
-   * @param {string} to - Destination number with country code (e.g., 919876543210)
-   * @param {string} templateName - The pre-approved template name
-   * @param {Object} defaultParams - Key-value map of variables in the template
+   * Send Transactional SMS via 2Factor.in
+   * @param {string} mobile — 10-digit Indian mobile (no country code)
+   * @param {string} message — DLT-approved message text (must match exactly)
+   * @returns {Promise<{success: boolean, data?: any, error?: string}>}
+   */
+  async sendSMS(mobile, templateId, shortUrl, variables = {}) {
+    if (!this.apiKey) {
+      console.log(`[MOCK SMS] To: ${mobile} | Variables:`, variables);
+      return { success: true, mocked: true };
+    }
+
+    // Build the actual message from variables
+    // For campaigns, the message_content is passed as variables.content
+    const message = variables.content || variables.body || '';
+    if (!message) {
+      console.error('[SMS] No message content provided');
+      return { success: false, error: 'No message content' };
+    }
+
+    try {
+      const response = await axios.get('https://2factor.in/API/R1/', {
+        params: {
+          module: 'TRANS_SMS',
+          apikey: this.apiKey,
+          to: mobile,
+          from: this.senderId,
+          msg: message,
+        },
+        timeout: 10000,
+      });
+
+      if (response.data && response.data.Status === 'Success') {
+        console.log(`[SMS] SENT — To: ${mobile} | SessionId: ${response.data.Details}`);
+        return { success: true, data: response.data };
+      } else {
+        console.error(`[SMS] FAILED — To: ${mobile} | Response:`, response.data);
+        return { success: false, error: response.data?.Details || 'SMS send failed' };
+      }
+    } catch (error) {
+      console.error('[SMS] ERROR —', error.response?.data || error.message);
+      return { success: false, error: error.response?.data?.Details || error.message };
+    }
+  }
+
+  /**
+   * Send WhatsApp Message via 2Factor.in (if supported)
+   * Falls back to SMS if WhatsApp not configured
    */
   async sendWhatsApp(to, templateName, defaultParams = {}) {
-    if (!this.authKey) {
-      console.log(`[MOCK WHATSAPP] To: ${to} | Template: ${templateName} | Params:`, defaultParams);
-      return { success: true, mocked: true };
-    }
-
-    try {
-      const response = await axios.post(`${this.msg91BaseUrl}/whatsapp/whatsapp-outbound-message/bulk/`, {
-        integrated_number: process.env.WHATSAPP_NUMBER || "919925566886",
-        content_type: "template",
-        payload: {
-          messaging_product: "whatsapp",
-          type: "template",
-          template: {
-            name: templateName,
-            language: { code: "en", policy: "deterministic" },
-            namespace: process.env.WHATSAPP_NAMESPACE,
-            to_and_components: [
-              {
-                to: [to],
-                components: this._buildTemplateComponents(defaultParams)
-              }
-            ]
-          }
-        }
-      }, {
-        headers: {
-          'authkey': this.authKey,
-          'Content-Type': 'application/json'
-        }
-      });
-      return { success: true, data: response.data };
-    } catch (error) {
-      console.error('WhatsApp sending failed:', error?.response?.data || error.message);
-      return { success: false, error: 'Failed to send WhatsApp message' };
-    }
-  }
-
-  /**
-   * Send promotional SMS or Transactional SMS via MSG91
-   */
-  async sendSMS(to, templateId, shortUrl = '1', variables = {}) {
-    if (!this.authKey) {
-      console.log(`[MOCK SMS] To: ${to} | TemplateID: ${templateId} | Variables:`, variables);
-      return { success: true, mocked: true };
-    }
-
-    try {
-      const response = await axios.post(`${this.msg91BaseUrl}/flow/`, {
-        template_id: templateId,
-        short_url: shortUrl,
-        recipients: [
-          {
-            mobiles: to,
-            ...variables
-          }
-        ]
-      }, {
-        headers: {
-          'authkey': this.authKey,
-          'Content-Type': 'application/json'
-        }
-      });
-      return { success: true, data: response.data };
-    } catch (error) {
-      console.error('SMS sending failed:', error?.response?.data || error.message);
-      return { success: false, error: 'Failed to send SMS' };
-    }
-  }
-
-  // Internal helper to map MSG91 dynamic params
-  _buildTemplateComponents(params) {
-    if (Object.keys(params).length === 0) return {};
-    const components = {};
-    if (params.body) {
-      components["body_1"] = {
-        type: "text",
-        value: params.body
-      };
-    }
-    if (params.header) {
-      components["header_1"] = {
-        type: "text",
-        value: params.header
-      };
-    }
-    return components;
+    // 2Factor.in WhatsApp is a separate product — fall back to SMS for now
+    console.log(`[WHATSAPP] Falling back to SMS for: ${to}`);
+    return this.sendSMS(to, null, null, { content: defaultParams.body || '' });
   }
 }
 

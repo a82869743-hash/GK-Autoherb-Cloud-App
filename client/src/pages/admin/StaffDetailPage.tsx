@@ -38,7 +38,7 @@ export default function StaffDetailPage() {
   const [showAttModal, setShowAttModal] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
 
-  const [attForm, setAttForm] = useState({ att_date: new Date().toISOString().slice(0, 10), status: 'present', note: '' });
+  const [attForm, setAttForm] = useState({ att_date: new Date().toISOString().slice(0, 10), status: 'present', note: '', check_in_time: '', check_out_time: '' });
   const [payForm, setPayForm] = useState({ amount: '', purpose: '', payment_date: new Date().toISOString().slice(0, 10) });
   const [profileForm, setProfileForm] = useState({ name: '', mobile: '', email: '', specialisations: '' });
 
@@ -143,6 +143,8 @@ export default function StaffDetailPage() {
               columns={[
                 { key: 'att_date', header: 'Date', render: (row: any) => new Date(row.att_date).toLocaleDateString() },
                 { key: 'status', header: 'Status', render: (row: any) => <StatusBadge status={row.status} /> },
+                { key: 'check_in_time', header: 'Check In', render: (row: any) => row.check_in_time ? new Date(row.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—' },
+                { key: 'check_out_time', header: 'Check Out', render: (row: any) => row.check_out_time ? new Date(row.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—' },
                 { key: 'note', header: 'Note', render: (row: any) => row.note || '—' }
               ]}
               data={attendance || []}
@@ -192,6 +194,10 @@ export default function StaffDetailPage() {
               <option value="absent">Absent</option>
               <option value="half_day">Half Day</option>
             </select>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Input label="Check-In Time" type="time" value={attForm.check_in_time} onChange={e => setAttForm({...attForm, check_in_time: e.target.value})} />
+            <Input label="Check-Out Time" type="time" value={attForm.check_out_time} onChange={e => setAttForm({...attForm, check_out_time: e.target.value})} />
           </div>
           <Input label="Note (Optional)" value={attForm.note} onChange={e => setAttForm({...attForm, note: e.target.value})} />
           <div className="flex justify-end gap-3 pt-2">
