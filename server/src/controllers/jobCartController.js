@@ -105,20 +105,7 @@ exports.create = async (req, res) => {
 
     const jobCartId = result.insertId;
 
-    // ── Fire-and-forget SMS notification ──────────────────────
-    // NEVER block the response — SMS failure is non-critical
-    try {
-      const sendSms = require('../utils/sendSms');
-      const [custRows] = await pool.query(
-        `SELECT u.mobile FROM users u JOIN vehicles v ON v.customer_id = u.id WHERE v.id = ?`,
-        [vehicleId]
-      );
-      if (custRows.length && custRows[0].mobile) {
-        sendSms(custRows[0].mobile, jobCartId).catch(() => {});
-      }
-    } catch (smsErr) {
-      console.error('[SMS] Job card SMS failed (non-blocking):', smsErr.message);
-    }
+    // SMS moved to completion step
 
     res.status(201).json({ success: true, data: { id: jobCartId }, message: 'Job cart created' });
   } catch (err) {
@@ -401,16 +388,19 @@ exports.complete = async (req, res) => {
         const serviceList = svcs.map(s => s.service_name).join(', ');
         const messageBody = `Dear ${c.name}, your ${c.brand} ${c.model} (${c.registration_no}) service is complete at GK AutoHerb! Services: ${serviceList}. Total: Rs.${grandTotal}. Thank you!`;
         
-        // Fire-and-forget WhatsApp (existing)
+        // Fire-and-forget WhatsApp (existing custom template)
         messagingService.sendWhatsApp(`91${c.mobile}`, 'job_complete', { body: messageBody }).catch(() => {});
         
-        // Fire-and-forget 2Factor SMS (new)
-        sendSms(c.mobile, messageBody).catch(() => {});
+        // Fire-and-forget 2Factor SMS (strictly matches DLT template: GK AutoHerb: Your job card #VAR1# is ready...)
+        sendSms(c.mobile, id).catch(() => {});
         
         // Log to messages_log
+        const baseUrl = process.env.APP_BASE_URL || 'https://gkautobook.cloud';
+        const smsPreview = `GK AutoHerb: Your job card ${id} is ready. Track here ${baseUrl}/job/${id}`;
+        
         pool.query(
-          `INSERT INTO messages_log (customer_id, mobile, type, channel, status, message_preview) VALUES (?, ?, 'job_complete', 'sms', 'queued', ?)`,
-          [customerId, c.mobile, messageBody.substring(0, 100)]
+          `INSERT INTO messages_log (customer_id, mobile, type, channel, status, message_preview) VALUES (?, ?, 'job_complete', 'sms', 'sent', ?)`,
+          [customerId, c.mobile, smsPreview]
         ).catch(() => {});
       }
     } catch (msgErr) {
