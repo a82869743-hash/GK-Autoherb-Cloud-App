@@ -9,7 +9,8 @@ const api = axios.create({
 // Attach JWT on every request
 api.interceptors.request.use((config) => {
   try {
-    const stored = localStorage.getItem('gk-auth-v1');
+    // Try sessionStorage first, fall back to localStorage for migration
+    const stored = sessionStorage.getItem('gk-auth-v1') || localStorage.getItem('gk-auth-v1');
     if (stored) {
       const { state } = JSON.parse(stored);
       if (state?.token) config.headers.Authorization = `Bearer ${state.token}`;
@@ -32,6 +33,7 @@ api.interceptors.response.use(
 
     // Auto-logout on 401 (token expired/invalid)
     if (err.response.status === 401) {
+      sessionStorage.removeItem('gk-auth-v1');
       localStorage.removeItem('gk-auth-v1');
       // Only redirect if not already on login/register
       const path = window.location.pathname;

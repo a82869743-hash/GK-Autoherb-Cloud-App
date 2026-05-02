@@ -30,6 +30,8 @@ export default function BookingPage() {
 
   // Step 2: Vehicle
   const [userVehicles, setUserVehicles] = useState<any[]>([]);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<number | null>(null);
+  const [manualEntry, setManualEntry] = useState(false);
 
   // Step 2: Vehicle
   const [brand, setBrand] = useState('');
@@ -67,12 +69,15 @@ export default function BookingPage() {
         const fetchedVehicles = myVehiclesRes.data.data || [];
         setUserVehicles(fetchedVehicles);
         
-        // Auto-select primary car if available
+        // Auto-select primary car (or only car) if available
         if (fetchedVehicles.length > 0) {
           const primary = fetchedVehicles.find((v: any) => v.is_primary) || fetchedVehicles[0];
+          setSelectedVehicleId(primary.id);
           setBrand(primary.brand);
           setModel(primary.model);
           setRegNo(primary.registration_no || '');
+        } else {
+          setManualEntry(true);
         }
 
         setActivePackages(activePkgRes.data.data || []);
@@ -121,6 +126,7 @@ export default function BookingPage() {
         slot_id: selectedSlot.id,
         service_ids: selectedServices.length > 0 ? selectedServices : undefined,
         package_id: selectedPackage || undefined,
+        vehicle_id: selectedVehicleId || undefined,
         vehicle_brand: brand,
         vehicle_model: model,
         vehicle_reg_no: regNo || undefined,
@@ -128,6 +134,7 @@ export default function BookingPage() {
       });
       setBookingResult(res);
     } catch (err: any) {
+      console.error('BOOKING ERROR:', err);
       toast('error', err?.response?.data?.error || 'Booking failed');
     }
   };
@@ -315,34 +322,66 @@ export default function BookingPage() {
       {/* ═══ Step 1: Vehicle Details ═══ */}
       {step === 1 && (
         <div className="bg-white rounded-lg p-6 shadow-sm space-y-4">
-          {userVehicles.length > 0 && (
-            <div className="mb-6 p-4 bg-gray-50 border border-gray-100 rounded-xl">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2">Select Saved Vehicle</p>
-              <div className="flex gap-2 overflow-x-auto pb-2">
-                {userVehicles.map((v) => (
-                  <button
-                    key={v.id}
-                    onClick={() => {
-                      setBrand(v.brand);
-                      setModel(v.model);
-                      setRegNo(v.registration_no || '');
-                    }}
-                    className={`shrink-0 px-4 py-2 border rounded-lg text-sm font-bold transition-all ${
-                      brand === v.brand && model === v.model && regNo === (v.registration_no || '')
-                        ? 'bg-[#D32F2F] text-white border-[#D32F2F]'
-                        : 'bg-white text-[#1c1b1b] border-gray-200 hover:border-[#D32F2F]'
-                    }`}
-                  >
-                    {v.brand} {v.model} {v.registration_no ? `(${v.registration_no})` : ''}
-                  </button>
+          {/* Vehicle dropdown — shown when user has saved vehicles */}
+          {userVehicles.length > 0 && !manualEntry && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2">Select Your Vehicle</p>
+              <select
+                value={selectedVehicleId || ''}
+                onChange={(e) => {
+                  const vid = parseInt(e.target.value);
+                  const v = userVehicles.find((veh: any) => veh.id === vid);
+                  if (v) {
+                    setSelectedVehicleId(v.id);
+                    setBrand(v.brand);
+                    setModel(v.model);
+                    setRegNo(v.registration_no || '');
+                  }
+                }}
+                className="w-full px-4 py-3.5 bg-[#f6f3f2] border border-transparent rounded-lg text-[#1c1b1b] font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white focus:border-[#D32F2F]/30 transition-all duration-200 appearance-none cursor-pointer"
+              >
+                {userVehicles.map((v: any) => (
+                  <option key={v.id} value={v.id}>
+                    🚗 {v.brand} {v.model} {v.registration_no ? `(${v.registration_no})` : ''} {v.is_primary ? '★ Primary' : ''}
+                  </option>
                 ))}
-              </div>
+              </select>
+
+              {/* Link to switch to manual entry */}
+              <button
+                type="button"
+                onClick={() => { setManualEntry(true); setSelectedVehicleId(null); setBrand(''); setModel(''); setRegNo(''); }}
+                className="mt-3 text-xs font-bold text-[#D32F2F] hover:underline"
+              >
+                + Enter vehicle details manually
+              </button>
             </div>
           )}
-          
-          <Input label="Car Brand" placeholder="e.g. Hyundai" value={brand} onChange={(e) => setBrand(e.target.value)} listOptions={brandsRes?.data} />
-          <Input label="Car Model" placeholder="e.g. Creta" value={model} onChange={(e) => setModel(e.target.value)} listOptions={modelsRes?.data} />
-          <Input label="Registration No (Optional)" placeholder="e.g. GJ01AB1234" value={regNo} onChange={(e) => setRegNo(e.target.value.toUpperCase())} />
+
+          {/* Manual entry — shown when no saved vehicles or user chose manual */}
+          {(manualEntry || userVehicles.length === 0) && (
+            <div className="space-y-4">
+              {userVehicles.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManualEntry(false);
+                    const primary = userVehicles.find((v: any) => v.is_primary) || userVehicles[0];
+                    setSelectedVehicleId(primary.id);
+                    setBrand(primary.brand);
+                    setModel(primary.model);
+                    setRegNo(primary.registration_no || '');
+                  }}
+                  className="text-xs font-bold text-[#D32F2F] hover:underline mb-2"
+                >
+                  ← Back to saved vehicles
+                </button>
+              )}
+              <Input label="Car Brand" placeholder="e.g. Hyundai" value={brand} onChange={(e) => setBrand(e.target.value)} listOptions={brandsRes?.data} />
+              <Input label="Car Model" placeholder="e.g. Creta" value={model} onChange={(e) => setModel(e.target.value)} listOptions={modelsRes?.data} />
+              <Input label="Registration No (Optional)" placeholder="e.g. GJ01AB1234" value={regNo} onChange={(e) => setRegNo(e.target.value.toUpperCase())} />
+            </div>
+          )}
         </div>
       )}
 

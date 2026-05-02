@@ -19,6 +19,7 @@ router.post('/reset-password', forgotPasswordController.resetPassword);
 router.get('/me', authMiddleware, authController.getMe);
 router.put('/profile', authMiddleware, authController.updateProfile);
 router.post('/change-password', authMiddleware, authController.changePassword);
+router.post('/refresh', authMiddleware, authController.refreshToken);
 
 // Admin routes
 const role = require('../middleware/role');

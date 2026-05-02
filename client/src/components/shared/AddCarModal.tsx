@@ -45,6 +45,7 @@ export default function AddCarModal({ isOpen, onClose }: AddCarModalProps) {
       resetForm();
       onClose();
     } catch (err: any) {
+      console.error('ADD CAR ERROR:', err);
       toast.error(err.response?.data?.error || 'Failed to add car');
     } finally {
       setIsPending(false);

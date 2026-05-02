@@ -9,7 +9,7 @@ const generateToken = (user) => {
   return jwt.sign(
     { id: user.id, role: user.role, name: user.name, mobile: user.mobile },
     process.env.JWT_SECRET,
-    { expiresIn: '1d' }
+    { expiresIn: '1h' }
   );
 };
 
@@ -281,5 +281,36 @@ exports.adminCreateCustomer = async (req, res) => {
       return res.status(409).json({ success: false, error: 'Mobile already registered' });
     }
     res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+/**
+ * POST /auth/refresh
+ * Auth: Any (valid or recently-expired token)
+ * Returns a fresh 1h token if the current token is still valid.
+ * This enables soft session extension — frontend calls this periodically.
+ */
+exports.refreshToken = async (req, res) => {
+  try {
+    // req.user is set by auth middleware (token must still be valid)
+    const [users] = await pool.query(
+      'SELECT id, name, mobile, role FROM users WHERE id = ? AND is_active = 1',
+      [req.user.id]
+    );
+
+    if (!users.length) {
+      return res.status(401).json({ success: false, error: 'User not found or deactivated' });
+    }
+
+    const user = users[0];
+    const newToken = generateToken(user);
+
+    res.json({
+      success: true,
+      data: { token: newToken, user },
+    });
+  } catch (err) {
+    console.error('Token refresh error:', err);
+    res.status(500).json({ success: false, error: 'Token refresh failed' });
   }
 };

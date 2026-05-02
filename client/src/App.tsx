@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
-import { useInactivityTimer } from './utils/useInactivityTimer';
+import { useInactivityTimer, useTokenRefresh } from './utils/useInactivityTimer';
 import AdminLayout from './components/layout/AdminLayout';
 import CustomerLayout from './components/layout/CustomerLayout';
 import StaffLayout from './components/layout/StaffLayout';
@@ -78,6 +78,9 @@ export default function App() {
 
   // Auto-logout after 30 min inactivity
   useInactivityTimer();
+
+  // Silent token refresh (checks expiry on mount, refreshes every 45 min)
+  useTokenRefresh();
 
   const getDefaultRedirect = () => {
     if (!isAuthenticated || !user) return '/login';
