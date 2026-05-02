@@ -42,7 +42,7 @@ export const useCreateBooking = () => {
   return useMutation({
     mutationFn: async (payload: {
       slot_id: number;
-      service_id?: number; package_id?: number;
+      service_id?: number; service_ids?: number[]; package_id?: number;
       vehicle_brand?: string; vehicle_model?: string; vehicle_reg_no?: string;
       vehicle_category?: string;
       is_free_wash?: boolean; notes?: string;
