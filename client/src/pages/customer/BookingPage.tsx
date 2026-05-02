@@ -23,9 +23,13 @@ export default function BookingPage() {
   // Step 1: Service/Package
   const [services, setServices] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
-  const [selectedService, setSelectedService] = useState<number | null>(null);
+  const [selectedServices, setSelectedServices] = useState<number[]>([]);
   const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
   const [servicesLoading, setServicesLoading] = useState(true);
+  const [activePackages, setActivePackages] = useState<any[]>([]);
+
+  // Step 2: Vehicle
+  const [userVehicles, setUserVehicles] = useState<any[]>([]);
 
   // Step 2: Vehicle
   const [brand, setBrand] = useState('');
@@ -47,40 +51,54 @@ export default function BookingPage() {
   const { data: brandsRes } = useBrands();
   const { data: modelsRes } = useModels(brand);
 
-  // Load services & packages
+  // Load services, packages, vehicles
   useEffect(() => {
     (async () => {
       try {
-        const [svcRes, pkgRes] = await Promise.all([
+        const [svcRes, pkgRes, myVehiclesRes, activePkgRes] = await Promise.all([
           api.get('/services').catch(() => ({ data: { data: [] } })),
           api.get('/packages').catch(() => ({ data: { data: [] } })),
+          api.get('/vehicles/my-vehicles').catch(() => ({ data: { data: [] } })),
+          api.get('/user-packages/active').catch(() => ({ data: { data: [] } })),
         ]);
         setServices(svcRes.data.data || []);
         setPackages(pkgRes.data.data || []);
+        
+        const fetchedVehicles = myVehiclesRes.data.data || [];
+        setUserVehicles(fetchedVehicles);
+        
+        // Auto-select primary car if available
+        if (fetchedVehicles.length > 0) {
+          const primary = fetchedVehicles.find((v: any) => v.is_primary) || fetchedVehicles[0];
+          setBrand(primary.brand);
+          setModel(primary.model);
+          setRegNo(primary.registration_no || '');
+        }
+
+        setActivePackages(activePkgRes.data.data || []);
       } catch {} finally { setServicesLoading(false); }
     })();
   }, []);
 
-  // Pre-select from URL params
   useEffect(() => {
     const sid = searchParams.get('service_id');
     const pid = searchParams.get('package_id');
-    if (sid) setSelectedService(parseInt(sid));
+    if (sid) setSelectedServices([parseInt(sid)]);
     if (pid) setSelectedPackage(parseInt(pid));
   }, [searchParams]);
 
   const canNext = useMemo(() => {
     switch (step) {
-      case 0: return selectedService !== null || selectedPackage !== null;
+      case 0: return selectedServices.length > 0 || selectedPackage !== null;
       case 1: return brand.trim().length > 0 && model.trim().length > 0;
       case 2: return selectedDate.length > 0;
       case 3: return selectedSlot !== null;
       default: return true;
     }
-  }, [step, selectedService, selectedPackage, brand, model, selectedDate, selectedSlot]);
+  }, [step, selectedServices, selectedPackage, brand, model, selectedDate, selectedSlot]);
 
-  const selectedServiceObj = services.find((s) => s.id === selectedService);
-  const selectedPackageObj = packages.find((p) => p.id === selectedPackage);
+  const selectedServicesObjs = services.filter((s) => selectedServices.includes(s.id));
+  const selectedPackageObj = activePackages.find((p) => p.package_id === selectedPackage) || packages.find((p) => p.id === selectedPackage);
 
   // ─── Calendar helpers ───────────────────
   const today = new Date();
@@ -101,7 +119,7 @@ export default function BookingPage() {
     try {
       const res = await createMut.mutateAsync({
         slot_id: selectedSlot.id,
-        service_id: selectedService || undefined,
+        service_ids: selectedServices.length > 0 ? selectedServices : undefined,
         package_id: selectedPackage || undefined,
         vehicle_brand: brand,
         vehicle_model: model,
@@ -121,13 +139,15 @@ export default function BookingPage() {
         <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mb-6">
           <Check size={36} className="text-green-600" />
         </div>
-        <h2 className="text-2xl font-extrabold text-[#1c1b1b] mb-2">Booking Confirmed!</h2>
-        <p className="text-sm text-[#5f5e5e] mb-1">Your appointment has been booked successfully.</p>
+        <h2 className="text-2xl font-extrabold text-[#1c1b1b] mb-2">Booking Requested!</h2>
+        <p className="text-sm text-[#5f5e5e] mb-1">Your appointment request has been submitted for approval.</p>
         <p className="text-xs text-[#5f5e5e] mb-6">Reference: <span className="font-bold">#{bookingResult.data?.id}</span></p>
         <div className="bg-white rounded-lg p-6 shadow-sm max-w-sm w-full text-left space-y-2">
           <div className="flex justify-between text-sm">
-            <span className="text-[#5f5e5e]">Service</span>
-            <span className="font-bold">{selectedServiceObj?.name || selectedPackageObj?.name}</span>
+            <span className="text-[#5f5e5e]">Service(s)</span>
+            <span className="font-bold text-right ml-4">
+              {selectedServicesObjs.length > 0 ? selectedServicesObjs.map(s => s.name).join(', ') : (selectedPackageObj?.package_name || selectedPackageObj?.name)}
+            </span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-[#5f5e5e]">Date</span>
@@ -195,15 +215,25 @@ export default function BookingPage() {
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-3">Services</p>
                   <div className="grid gap-3">
-                    {services.filter(s => s.is_active).map((svc) => (
-                      <button
-                        key={svc.id}
-                        onClick={() => { setSelectedService(svc.id); setSelectedPackage(null); }}
-                        className={`text-left p-4 rounded-lg border-2 transition-all ${
-                          selectedService === svc.id ? 'border-[#D32F2F] bg-red-50/30' : 'border-gray-100 bg-white hover:border-gray-200'
-                        }`}
-                      >
-                        <p className="font-bold text-[#1c1b1b]">{svc.name}</p>
+                    {services.filter(s => s.is_active).map((svc) => {
+                      const isSelected = selectedServices.includes(svc.id);
+                      return (
+                        <button
+                          key={svc.id}
+                          onClick={() => {
+                            setSelectedServices(prev => prev.includes(svc.id) ? prev.filter(id => id !== svc.id) : [...prev, svc.id]);
+                            setSelectedPackage(null);
+                          }}
+                          className={`text-left p-4 rounded-lg border-2 transition-all ${
+                            isSelected ? 'border-[#D32F2F] bg-red-50/30' : 'border-gray-100 bg-white hover:border-gray-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <p className="font-bold text-[#1c1b1b]">{svc.name}</p>
+                            <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-[#D32F2F] border-[#D32F2F]' : 'border-gray-300'}`}>
+                              {isSelected && <Check size={12} className="text-white" />}
+                            </div>
+                          </div>
                         {svc.description && <p className="text-xs text-[#5f5e5e] mt-1 line-clamp-2">{svc.description}</p>}
                         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-[#5f5e5e]">
                           {filter === 'all' ? (
@@ -219,6 +249,33 @@ export default function BookingPage() {
                           )}
                         </div>
                       </button>
+                    )})}
+                  </div>
+                </div>
+              )}
+
+              {activePackages.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-3">Your Active Packages</p>
+                  <div className="grid gap-3">
+                    {activePackages.map((pkg) => (
+                      <button
+                        key={pkg.id}
+                        onClick={() => { setSelectedPackage(pkg.package_id); setSelectedServices([]); }}
+                        className={`text-left p-4 rounded-lg border-2 transition-all ${
+                          selectedPackage === pkg.package_id ? 'border-[#D32F2F] bg-red-50/30' : 'border-gray-100 bg-white hover:border-gray-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Sparkles size={14} className="text-[#D32F2F]" />
+                          <p className="font-bold text-[#1c1b1b]">{pkg.package_name}</p>
+                          <span className="ml-auto text-[10px] font-bold px-2 py-0.5 bg-green-100 text-green-700 rounded uppercase">Active</span>
+                        </div>
+                        <div className="flex gap-4 mt-2 text-xs text-[#5f5e5e]">
+                          <span>{pkg.remaining_washes} washes left</span>
+                          <span>{pkg.remaining_coatings} coatings left</span>
+                        </div>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -226,12 +283,12 @@ export default function BookingPage() {
 
               {packages.length > 0 && (
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-3">Packages</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-3">Buy a Package</p>
                   <div className="grid gap-3">
                     {packages.filter(p => p.is_active || p.is_published).map((pkg) => (
                       <button
                         key={pkg.id}
-                        onClick={() => { setSelectedPackage(pkg.id); setSelectedService(null); }}
+                        onClick={() => { setSelectedPackage(pkg.id); setSelectedServices([]); }}
                         className={`text-left p-4 rounded-lg border-2 transition-all ${
                           selectedPackage === pkg.id ? 'border-[#D32F2F] bg-red-50/30' : 'border-gray-100 bg-white hover:border-gray-200'
                         }`}
@@ -258,6 +315,31 @@ export default function BookingPage() {
       {/* ═══ Step 1: Vehicle Details ═══ */}
       {step === 1 && (
         <div className="bg-white rounded-lg p-6 shadow-sm space-y-4">
+          {userVehicles.length > 0 && (
+            <div className="mb-6 p-4 bg-gray-50 border border-gray-100 rounded-xl">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2">Select Saved Vehicle</p>
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                {userVehicles.map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => {
+                      setBrand(v.brand);
+                      setModel(v.model);
+                      setRegNo(v.registration_no || '');
+                    }}
+                    className={`shrink-0 px-4 py-2 border rounded-lg text-sm font-bold transition-all ${
+                      brand === v.brand && model === v.model && regNo === (v.registration_no || '')
+                        ? 'bg-[#D32F2F] text-white border-[#D32F2F]'
+                        : 'bg-white text-[#1c1b1b] border-gray-200 hover:border-[#D32F2F]'
+                    }`}
+                  >
+                    {v.brand} {v.model} {v.registration_no ? `(${v.registration_no})` : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          
           <Input label="Car Brand" placeholder="e.g. Hyundai" value={brand} onChange={(e) => setBrand(e.target.value)} listOptions={brandsRes?.data} />
           <Input label="Car Model" placeholder="e.g. Creta" value={model} onChange={(e) => setModel(e.target.value)} listOptions={modelsRes?.data} />
           <Input label="Registration No (Optional)" placeholder="e.g. GJ01AB1234" value={regNo} onChange={(e) => setRegNo(e.target.value.toUpperCase())} />
@@ -324,8 +406,19 @@ export default function BookingPage() {
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {(slotsData?.data || []).filter((s: any) => !s.is_blocked).map((slot: any) => {
-                const isFull = slot.booked_count >= slot.max_capacity;
+                let isFull = slot.booked_count >= slot.max_capacity;
                 const isSelected = selectedSlot?.id === slot.id;
+                
+                // Filter out past slots for today
+                const isToday = selectedDate === today.toISOString().split('T')[0];
+                if (isToday) {
+                  const [hour, minute] = slot.start_time.split(':').map(Number);
+                  const now = new Date();
+                  if (hour < now.getHours() || (hour === now.getHours() && minute <= now.getMinutes())) {
+                    isFull = true; // Mark as disabled
+                  }
+                }
+
                 return (
                   <button
                     key={slot.id}
@@ -362,8 +455,10 @@ export default function BookingPage() {
           <div className="space-y-3 text-sm mb-6">
             <div className="flex items-center gap-3 py-2 border-b border-gray-50">
               <Sparkles size={16} className="text-[#D32F2F] shrink-0" />
-              <span className="text-[#5f5e5e]">Service</span>
-              <span className="ml-auto font-bold text-[#1c1b1b]">{selectedServiceObj?.name || selectedPackageObj?.name}</span>
+              <span className="text-[#5f5e5e]">Service(s)</span>
+              <span className="ml-auto font-bold text-[#1c1b1b] text-right ml-4">
+                {selectedServicesObjs.length > 0 ? selectedServicesObjs.map(s => s.name).join(', ') : (selectedPackageObj?.package_name || selectedPackageObj?.name)}
+              </span>
             </div>
             <div className="flex items-center gap-3 py-2 border-b border-gray-50">
               <Car size={16} className="text-[#D32F2F] shrink-0" />

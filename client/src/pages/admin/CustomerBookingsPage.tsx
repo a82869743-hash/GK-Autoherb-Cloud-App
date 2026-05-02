@@ -11,8 +11,10 @@ import StatusBadge from '../../components/ui/StatusBadge';
 import Modal from '../../components/ui/Modal';
 import { SkeletonCard } from '../../components/ui/SkeletonLoader';
 import { formatTime } from '../../utils/formatters';
+import api from '../../api/axiosInstance';
 
 const TABS = [
+  { key: 'pending_approval', label: 'Pending Approvals', color: 'bg-yellow-500' },
   { key: 'confirmed', label: 'Confirmed', color: 'bg-green-500' },
   { key: 'all', label: 'All', color: 'bg-gray-500' },
   { key: 'completed', label: 'Completed', color: 'bg-blue-500' },
@@ -21,7 +23,7 @@ const TABS = [
 
 export default function CustomerBookingsPage() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('confirmed');
+  const [activeTab, setActiveTab] = useState('pending_approval');
   const [search, setSearch] = useState('');
   const [searchDebounced, setSearchDebounced] = useState('');
   const [page, setPage] = useState(1);
@@ -232,10 +234,42 @@ export default function CustomerBookingsPage() {
                   <span className={`text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg ${
                     b.status === 'confirmed' ? 'bg-green-100 text-green-700' :
                     b.status === 'completed' ? 'bg-blue-100 text-blue-700' :
+                    b.status === 'pending_approval' ? 'bg-yellow-100 text-yellow-800' :
                     'bg-red-100 text-red-700'
                   }`}>
-                    {b.status}
+                    {b.status.replace('_', ' ')}
                   </span>
+
+                  {b.status === 'pending_approval' && (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="!text-red-600 hover:bg-red-50"
+                        onClick={async () => {
+                          if (!window.confirm('Reject this booking?')) return;
+                          try {
+                            await api.patch(`/bookings/${b.id}/reject`);
+                            window.location.reload();
+                          } catch (err) { alert('Failed to reject booking'); }
+                        }}
+                      >
+                        Reject
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700"
+                        onClick={async () => {
+                          try {
+                            await api.patch(`/bookings/${b.id}/approve`);
+                            window.location.reload();
+                          } catch (err) { alert('Failed to approve booking'); }
+                        }}
+                      >
+                        Approve
+                      </Button>
+                    </div>
+                  )}
 
                   {b.status === 'confirmed' && !b.job_cart_id && (
                     <Button
