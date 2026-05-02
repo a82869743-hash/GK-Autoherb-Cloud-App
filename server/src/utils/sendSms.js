@@ -37,9 +37,7 @@ async function sendSms(mobile, jobId) {
     return false;
   }
 
-  // ⚠️ DLT template — must match EXACTLY what is registered on DLT portal
-  const message = `GK AutoHerb: Your job card ${jobId} is ready. Track here ${baseUrl}/job/${jobId}`;
-
+  // ⚠️ Using explicit Template Name to avoid DLT whitespace/formatting rejections
   try {
     const response = await axios.get('https://2factor.in/API/R1/', {
       params: {
@@ -47,7 +45,9 @@ async function sendSms(mobile, jobId) {
         apikey: apiKey,
         to: mobile,
         from: sender,
-        msg: message,
+        templatename: 'GK_JOB_ALERT',
+        var1: jobId,
+        var2: `${baseUrl}/job/${jobId}`
       },
       timeout: 10000,
     });
