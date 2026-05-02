@@ -31,6 +31,7 @@ export default function JobCartDetailPage() {
   const navigate = useNavigate();
   const toast = useUIStore((s) => s.toast);
   const user = useAuthStore((s) => s.user);
+  const token = useAuthStore((s) => s.token);
   const { data: cart, isLoading, isError, refetch } = useJobCart(id);
   const submitMut = useSubmitJobCart();
   const completeMut = useCompleteJobCart();
@@ -265,12 +266,9 @@ export default function JobCartDetailPage() {
   };
 
   const handleDownloadInvoice = () => {
-    const token = localStorage.getItem('gk-auth-v1');
-    const parsed = token ? JSON.parse(token) : null;
-    const jwt = parsed?.state?.token;
     const apiBase = import.meta.env.VITE_API_URL || '/api';
     window.open(
-      `${apiBase}/job-carts/${cart.id}/invoice?token=${jwt}`,
+      `${apiBase}/job-carts/${cart.id}/invoice?token=${token}`,
       '_blank'
     );
   };

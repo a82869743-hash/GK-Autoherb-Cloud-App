@@ -46,8 +46,8 @@ async function sendJobCardSMS(mobile, jobId) {
     From: sender,
     To: cleanMobile,
     TemplateName: 'GK_JOB_ALERT_V2',
-    VAR1: String(jobId),
-    VAR2: trackingUrl
+    VAR1: trackingUrl,
+    VAR2: String(jobId)
   };
 
   const fallbackPayload = {

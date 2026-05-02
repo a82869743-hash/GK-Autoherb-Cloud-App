@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ClipboardList, ChevronDown, ChevronUp, Download, Calendar, Car, Hash } from 'lucide-react';
 import { useJobCarts } from '../../api/hooks/useJobCarts';
+import { useAuthStore } from '../../store/authStore';
 import StatusBadge from '../../components/shared/StatusBadge';
 import EmptyState from '../../components/shared/EmptyState';
 import { SkeletonCard } from '../../components/ui/SkeletonLoader';
@@ -10,6 +11,7 @@ import type { JobPhoto } from '../../types';
 export default function CustomerJobCartsPage() {
   const { data, isLoading } = useJobCarts({ page: 1, limit: 100 });
   const [expanded, setExpanded] = useState<number | null>(null);
+  const token = useAuthStore((s) => s.token);
 
   if (isLoading) {
     return (
@@ -36,12 +38,9 @@ export default function CustomerJobCartsPage() {
   }
 
   const handleDownloadInvoice = (cartId: number) => {
-    const token = localStorage.getItem('gk-auth-v1');
-    const parsed = token ? JSON.parse(token) : null;
-    const jwt = parsed?.state?.token;
     const apiBase = import.meta.env.VITE_API_URL || '/api';
     window.open(
-      `${apiBase}/job-carts/${cartId}/invoice?token=${jwt}`,
+      `${apiBase}/job-carts/${cartId}/invoice?token=${token}`,
       '_blank'
     );
   };
