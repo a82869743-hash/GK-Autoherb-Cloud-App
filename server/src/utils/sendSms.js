@@ -1,6 +1,7 @@
 /**
  * ─── SEND TRANSACTIONAL SMS VIA 2FACTOR.IN ──────────────────
  * Production-ready DLT-compliant transactional SMS for job card updates.
+ * DEBUG MODE ENABLED
  */
 
 const axios = require('axios');
@@ -17,7 +18,7 @@ async function sendJobCardSMS(mobile, jobId) {
   const baseUrl = process.env.APP_BASE_URL || 'https://gkautobook.cloud';
 
   if (!apiKey) {
-    console.log(`[DEV SMS] To: ${mobile} | JobId: ${jobId} (API key not set)`);
+    console.log(`[DEBUG SMS] To: ${mobile} | JobId: ${jobId} (API key not set)`);
     return false;
   }
 
@@ -28,19 +29,19 @@ async function sendJobCardSMS(mobile, jobId) {
   } else if (cleanMobile.length === 12 && cleanMobile.startsWith('91')) {
     // Already correct
   } else {
-    console.error(`[SMS FAILED] Invalid mobile number format: ${mobile}`);
+    console.error(`[DEBUG SMS FAILED] Invalid mobile number format: ${mobile}`);
     return false;
   }
 
-  // 2. Validate Variables
   if (!jobId) {
-    console.error('[SMS FAILED] Missing Job ID');
+    console.error('[DEBUG SMS FAILED] Missing Job ID');
     return false;
   }
 
   const trackingUrl = `${baseUrl}/job/${jobId}`;
   
-  // 3. Build API Payload
+  // 3. Build CORRECT API Endpoint & Payload
+  // ✅ Correct Endpoint: /ADDON_SERVICES/SEND/TSMS
   const url = `https://2factor.in/API/V1/${apiKey}/ADDON_SERVICES/SEND/TSMS`;
   const payload = {
     From: sender,
@@ -50,28 +51,48 @@ async function sendJobCardSMS(mobile, jobId) {
     VAR2: trackingUrl
   };
 
-  // 4. Send API Request with Retry Logic
+  console.log('\n=============================================');
+  console.log('🔹 DEBUG SMS REQUEST DETAILS');
+  console.log('=============================================');
+  console.log('Endpoint URL:', url.replace(apiKey, 'HIDDEN_API_KEY'));
+  console.log('Payload:', JSON.stringify(payload, null, 2));
+  console.log('Headers: Content-Type: application/json');
+  console.log('=============================================\n');
+
+  // 4. Send API Request
   let attempt = 0;
   const maxRetries = 2;
 
   while (attempt <= maxRetries) {
     try {
-      const response = await axios.post(url, payload, { timeout: 10000 });
+      const response = await axios.post(url, payload, { 
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000 
+      });
+
+      console.log(`[DEBUG SMS RESPONSE - Attempt ${attempt + 1}]`);
+      console.log('Status Code:', response.status);
+      console.log('Response Body:', JSON.stringify(response.data, null, 2));
 
       if (response.data && response.data.Status === 'Success') {
-        console.log(`[SMS SUCCESS] Mobile: ${cleanMobile} | JobId: ${jobId} | SessionId: ${response.data.Details}`);
+        console.log(`✅ [SMS API SUCCESS] Mobile: ${cleanMobile} | JobId: ${jobId}`);
         return true;
       } else {
-        console.error(`[SMS FAILED] API Error (Attempt ${attempt + 1}):`, response.data);
+        console.error(`❌ [SMS FAILED] API rejected payload:`, response.data);
         
-        // Do not retry if DLT rejection (it will always fail)
         if (JSON.stringify(response.data).includes('DLT-CNT-REJECT')) {
-          console.error('[SMS FATAL] DLT Content Rejection! Check Template mapping.');
+          console.error('❌ [FATAL] DLT Content Rejection! API is correct, but telecom operator scrub failed.');
           return false;
         }
       }
     } catch (err) {
-      console.error(`[SMS ERROR] Request Failed (Attempt ${attempt + 1}):`, err.response?.data || err.message);
+      console.error(`❌ [SMS ERROR] Request Failed (Attempt ${attempt + 1}):`);
+      if (err.response) {
+        console.error('Error Status:', err.response.status);
+        console.error('Error Data:', err.response.data);
+      } else {
+        console.error('Error Message:', err.message);
+      }
     }
     
     attempt++;
