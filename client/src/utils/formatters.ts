@@ -1,10 +1,16 @@
 // Currency formatter (Indian Rupees)
-export const formatINR = (amount: number): string =>
-  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
+export const formatINR = (amount: number | string | null | undefined): string => {
+  const parsed = Number(amount);
+  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(isNaN(parsed) ? 0 : parsed);
+};
 
 // Date formatter
-export const formatDate = (date: string): string =>
-  new Date(date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+export const formatDate = (date: string | null | undefined): string => {
+  if (!date) return '-';
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return '-';
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
 
 // Time formatter (12-hour)
 export const formatTime = (time: string): string => {
