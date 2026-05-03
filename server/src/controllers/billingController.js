@@ -141,3 +141,20 @@ exports.getOne = async (req, res) => {
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };
+
+// ─── DOWNLOAD INVOICE PDF ────────────────────
+exports.downloadInvoice = async (req, res) => {
+  try {
+    const { generateManualBillPDF } = require('../services/invoiceService');
+    const { pdfBuffer, invoiceNumber } = await generateManualBillPDF(req.params.id);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${invoiceNumber}.pdf"`,
+    });
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error('Manual bill invoice error:', err);
+    res.status(500).json({ success: false, error: 'Failed to generate invoice' });
+  }
+};
+

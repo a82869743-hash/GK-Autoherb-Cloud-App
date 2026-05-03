@@ -785,4 +785,347 @@ async function generateBuySellInvoicePDF(buySellId) {
   }
 }
 
-module.exports = { generateInvoicePDF, generateBuySellInvoicePDF };
+
+/**
+ * Generate "Bill of Supply" PDF for a Manual Bill (Quick Billing)
+ */
+async function generateManualBillPDF(billId) {
+  const conn = await pool.getConnection();
+  try {
+    const [rows] = await conn.query(`
+      SELECT mb.*, u.name AS created_by_name
+      FROM manual_bills mb
+      LEFT JOIN users u ON mb.created_by = u.id
+      WHERE mb.id = ?
+    `, [billId]);
+    if (!rows.length) throw new Error('Manual bill not found');
+    const bill = rows[0];
+
+    const [settingsRows] = await conn.query('SELECT key_name, value FROM settings');
+    const settings = {};
+    settingsRows.forEach(r => { settings[r.key_name] = r.value; });
+
+    const invoiceNumber = `MB-${bill.id}`;
+    const invoiceDate = new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const logoBase64 = getLogoBase64();
+    const logoHtml = logoBase64
+      ? `<img src="${logoBase64}" alt="GK Auto Herb" style="width:80px;height:80px;object-fit:contain;" />`
+      : `<div style="width:80px;height:80px;background:#D32F2F;border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:14px;text-align:center;">Auto<br>Herb</div>`;
+
+    const services = bill.services_json ? (typeof bill.services_json === 'string' ? JSON.parse(bill.services_json) : bill.services_json) : [];
+    const products = bill.products_json ? (typeof bill.products_json === 'string' ? JSON.parse(bill.products_json) : bill.products_json) : [];
+
+    let grandTotal = 0;
+    const itemRows = [];
+    for (const s of services) {
+      const price = parseFloat(s.price || s.service_price || 0);
+      grandTotal += price;
+      itemRows.push({ name: (s.service_name || s.name || 'Service').toUpperCase(), qty: '1 PCS', rate: formatINR(price), amount: formatINR(price) });
+    }
+    for (const p of products) {
+      const qty = parseInt(p.quantity || 1);
+      const price = parseFloat(p.price || p.unit_cost || 0);
+      const total = price * qty;
+      grandTotal += total;
+      itemRows.push({ name: (p.product_name || p.name || 'Product').toUpperCase(), qty: `${qty} PCS`, rate: formatINR(price), amount: formatINR(total) });
+    }
+
+    let discountAmt = 0;
+    if (bill.discount_type === 'percentage') {
+      discountAmt = grandTotal * (parseFloat(bill.discount_value || 0) / 100);
+    } else if (bill.discount_type === 'fixed') {
+      discountAmt = parseFloat(bill.discount_value || 0);
+    }
+    const finalTotal = Math.max(0, grandTotal - discountAmt);
+
+    const emptyRowsCount = Math.max(0, 6 - itemRows.length);
+    const serviceRowsHtml = itemRows.map(s => `
+      <tr>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-transform:uppercase;">${s.name}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:center;">${s.qty}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">${s.rate}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">${s.amount}</td>
+      </tr>
+    `).join('');
+    const emptyRows = Array(emptyRowsCount).fill(`
+      <tr>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;">&nbsp;</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;">&nbsp;</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;">&nbsp;</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;">&nbsp;</td>
+      </tr>
+    `).join('');
+
+    const html = buildInvoiceHTML({
+      title: 'BILL OF SUPPLY',
+      invoiceNumber,
+      invoiceDate,
+      logoHtml,
+      partyName: bill.customer_name || 'Walk-in Customer',
+      partyMobile: bill.customer_mobile || '—',
+      rightLabel: 'Payment Method',
+      rightValue: (bill.payment_method || 'cash').toUpperCase(),
+      serviceRowsHtml,
+      emptyRows,
+      totalQty: itemRows.length,
+      grandTotal,
+      discountAmt,
+      finalTotal,
+      notes: bill.description || '',
+    });
+
+    return renderPDF(html, invoiceNumber);
+  } finally {
+    conn.release();
+  }
+}
+
+/**
+ * Generate "Salary Slip" PDF for a staff salary record
+ */
+async function generateSalarySlipPDF(salaryId) {
+  const conn = await pool.getConnection();
+  try {
+    const [rows] = await conn.query(`
+      SELECT ss.*, u.name AS staff_name, u.mobile AS staff_mobile
+      FROM staff_salary ss
+      JOIN users u ON ss.staff_id = u.id
+      WHERE ss.id = ?
+    `, [salaryId]);
+    if (!rows.length) throw new Error('Salary record not found');
+    const rec = rows[0];
+
+    const invoiceNumber = `SAL-${rec.month_year}-${rec.id}`;
+    const invoiceDate = new Date(rec.created_at || Date.now()).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const logoBase64 = getLogoBase64();
+    const logoHtml = logoBase64
+      ? `<img src="${logoBase64}" alt="GK Auto Herb" style="width:80px;height:80px;object-fit:contain;" />`
+      : `<div style="width:80px;height:80px;background:#D32F2F;border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:14px;text-align:center;">Auto<br>Herb</div>`;
+
+    const base = parseFloat(rec.base_salary || 0);
+    const bonus = parseFloat(rec.bonus || 0);
+    const deductions = parseFloat(rec.deductions || 0);
+    const finalTotal = parseFloat(rec.final_salary || 0);
+    const grandTotal = base + bonus;
+
+    const serviceRowsHtml = `
+      <tr><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;">BASE SALARY — ${rec.month_year}</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:center;">1</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">${formatINR(base)}</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">${formatINR(base)}</td></tr>
+      ${bonus > 0 ? `<tr><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;">BONUS</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:center;">1</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">${formatINR(bonus)}</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">${formatINR(bonus)}</td></tr>` : ''}
+    `;
+    const emptyCount = Math.max(0, 6 - (bonus > 0 ? 2 : 1));
+    const emptyRows = Array(emptyCount).fill(`<tr><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;">&nbsp;</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;">&nbsp;</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;">&nbsp;</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;">&nbsp;</td></tr>`).join('');
+
+    const html = buildInvoiceHTML({
+      title: 'SALARY SLIP',
+      invoiceNumber,
+      invoiceDate,
+      logoHtml,
+      partyName: rec.staff_name,
+      partyMobile: rec.staff_mobile || '—',
+      rightLabel: 'Month',
+      rightValue: rec.month_year,
+      serviceRowsHtml,
+      emptyRows,
+      totalQty: bonus > 0 ? 2 : 1,
+      grandTotal,
+      discountAmt: deductions,
+      finalTotal,
+      notes: rec.notes || '',
+    });
+
+    return renderPDF(html, invoiceNumber);
+  } finally {
+    conn.release();
+  }
+}
+
+// ─── Shared HTML builder ──────────────────────────────────────────────────────
+function buildInvoiceHTML({ title, invoiceNumber, invoiceDate, logoHtml, partyName, partyMobile, rightLabel, rightValue, serviceRowsHtml, emptyRows, totalQty, grandTotal, discountAmt, finalTotal, notes }) {
+  return `
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4; margin: 0; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: 'Segoe UI', Arial, Helvetica, sans-serif; color: #1a1a1a; padding: 30px 35px; font-size: 12px; line-height: 1.4; }
+      .bill-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+      .bill-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+      .original-badge { display: inline-block; border: 1px solid #999; padding: 2px 8px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 8px; color: #666; }
+      .company-header { display: flex; align-items: center; gap: 15px; background: #D32F2F; padding: 12px 15px; border-radius: 4px; margin-bottom: 15px; margin-top: 8px; }
+      .company-logo { flex-shrink: 0; background: white; padding: 4px; border-radius: 4px; }
+      .company-info { color: white; }
+      .company-info h1 { font-size: 22px; font-weight: 800; margin-bottom: 3px; }
+      .company-info p { font-size: 10px; line-height: 1.5; opacity: 0.95; }
+      .company-info .gst-row { margin-top: 4px; font-size: 10px; font-weight: 600; }
+      .invoice-meta { display: flex; border: 1px solid #D32F2F; margin-bottom: 12px; }
+      .invoice-meta-left, .invoice-meta-right { flex: 1; padding: 8px 12px; }
+      .invoice-meta-right { text-align: right; border-left: 1px solid #D32F2F; }
+      .meta-label { font-size: 10px; color: #D32F2F; font-weight: 700; }
+      .meta-value { font-size: 13px; font-weight: 700; }
+      .bill-details { display: flex; border: 1px solid #D32F2F; border-top: none; margin-top: -12px; margin-bottom: 15px; }
+      .bill-to-section { flex: 1; padding: 10px 12px; }
+      .vehicle-section { flex: 0 0 220px; padding: 10px 12px; border-left: 1px solid #D32F2F; text-align: right; }
+      .bill-to-label, .vehicle-label { font-size: 10px; font-weight: 700; color: #D32F2F; text-transform: uppercase; }
+      .bill-to-name { font-size: 13px; font-weight: 700; margin-top: 3px; }
+      .bill-to-detail { font-size: 11px; color: #444; margin-top: 1px; }
+      .vehicle-value { font-size: 12px; font-weight: 600; margin-top: 2px; }
+      .services-table { width: 100%; border-collapse: collapse; margin-bottom: 0; }
+      .services-table thead th { background: #D32F2F; color: white; padding: 8px 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; text-align: left; }
+      .subtotal-row { display: flex; justify-content: space-between; padding: 10px 12px; border: 1px solid #D32F2F; font-weight: 700; font-size: 13px; margin-top: 20px; }
+      .bottom-grid { display: flex; gap: 0; border: 1px solid #D32F2F; border-top: none; }
+      .bank-section { flex: 1; padding: 12px; border-right: 1px solid #D32F2F; }
+      .amounts-section { flex: 0 0 260px; padding: 0; }
+      .bank-title { font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 6px; }
+      .bank-row { display: flex; font-size: 10px; margin-bottom: 2px; }
+      .bank-label { width: 85px; font-weight: 600; }
+      .bank-value { flex: 1; }
+      .amount-row { display: flex; justify-content: space-between; padding: 6px 12px; font-size: 11px; border-bottom: 1px solid #eee; }
+      .amount-row.total { background: #D32F2F; color: white; font-weight: 700; font-size: 13px; }
+      .terms-section { border: 1px solid #D32F2F; border-top: none; display: flex; }
+      .terms-left { flex: 1; padding: 12px; border-right: 1px solid #D32F2F; }
+      .terms-right { flex: 0 0 260px; padding: 12px; }
+      .terms-title { font-size: 10px; font-weight: 700; text-transform: uppercase; margin-bottom: 6px; }
+      .terms-text { font-size: 9px; color: #444; line-height: 1.5; }
+      .words-label { font-size: 10px; font-weight: 700; margin-bottom: 4px; }
+      .words-value { font-size: 11px; font-style: italic; color: #333; }
+      .signatory { border: 1px solid #D32F2F; border-top: none; padding: 20px 12px 12px; text-align: right; }
+      .signatory-line { width: 200px; margin-left: auto; text-align: center; }
+      .signatory-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #D32F2F; }
+      .signatory-name { font-size: 11px; font-weight: 600; margin-top: 2px; }
+    </style>
+  </head>
+  <body>
+    <div class="bill-header">
+      <div>
+        <span class="bill-title">${title}</span>
+        <span class="original-badge">ORIGINAL FOR RECIPIENT</span>
+      </div>
+    </div>
+    <div class="company-header">
+      <div class="company-logo">${logoHtml}</div>
+      <div class="company-info">
+        <h1>GK Auto Herb</h1>
+        <p>4 Tilak Nagar Society, Near Radiyatba Nagar, Opp AP Mart super store, New alkapuri, Laxmipura,<br>Vadodara, Gujarat, 390021</p>
+        <div class="gst-row">
+          <span>Mobile: 9408424541</span>&nbsp;&nbsp;&nbsp;
+          <span>GSTIN: 24AKUPK0446L1ZT</span>&nbsp;&nbsp;&nbsp;
+          <span>PAN Number: AKUPK0446L</span>
+        </div>
+        <p>Email: gaurav.itm2006@gmail.com</p>
+      </div>
+    </div>
+    <div class="invoice-meta">
+      <div class="invoice-meta-left">
+        <span class="meta-label">Invoice No.: </span>
+        <span class="meta-value">${invoiceNumber}</span>
+      </div>
+      <div class="invoice-meta-right">
+        <span class="meta-label">Invoice Date: </span>
+        <span class="meta-value">${invoiceDate}</span>
+      </div>
+    </div>
+    <div class="bill-details">
+      <div class="bill-to-section">
+        <div class="bill-to-label">BILL TO</div>
+        <div class="bill-to-name">${partyName}</div>
+        <div class="bill-to-detail">Mobile: ${partyMobile}</div>
+        <div class="bill-to-detail">Place of Supply: Gujarat</div>
+      </div>
+      <div class="vehicle-section">
+        <div>
+          <span class="vehicle-label">${rightLabel}</span>
+          <div class="vehicle-value">${rightValue}</div>
+        </div>
+      </div>
+    </div>
+    <table class="services-table">
+      <thead>
+        <tr>
+          <th style="width:50%;">DESCRIPTION</th>
+          <th style="width:15%;text-align:center;">QTY.</th>
+          <th style="width:17%;text-align:right;">RATE</th>
+          <th style="width:18%;text-align:right;">AMOUNT</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${serviceRowsHtml}
+        ${emptyRows}
+      </tbody>
+    </table>
+    <div class="subtotal-row">
+      <div><span style="font-size:11px;font-weight:700;">SUBTOTAL</span></div>
+      <div style="display:flex;gap:40px;">
+        <span>${totalQty}</span>
+        <span>₹ ${formatINR(grandTotal)}</span>
+      </div>
+    </div>
+    <div class="bottom-grid">
+      <div class="bank-section">
+        <div class="bank-title">BANK DETAILS</div>
+        <div class="bank-row"><span class="bank-label">Name:</span><span class="bank-value">GK Auto Herb</span></div>
+        <div class="bank-row"><span class="bank-label">IFSC Code:</span><span class="bank-value">UTIB0005059</span></div>
+        <div class="bank-row"><span class="bank-label">Account No:</span><span class="bank-value">924020045334712</span></div>
+        <div class="bank-row"><span class="bank-label">Bank:</span><span class="bank-value">Axis Bank, GOTRI SEVASI ROAD</span></div>
+      </div>
+      <div class="amounts-section">
+        <div class="amount-row"><span>Subtotal</span><span>₹ ${formatINR(grandTotal)}</span></div>
+        ${discountAmt > 0 ? `<div class="amount-row" style="color:#D32F2F;"><span>Deduction / Discount</span><span>- ₹ ${formatINR(discountAmt)}</span></div>` : ''}
+        <div class="amount-row total"><span>Total Payable</span><span>₹ ${formatINR(finalTotal)}</span></div>
+        <div class="amount-row"><span>Received Amount</span><span>₹ ${formatINR(finalTotal)}</span></div>
+        <div class="amount-row"><span>Balance</span><span>₹ 0</span></div>
+      </div>
+    </div>
+    <div class="terms-section">
+      <div class="terms-left">
+        ${notes ? `<div class="terms-title">NOTES</div><div class="terms-text" style="margin-bottom:8px;">${notes}</div>` : ''}
+        <div class="terms-title">TERMS AND CONDITIONS</div>
+        <div class="terms-text">
+          1. Your car belongings are not our responsibility and make sure you check your belongings before dropping your car at our workshop.<br>
+          2. Please check if any cash or others important documents are there.<br>
+          3. All disputes are subject to [Vadodara] jurisdiction only.
+        </div>
+      </div>
+      <div class="terms-right">
+        <div class="words-label">Total Amount (in words)</div>
+        <div class="words-value">${amountInWords(finalTotal)}</div>
+      </div>
+    </div>
+    <div class="signatory">
+      <div class="signatory-line">
+        <div style="border-top:1px solid #999;padding-top:6px;margin-top:30px;">
+          <div class="signatory-label">AUTHORISED SIGNATORY FOR</div>
+          <div class="signatory-name">GK Auto Herb</div>
+        </div>
+      </div>
+    </div>
+  </body>
+  </html>
+  `;
+}
+
+// ─── Shared PDF renderer ──────────────────────────────────────────────────────
+async function renderPDF(html, invoiceNumber) {
+  const puppeteer = require('puppeteer');
+  const launchOptions = {
+    headless: 'new',
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+  };
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+  const browser = await puppeteer.launch(launchOptions);
+  const page = await browser.newPage();
+  await page.setContent(html, { waitUntil: 'networkidle0' });
+  const pdfBuffer = await page.pdf({
+    format: 'A4',
+    printBackground: true,
+    margin: { top: '8mm', right: '8mm', bottom: '8mm', left: '8mm' },
+  });
+  await browser.close();
+  return { pdfBuffer, invoiceNumber };
+}
+
+module.exports = { generateInvoicePDF, generateBuySellInvoicePDF, generateManualBillPDF, generateSalarySlipPDF };
+

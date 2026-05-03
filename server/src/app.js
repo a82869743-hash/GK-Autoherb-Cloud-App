@@ -93,6 +93,7 @@ app.use('/api/reports',       require('./routes/reports'));
 app.use('/api/billing',       require('./routes/billing'));
 app.use('/api/vendors',       require('./routes/vendors'));
 app.use('/api/salary',        require('./routes/salary'));
+app.use('/api/invoices',      require('./routes/invoices'));
 
 // ─── Socket.io Auth + GPS ───────────────────────────
 const jwt = require('jsonwebtoken');

@@ -78,3 +78,20 @@ exports.updateSalary = async (req, res) => {
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };
+
+// ─── DOWNLOAD SALARY SLIP PDF ────────────────
+exports.downloadSlip = async (req, res) => {
+  try {
+    const { generateSalarySlipPDF } = require('../services/invoiceService');
+    const { pdfBuffer, invoiceNumber } = await generateSalarySlipPDF(req.params.id);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${invoiceNumber}.pdf"`,
+    });
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error('Salary slip PDF error:', err);
+    res.status(500).json({ success: false, error: 'Failed to generate salary slip' });
+  }
+};
+

@@ -57,6 +57,7 @@ import StaffInquiryPage from './pages/staff/InquiryPage';
 import DashboardPage from './pages/admin/DashboardPage';
 import SettingsPage from './pages/admin/SettingsPage';
 import QuickBillingPage from './pages/admin/QuickBillingPage';
+import AllInvoicesPage from './pages/admin/AllInvoicesPage';
 
 // Delivery pages
 import DeliveryPage from './pages/staff/DeliveryPage';
@@ -135,6 +136,7 @@ export default function App() {
         {/* ─── New Admin Routes ─── */}
         <Route path="reports" element={<Placeholder title="Reports" />} />
         <Route path="billing" element={<QuickBillingPage />} />
+        <Route path="invoices" element={<AllInvoicesPage />} />
         <Route path="salary" element={<StaffSalaryPage />} />
         <Route path="vendors" element={<Placeholder title="Vendor Management" />} />
       </Route>
