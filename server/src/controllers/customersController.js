@@ -139,8 +139,8 @@ exports.createManual = async (req, res) => {
     if (package_id && vehicleId) {
       // Auto approve
       await connection.query(
-        "INSERT INTO package_requests (customer_id, vehicle_id, package_id, status, price, approved_by, approved_at) VALUES (?, ?, ?, 'approved', ?, ?, NOW())",
-        [customerId, vehicleId, package_id, price || 0, req.user.id]
+        "INSERT INTO package_requests (customer_id, vehicle_id, package_id, status, price, approved_at) VALUES (?, ?, ?, 'approved', ?, NOW())",
+        [customerId, vehicleId, package_id, price || 0]
       );
       
       await connection.query(
