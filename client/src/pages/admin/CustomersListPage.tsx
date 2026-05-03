@@ -102,7 +102,7 @@ export default function CustomersListPage() {
                 </tr>
               ) : (
                 customers.map(cust => (
-                  <tr key={cust.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => navigate(\`/admin/customers/\${cust.id}\`)}>
+                  <tr key={cust.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => navigate(`/admin/customers/${cust.id}`)}>
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         <UserCircle className="w-8 h-8 text-gray-400" />

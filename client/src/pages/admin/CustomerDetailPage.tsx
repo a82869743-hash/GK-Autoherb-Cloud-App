@@ -17,7 +17,7 @@ export default function CustomerDetailPage() {
 
   const fetchDetail = async () => {
     try {
-      const res = await api.get(\`/customers/\${id}\`);
+      const res = await api.get(`/customers/${id}`);
       if (res.data.success) {
         setData(res.data.data);
       }
@@ -35,7 +35,7 @@ export default function CustomerDetailPage() {
     if (!newNote.trim()) return;
     setSubmittingNote(true);
     try {
-      const res = await api.post(\`/customers/\${id}/notes\`, { note: newNote });
+      const res = await api.post(`/customers/${id}/notes`, { note: newNote });
       if (res.data.success) {
         setData((prev: any) => ({
           ...prev,

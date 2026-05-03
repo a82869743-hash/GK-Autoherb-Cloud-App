@@ -28,7 +28,7 @@ export default function PackageApprovalsPage() {
     if (!window.confirm('Approve this package request? This will generate an invoice.')) return;
     setApprovingId(id);
     try {
-      const res = await api.put(\`/packages/requests/\${id}/approve\`);
+      const res = await api.put(`/packages/requests/${id}/approve`);
       if (res.data.success) {
         alert('Package approved successfully!');
         fetchRequests(); // refresh list
