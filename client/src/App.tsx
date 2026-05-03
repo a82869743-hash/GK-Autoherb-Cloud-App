@@ -46,6 +46,7 @@ import AccountsPage from './pages/admin/AccountsPage';
 import BuySellPage from './pages/admin/BuySellPage';
 import CustomersListPage from './pages/admin/CustomersListPage';
 import CustomerDetailPage from './pages/admin/CustomerDetailPage';
+import ManualRegistrationPage from './pages/admin/ManualRegistrationPage';
 import PackageApprovalsPage from './pages/admin/PackageApprovalsPage';
 import StaffJobCartsPage from './pages/staff/StaffJobCartsPage';
 import StaffBenefitsPage from './pages/staff/StaffBenefitsPage';
@@ -139,6 +140,7 @@ export default function App() {
         <Route path="loyalty" element={<LoyaltyAwardPage />} />
         <Route path="customers" element={<CustomersListPage />} />
         <Route path="customers/:id" element={<CustomerDetailPage />} />
+        <Route path="add-customer" element={<ManualRegistrationPage />} />
         <Route path="package-approvals" element={<PackageApprovalsPage />} />
         {/* ─── New Admin Routes ─── */}
         <Route path="reports" element={<Placeholder title="Reports" />} />

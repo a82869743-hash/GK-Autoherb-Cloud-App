@@ -3,7 +3,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
 import {
   LayoutDashboard, ClipboardList, Package, Calendar, CalendarCheck, Wrench, Users,
-  DollarSign, MessageSquare, HelpCircle, Upload, Settings, LogOut, X, ShoppingCart, Layers, FileText, Wallet, Archive
+  DollarSign, MessageSquare, HelpCircle, Upload, Settings, LogOut, X, ShoppingCart, Layers, FileText, Wallet, Archive, PlusCircle
 } from 'lucide-react';
 
 const navItems = [
@@ -13,6 +13,7 @@ const navItems = [
   { to: '/admin/buy-sell', icon: ShoppingCart, label: 'Buy & Sell' },
   { to: '/admin/slots', icon: Calendar, label: 'Slots & Bookings' },
   { to: '/admin/customer-bookings', icon: CalendarCheck, label: 'Customer Bookings' },
+  { to: '/admin/add-customer', icon: PlusCircle, label: 'Add Customer' },
   { to: '/admin/customers', icon: Users, label: 'Customers CRM' },
   { to: '/admin/services', icon: Wrench, label: 'Services' },
   { to: '/admin/packages', icon: Layers, label: 'Packages' },

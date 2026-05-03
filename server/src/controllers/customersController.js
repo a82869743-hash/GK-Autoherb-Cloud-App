@@ -97,3 +97,101 @@ exports.addNote = async (req, res) => {
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };
+
+// ─── MANUAL REGISTRATION ─────────────────────────
+exports.createManual = async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const { name, mobile, email, brand, model, category, registration_no, package_id, price } = req.body;
+
+    if (!name || !mobile) {
+      return res.status(400).json({ success: false, error: 'Name and mobile are required' });
+    }
+
+    // Check if user exists
+    let customerId;
+    const [existing] = await connection.query("SELECT id FROM users WHERE mobile = ?", [mobile]);
+    if (existing.length > 0) {
+      customerId = existing[0].id;
+    } else {
+      const [userResult] = await connection.query(
+        "INSERT INTO users (name, mobile, email, role, password) VALUES (?, ?, ?, 'customer', 'manual')",
+        [name, mobile, email || null]
+      );
+      customerId = userResult.insertId;
+    }
+
+    // Add Vehicle
+    let vehicleId = null;
+    if (brand && model) {
+      // make existing vehicles non-primary
+      await connection.query("UPDATE vehicles SET is_primary = 0 WHERE customer_id = ?", [customerId]);
+      
+      const [vehResult] = await connection.query(
+        "INSERT INTO vehicles (customer_id, registration_no, brand, model, category, is_primary) VALUES (?, ?, ?, ?, ?, ?)",
+        [customerId, registration_no || null, brand, model, category || null, 1]
+      );
+      vehicleId = vehResult.insertId;
+    }
+
+    // Add Package
+    if (package_id && vehicleId) {
+      // Auto approve
+      await connection.query(
+        "INSERT INTO package_requests (customer_id, vehicle_id, package_id, status, price, approved_by, approved_at) VALUES (?, ?, ?, 'approved', ?, ?, NOW())",
+        [customerId, vehicleId, package_id, price || 0, req.user.id]
+      );
+      
+      await connection.query(
+        "INSERT INTO customer_notes (customer_id, note) VALUES (?, ?)",
+        [customerId, `Walk-in customer registered with manual package assignment (Package ID: ${package_id}).`]
+      );
+    } else {
+      await connection.query(
+        "INSERT INTO customer_notes (customer_id, note) VALUES (?, ?)",
+        [customerId, `Walk-in customer registered manually.`]
+      );
+    }
+
+    await connection.commit();
+    res.json({ success: true, data: { customer_id: customerId, vehicle_id: vehicleId } });
+  } catch (err) {
+    await connection.rollback();
+    console.error('Manual create error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  } finally {
+    connection.release();
+  }
+};
+
+exports.listManual = async (req, res) => {
+  try {
+    const { search } = req.query;
+    let query = `
+      SELECT u.id as customer_id, u.name, u.mobile, v.brand, v.model, v.registration_no,
+             pr.package_id, p.name as package_name, pr.status, u.created_at
+      FROM users u
+      LEFT JOIN vehicles v ON u.id = v.customer_id
+      LEFT JOIN package_requests pr ON v.id = pr.vehicle_id
+      LEFT JOIN packages p ON pr.package_id = p.id
+      WHERE u.role = 'customer'
+    `;
+    const params = [];
+    
+    if (search) {
+      query += " AND (u.name LIKE ? OR u.mobile LIKE ? OR v.registration_no LIKE ?)";
+      const s = `%${search}%`;
+      params.push(s, s, s);
+    }
+    
+    query += " ORDER BY u.created_at DESC LIMIT 100";
+    
+    const [rows] = await pool.query(query, params);
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('Manual list error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
