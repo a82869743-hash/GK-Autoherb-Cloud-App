@@ -123,7 +123,7 @@ export default function CustomerDetailPage() {
                     <div className="font-bold text-gray-900">{v.brand} {v.model}</div>
                     <div className="text-xs text-gray-500 mt-1 flex items-center gap-2">
                       <span className="bg-white px-2 py-0.5 rounded border border-gray-200">{v.registration_no || 'No Reg'}</span>
-                      <span className="uppercase">{v.category.replace('_', ' ')}</span>
+                      <span className="uppercase">{v.category ? v.category.replace('_', ' ') : 'UNKNOWN'}</span>
                     </div>
                   </div>
                 ))}

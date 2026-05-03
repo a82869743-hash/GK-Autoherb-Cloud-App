@@ -123,7 +123,7 @@ export default function BuyPackagesPage() {
           >
             {vehicles.map(v => (
               <option key={v.id} value={v.id}>
-                {v.brand} {v.model} ({v.registration_no || 'No Reg'}) - {v.category.replace('_', ' ').toUpperCase()}
+                {v.brand} {v.model} ({v.registration_no || 'No Reg'}) - {v.category ? v.category.replace('_', ' ').toUpperCase() : 'UNKNOWN'}
               </option>
             ))}
           </select>
