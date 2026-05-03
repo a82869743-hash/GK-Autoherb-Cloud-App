@@ -1152,17 +1152,17 @@ async function generatePackageInvoicePDF(requestId) {
     const settings = {};
     settingsRows.forEach(r => { settings[r.key_name] = r.value; });
 
-    const invoiceNumber = \`PKG-\${record.id}\`;
+    const invoiceNumber = `PKG-${record.id}`;
     const invoiceDate = new Date(record.approved_at || record.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
     const logoBase64 = getLogoBase64();
     const logoHtml = logoBase64
-      ? \`<img src="\${logoBase64}" alt="GK Auto Herb" style="width:80px;height:80px;object-fit:contain;" />\`
-      : \`<div style="width:80px;height:80px;background:#D32F2F;border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:14px;text-align:center;">Auto<br>Herb</div>\`;
+      ? `<img src="${logoBase64}" alt="GK Auto Herb" style="width:80px;height:80px;object-fit:contain;" />`
+      : `<div style="width:80px;height:80px;background:#D32F2F;border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:14px;text-align:center;">Auto<br>Herb</div>`;
 
     const grandTotal = parseFloat(record.price) || 0;
     
-    const html = \`
+    const html = `
     <!DOCTYPE html>
     <html>
     <head>
@@ -1225,7 +1225,7 @@ async function generatePackageInvoicePDF(requestId) {
         <div><span class="bill-title">BILL OF SUPPLY</span></div>
       </div>
       <div class="company-header">
-        <div class="company-logo">\${logoHtml}</div>
+        <div class="company-logo">${logoHtml}</div>
         <div class="company-info">
           <h1>GK Auto Herb</h1>
           <p>4 Tilak Nagar Society, Near Radiyatba Nagar, Opp AP Mart super store, New alkapuri, Laxmipura,<br>Vadodara, Gujarat, 390021</p>
@@ -1239,22 +1239,22 @@ async function generatePackageInvoicePDF(requestId) {
       </div>
       <div class="invoice-meta">
         <div class="invoice-meta-left">
-          <span class="meta-label">Invoice No.: </span><span class="meta-value">\${invoiceNumber}</span>
+          <span class="meta-label">Invoice No.: </span><span class="meta-value">${invoiceNumber}</span>
         </div>
         <div class="invoice-meta-right">
-          <span class="meta-label">Invoice Date: </span><span class="meta-value">\${invoiceDate}</span>
+          <span class="meta-label">Invoice Date: </span><span class="meta-value">${invoiceDate}</span>
         </div>
       </div>
       <div class="bill-details">
         <div class="bill-to-section">
           <div class="bill-to-label">BILL TO</div>
-          <div class="bill-to-name">\${record.customer_name || '—'}</div>
-          <div class="bill-to-detail">Mobile: \${record.customer_mobile || '—'}</div>
+          <div class="bill-to-name">${record.customer_name || '—'}</div>
+          <div class="bill-to-detail">Mobile: ${record.customer_mobile || '—'}</div>
           <div class="bill-to-detail">Place of Supply: Gujarat</div>
         </div>
         <div class="vehicle-section">
-          <div><span class="vehicle-label">Vehicle Name</span><div class="vehicle-value">\${(record.brand || '')} \${(record.model || '').toUpperCase()}</div></div>
-          <div style="margin-top:8px;"><span class="vehicle-label">Vehicle No.</span><div class="vehicle-value">\${record.registration_no || '—'}</div></div>
+          <div><span class="vehicle-label">Vehicle Name</span><div class="vehicle-value">${(record.brand || '')} ${(record.model || '').toUpperCase()}</div></div>
+          <div style="margin-top:8px;"><span class="vehicle-label">Vehicle No.</span><div class="vehicle-value">${record.registration_no || '—'}</div></div>
         </div>
       </div>
       <table class="services-table">
@@ -1268,16 +1268,16 @@ async function generatePackageInvoicePDF(requestId) {
         </thead>
         <tbody>
           <tr>
-            <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-transform:uppercase;">\${record.package_name}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-transform:uppercase;">${record.package_name}</td>
             <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:center;">1</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">\${formatINR(grandTotal)}</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">\${formatINR(grandTotal)}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">${formatINR(grandTotal)}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">${formatINR(grandTotal)}</td>
           </tr>
         </tbody>
       </table>
       <div class="subtotal-row">
         <div><span style="font-size:11px;font-weight:700;">SUBTOTAL</span></div>
-        <div style="display:flex;gap:40px;"><span>1</span><span>₹ \${formatINR(grandTotal)}</span></div>
+        <div style="display:flex;gap:40px;"><span>1</span><span>₹ ${formatINR(grandTotal)}</span></div>
       </div>
       <div class="bottom-grid">
         <div class="bank-section">
@@ -1288,9 +1288,9 @@ async function generatePackageInvoicePDF(requestId) {
           <div class="bank-row"><span class="bank-label">Bank:</span><span class="bank-value">Axis Bank, GOTRI SEVASI ROAD</span></div>
         </div>
         <div class="amounts-section">
-          <div class="amount-row"><span class="amount-label">Subtotal</span><span class="amount-value">₹ \${formatINR(grandTotal)}</span></div>
-          <div class="amount-row total"><span class="amount-label">Total Payable</span><span class="amount-value">₹ \${formatINR(grandTotal)}</span></div>
-          <div class="amount-row"><span class="amount-label">Received Amount</span><span class="amount-value">₹ \${formatINR(grandTotal)}</span></div>
+          <div class="amount-row"><span class="amount-label">Subtotal</span><span class="amount-value">₹ ${formatINR(grandTotal)}</span></div>
+          <div class="amount-row total"><span class="amount-label">Total Payable</span><span class="amount-value">₹ ${formatINR(grandTotal)}</span></div>
+          <div class="amount-row"><span class="amount-label">Received Amount</span><span class="amount-value">₹ ${formatINR(grandTotal)}</span></div>
           <div class="amount-row"><span class="amount-label">Balance</span><span class="amount-value">₹ 0</span></div>
         </div>
       </div>
@@ -1301,7 +1301,7 @@ async function generatePackageInvoicePDF(requestId) {
         </div>
         <div class="terms-right">
           <div class="words-label">Total Amount (in words)</div>
-          <div class="words-value">\${amountInWords(grandTotal)}</div>
+          <div class="words-value">${amountInWords(grandTotal)}</div>
         </div>
       </div>
       <div class="signatory">
@@ -1314,7 +1314,7 @@ async function generatePackageInvoicePDF(requestId) {
       </div>
     </body>
     </html>
-    \`;
+    `;
 
     return await renderPDF(html, invoiceNumber);
   } finally {
