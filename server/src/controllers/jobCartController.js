@@ -134,6 +134,8 @@ exports.list = async (req, res) => {
     if (status && status !== 'all') {
       where += ' AND jc.status = ?';
       params.push(status);
+    } else {
+      where += " AND jc.status != 'cancelled'";
     }
     if (from_date) {
       where += ' AND jc.visit_date >= ?';

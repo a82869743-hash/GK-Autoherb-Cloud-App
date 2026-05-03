@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
   Briefcase, IndianRupee, Package, Users, TrendingUp, TrendingDown,
   Calendar, Clock, ChevronRight, Car, CalendarCheck, AlertTriangle,
-  UserCheck, ArrowUpRight, Zap, BarChart3, ShieldCheck
+  UserCheck, ArrowUpRight, Zap, BarChart3, ShieldCheck, Bell
 } from 'lucide-react';
 import { useDashboardStats } from '../../api/hooks/useDashboard';
 import { useJobCarts } from '../../api/hooks/useJobCarts';
@@ -23,6 +23,7 @@ export default function DashboardPage() {
   const [todayBookings, setTodayBookings] = useState<any[]>([]);
   const [bookingsLoading, setBookingsLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [showNotifications, setShowNotifications] = useState(false);
 
   // Live clock
   useEffect(() => {
@@ -111,12 +112,56 @@ export default function DashboardPage() {
             {currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
           </p>
         </div>
-        <Link 
-          to="/admin/job-carts/new"
-          className="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-br from-[#af101a] to-[#D32F2F] text-white font-bold rounded-xl shadow-lg shadow-[#D32F2F]/20 hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] transition-all text-sm uppercase tracking-wider"
-        >
-          <Zap size={16} /> New Job Cart
-        </Link>
+        <div className="flex items-center gap-3">
+          {/* Notification Bell */}
+          <div className="relative">
+            <button
+              onClick={() => setShowNotifications(!showNotifications)}
+              className="relative p-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-all shadow-sm"
+              title="Notifications"
+            >
+              <Bell size={18} className="text-gray-600" />
+              {!statsLoading && stats?.expiring_packages > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center animate-pulse">
+                  {stats.expiring_packages}
+                </span>
+              )}
+            </button>
+            {/* Dropdown */}
+            {showNotifications && (
+              <div className="absolute right-0 top-12 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+                  <p className="text-xs font-bold text-[#1c1b1b] uppercase tracking-wider">Notifications</p>
+                </div>
+                <div className="max-h-64 overflow-y-auto divide-y divide-gray-50">
+                  {stats?.expiring_packages > 0 ? (
+                    (stats.expiring_package_details || []).map((pkg: any) => {
+                      const daysLeft = Math.ceil((new Date(pkg.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                      return (
+                        <div key={pkg.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                          <p className="text-xs font-bold text-[#1c1b1b]">{pkg.customer_name}</p>
+                          <p className="text-[10px] text-gray-500 mt-0.5">
+                            {pkg.package_name} — <span className={daysLeft <= 7 ? 'text-red-600 font-bold' : 'text-amber-600 font-bold'}>{daysLeft <= 0 ? 'Expired' : `${daysLeft}d left`}</span>
+                          </p>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="px-4 py-8 text-center text-gray-400 text-xs">
+                      No notifications
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          <Link 
+            to="/admin/job-carts/new"
+            className="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-br from-[#af101a] to-[#D32F2F] text-white font-bold rounded-xl shadow-lg shadow-[#D32F2F]/20 hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] transition-all text-sm uppercase tracking-wider"
+          >
+            <Zap size={16} /> New Job Cart
+          </Link>
+        </div>
       </header>
 
       {/* ── KPI Grid ─────────────────────────────── */}

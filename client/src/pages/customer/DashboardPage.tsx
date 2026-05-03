@@ -42,6 +42,42 @@ export default function CustomerDashboardPage() {
 
   return (
     <div className="pt-4 space-y-6">
+      {/* ── Package Expiry Notification ─────────── */}
+      {activePackage?.end_date && (() => {
+        const daysLeft = Math.ceil((new Date(activePackage.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+        if (daysLeft <= 30) {
+          const startStr = new Date(activePackage.start_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+          const endStr = new Date(activePackage.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+          const isExpired = daysLeft <= 0;
+          return (
+            <div className={`rounded-2xl p-4 border shadow-sm ${isExpired ? 'bg-gradient-to-r from-red-50 to-red-100 border-red-200' : 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200'}`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-xl flex-shrink-0 ${isExpired ? 'bg-red-100' : 'bg-amber-100'}`}>
+                  <Package size={18} className={isExpired ? 'text-red-600' : 'text-amber-600'} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-bold ${isExpired ? 'text-red-800' : 'text-amber-800'}`}>
+                    {isExpired ? '❌ Your package has expired!' : `⚠️ Your package expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}!`}
+                  </p>
+                  <p className={`text-xs mt-0.5 ${isExpired ? 'text-red-600' : 'text-amber-700'}`}>
+                    <strong>{activePackage.package_name}</strong> • Started: {startStr} • Valid Till: {endStr}
+                  </p>
+                </div>
+                <Link
+                  to="/customer/packages"
+                  className={`flex-shrink-0 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-colors ${
+                    isExpired ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-amber-600 text-white hover:bg-amber-700'
+                  }`}
+                >
+                  {isExpired ? 'Renew Now' : 'View Package'}
+                </Link>
+              </div>
+            </div>
+          );
+        }
+        return null;
+      })()}
+
       {/* ── Hero Welcome Section ─────────────────── */}
       <div className="relative hero-bg rounded-2xl overflow-hidden pattern-overlay">
         <div className="relative z-10 px-6 sm:px-10 py-8 sm:py-10">

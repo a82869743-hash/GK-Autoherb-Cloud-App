@@ -6,7 +6,7 @@ exports.list = async (req, res) => {
     const { search, page = 1, limit = 50 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    let where = "role = 'customer'";
+    let where = "role = 'customer' AND is_active = 1";
     const params = [];
 
     if (search) {

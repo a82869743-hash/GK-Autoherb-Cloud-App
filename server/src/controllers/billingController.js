@@ -88,7 +88,7 @@ exports.list = async (req, res) => {
   try {
     const { page = 1, limit = 20, from_date, to_date, search } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    let where = '1=1';
+    let where = "mb.status != 'voided'";
     const params = [];
 
     if (from_date) { where += ' AND mb.created_at >= ?'; params.push(from_date); }

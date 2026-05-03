@@ -1,7 +1,14 @@
 const { Client } = require('ssh2');
 const c = new Client();
 c.on('ready', () => {
-  const cmd = "mysql -u root -p1234 gk_autoherb -e \"ALTER TABLE manual_bills ADD COLUMN status ENUM('paid','voided','cancelled') NOT NULL DEFAULT 'paid' AFTER payment_method;\" 2>&1";
+  const cmds = [
+    // 1. Add 'cancelled' to job_carts status enum
+    "ALTER TABLE job_carts MODIFY COLUMN status ENUM('draft','open','complete','cancelled') NOT NULL DEFAULT 'draft'",
+    // 2. Verify manual_bills status column exists
+    "SHOW COLUMNS FROM manual_bills LIKE 'status'",
+  ];
+  const sql = cmds.join('; ');
+  const cmd = `mysql -u root -p1234 gk_autoherb -e "${sql}" 2>&1`;
   c.exec(cmd, (err, stream) => {
     if (err) { console.error(err); c.end(); return; }
     stream.on('close', () => c.end())
