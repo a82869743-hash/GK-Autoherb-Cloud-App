@@ -59,6 +59,34 @@ exports.calculateSalary = async (req, res) => {
   }
 };
 
+exports.createSalary = async (req, res) => {
+  try {
+    const { staff_id, month_year, base_salary, bonus, deductions, status, notes } = req.body;
+    if (!staff_id || !month_year) {
+      return res.status(400).json({ success: false, error: 'staff_id and month_year are required' });
+    }
+
+    const final_salary = parseFloat(base_salary || 0) + parseFloat(bonus || 0) - parseFloat(deductions || 0);
+
+    const [result] = await pool.query(`
+      INSERT INTO staff_salary (staff_id, month_year, base_salary, bonus, deductions, final_salary, status, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE 
+        base_salary = VALUES(base_salary), 
+        bonus = VALUES(bonus), 
+        deductions = VALUES(deductions), 
+        final_salary = VALUES(final_salary), 
+        status = VALUES(status), 
+        notes = VALUES(notes)
+    `, [staff_id, month_year, base_salary || 0, bonus || 0, deductions || 0, final_salary, status || 'pending', notes]);
+
+    res.json({ success: true, message: 'Salary record created', data: { id: result.insertId } });
+  } catch (err) {
+    console.error('createSalary error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
 exports.updateSalary = async (req, res) => {
   try {
     const { id } = req.params;
