@@ -59,9 +59,6 @@ export default function AllInvoicesPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const limit = 25;
-
-  const { token } = useAuthStore();
-
   // Resolve api type filter — buy_sell_buy/sell both map to buy_sell on the server
   const apiType = activeType === 'buy_sell_buy' || activeType === 'buy_sell_sell' ? 'buy_sell' : activeType;
 
