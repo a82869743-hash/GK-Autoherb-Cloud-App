@@ -110,7 +110,7 @@ exports.search = async (req, res) => {
        FROM loyalty l JOIN users u ON l.customer_id = u.id
        WHERE u.mobile LIKE ? OR u.name LIKE ?
        LIMIT 20`,
-      [\`%\${q}%\`, \`%\${q}%\`]
+      [`%${q}%`, `%${q}%`]
     );
     res.json({ success: true, data: rows });
   } catch (err) {
