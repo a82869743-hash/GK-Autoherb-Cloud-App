@@ -43,7 +43,7 @@ async function migrate() {
     } catch (err) {
       console.error(`  ✗ ${file}: ${err.message}`);
       // Continue on duplicate table errors, fail on others
-      if (!err.message.includes('already exists') && !err.message.includes('Duplicate')) {
+      if (!err.message.includes('already exists') && !err.message.includes('Duplicate') && !err.message.includes('DROP')) {
         await initConn.end();
         process.exit(1);
       }
