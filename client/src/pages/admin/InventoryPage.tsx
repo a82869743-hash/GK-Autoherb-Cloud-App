@@ -244,7 +244,7 @@ export default function InventoryPage() {
               accept=".xlsx,.xls,.csv"
               className="hidden"
             />
-            <Button variant="outline" onClick={() => fileInputRef.current?.click()} icon={<Upload size={16} />} loading={isUploading}>
+            <Button variant="secondary" onClick={() => fileInputRef.current?.click()} icon={<Upload size={16} />} loading={isUploading}>
               Import Excel
             </Button>
             <Button onClick={openAddModal} icon={<Plus size={16} />}>

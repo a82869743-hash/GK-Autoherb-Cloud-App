@@ -114,7 +114,7 @@ export default function QuickBillingPage() {
     if (!pId) return;
     const prod = products.find((p: any) => p.id === pId);
     if (prod) {
-      append({ type: 'product', id: prod.id, name: prod.product_name, price: Number(prod.price || 0), quantity: 1 });
+      append({ type: 'product', id: prod.id, name: prod.product_name, price: Number((prod as any).price || 0), quantity: 1 });
     }
     e.target.value = ''; // reset
   };
