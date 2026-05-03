@@ -2,29 +2,13 @@ const { Client } = require('ssh2');
 const c = new Client();
 c.on('ready', () => {
   const code = `
-    const http = require('http');
-    const jwt = require('jsonwebtoken');
-    const token = jwt.sign({ id: 4, role: 'admin' }, 'supersecret123', { expiresIn: '1d' });
-    
-    http.get({
-      hostname: 'localhost',
-      port: 5000,
-      path: '/api/invoices?from_date=2026-05-03&to_date=2026-05-03',
-      headers: { 'Authorization': 'Bearer ' + token }
-    }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        console.log('Status:', res.statusCode);
-        console.log('Body:', data);
-        process.exit(0);
-      });
-    }).on('error', (err) => {
-      console.error(err);
-      process.exit(1);
-    });
+    const pool = require('/root/app/server/src/config/db.js');
+    pool.query('SELECT id, status, completed_at FROM job_carts').then(([rows]) => {
+      console.log(rows);
+      process.exit(0);
+    }).catch(console.error);
   `;
-  c.exec(`cd /root/app/server && node -e "${code.replace(/\n/g, ' ')}"`, (err, stream) => {
+  c.exec(`node -e "${code.replace(/\n/g, ' ')}"`, (err, stream) => {
     if (err) throw err;
     stream.on('close', () => c.end())
           .on('data', d => process.stdout.write(d))

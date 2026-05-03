@@ -9,7 +9,7 @@ exports.listAll = async (req, res) => {
 
     // ── 1. Job Carts ──────────────────────────────────────────────────────
     if (type === 'all' || type === 'job_cart') {
-      let where = "jc.status = 'completed'";
+      let where = "jc.status = 'complete'";
       const params = [];
       if (from_date) { where += ' AND DATE(jc.completed_at) >= ?'; params.push(from_date); }
       if (to_date)   { where += ' AND DATE(jc.completed_at) <= ?'; params.push(to_date); }
