@@ -31,9 +31,9 @@ exports.calculateSalary = async (req, res) => {
     
     // Get checkins for the month
     const [checkins] = await conn.query(`
-      SELECT staff_id, COUNT(DISTINCT DATE(checkin_time)) as days_present 
-      FROM staff_checkin 
-      WHERE DATE_FORMAT(checkin_time, '%Y-%m') = ?
+      SELECT staff_id, COUNT(DISTINCT att_date) as days_present 
+      FROM staff_attendance 
+      WHERE DATE_FORMAT(att_date, '%Y-%m') = ? AND status = 'present'
       GROUP BY staff_id
     `, [month_year]);
     

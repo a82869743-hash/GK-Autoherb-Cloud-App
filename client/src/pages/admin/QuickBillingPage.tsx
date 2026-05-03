@@ -44,7 +44,7 @@ export default function QuickBillingPage() {
   const { data: servicesData } = useServices();
 
   const products = inventoryData?.data || [];
-  const services = servicesData || [];
+  const services = Array.isArray(servicesData) ? servicesData : (servicesData?.data || []);
 
   const {
     register, control, handleSubmit, watch, setValue,

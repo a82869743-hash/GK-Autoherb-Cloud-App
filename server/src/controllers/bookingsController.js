@@ -53,7 +53,7 @@ exports.list = async (req, res) => {
       LEFT JOIN vehicles v ON b.vehicle_id = v.id
       LEFT JOIN users approver ON b.approved_by = approver.id
       WHERE ${where}
-      ORDER BY s.slot_date DESC, s.start_time DESC
+      ORDER BY b.created_at DESC
       LIMIT ? OFFSET ?
     `, [...params, parseInt(limit), offset]);
 

@@ -11,10 +11,12 @@ const loyaltyController = require('../controllers/loyaltyController');
 const getLoyalty = loyaltyController.get || loyaltyController.getLoyalty;
 const updateLoyalty = loyaltyController.update || loyaltyController.updateLoyalty;
 const getLoyaltyHistory = loyaltyController.history || loyaltyController.getLoyaltyHistory;
+const searchLoyalty = loyaltyController.search;
 
 // Routes
 router.get('/mine', protect, role(['customer']), getLoyalty);
 router.get('/mine/history', protect, role(['customer']), getLoyaltyHistory);
+router.get('/search', protect, role(['admin']), searchLoyalty);
 router.get('/:customerId', protect, role(['admin']), getLoyalty);
 router.get('/:customerId/history', protect, role(['admin']), getLoyaltyHistory);
 router.patch('/:customerId', protect, role(['admin']), updateLoyalty);

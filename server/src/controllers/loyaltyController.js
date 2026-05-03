@@ -98,3 +98,23 @@ exports.history = async (req, res) => {
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };
+
+// ─── SEARCH LOYALTY ─────────────────────────
+exports.search = async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q || q.length < 2) return res.json({ success: true, data: [] });
+
+    const [rows] = await pool.query(
+      `SELECT l.*, u.name AS customer_name, u.mobile
+       FROM loyalty l JOIN users u ON l.customer_id = u.id
+       WHERE u.mobile LIKE ? OR u.name LIKE ?
+       LIMIT 20`,
+      [\`%\${q}%\`, \`%\${q}%\`]
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('Loyalty search error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
