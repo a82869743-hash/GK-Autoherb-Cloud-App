@@ -108,7 +108,7 @@ export default function BuySellPage() {
                 row.status === 'pending' ? (
                   <Button variant="secondary" size="sm" onClick={() => handleCompleteBs(row.id)} loading={completeBuySellMutation.isPending}>Complete</Button>
                 ) : (
-                  <Button variant="outline" size="sm" onClick={() => handleDownloadInvoice(row.id)} loading={downloadingId === row.id} icon={<Download size={14} />}>
+                  <Button variant="secondary" size="sm" onClick={() => handleDownloadInvoice(row.id)} loading={downloadingId === row.id} icon={<Download size={14} />}>
                     Invoice
                   </Button>
                 )
