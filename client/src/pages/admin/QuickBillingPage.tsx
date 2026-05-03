@@ -100,21 +100,31 @@ export default function QuickBillingPage() {
   };
 
   const handleAddService = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const sId = Number(e.target.value);
-    if (!sId) return;
-    const service = services.find((s: any) => s.id === sId);
-    if (service) {
-      append({ type: 'service', id: service.id, name: service.name, price: Number(service.price), quantity: 1 });
+    const val = e.target.value;
+    if (!val) return;
+    if (val === 'other') {
+      append({ type: 'service', id: undefined, name: '', price: 0, quantity: 1 });
+    } else {
+      const sId = Number(val);
+      const service = services.find((s: any) => s.id === sId);
+      if (service) {
+        append({ type: 'service', id: service.id, name: service.name, price: Number(service.price), quantity: 1 });
+      }
     }
     e.target.value = ''; // reset
   };
 
   const handleAddProduct = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const pId = Number(e.target.value);
-    if (!pId) return;
-    const prod = products.find((p: any) => p.id === pId);
-    if (prod) {
-      append({ type: 'product', id: prod.id, name: prod.product_name, price: Number((prod as any).price || 0), quantity: 1 });
+    const val = e.target.value;
+    if (!val) return;
+    if (val === 'other') {
+      append({ type: 'product', id: undefined, name: '', price: 0, quantity: 1 });
+    } else {
+      const pId = Number(val);
+      const prod = products.find((p: any) => p.id === pId);
+      if (prod) {
+        append({ type: 'product', id: prod.id, name: prod.product_name, price: Number((prod as any).price || 0), quantity: 1 });
+      }
     }
     e.target.value = ''; // reset
   };
@@ -223,6 +233,7 @@ export default function QuickBillingPage() {
                   {services.map((s: any) => (
                     <option key={s.id} value={s.id}>{s.name} (₹{s.price})</option>
                   ))}
+                  <option value="other">-- Other (Custom) --</option>
                 </select>
               </div>
               <div className="flex-1">
@@ -232,6 +243,7 @@ export default function QuickBillingPage() {
                   {products.map((p: any) => (
                     <option key={p.id} value={p.id}>{p.product_name} ({p.quantity} in stock)</option>
                   ))}
+                  <option value="other">-- Other (Custom) --</option>
                 </select>
               </div>
             </div>

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axiosInstance';
-import { Search, Users, ChevronRight, UserCircle } from 'lucide-react';
+import { Search, Users, ChevronRight, UserCircle, Trash2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 interface Customer {
   id: number;
@@ -45,6 +46,17 @@ export default function CustomersListPage() {
     e.preventDefault();
     setPage(1);
     fetchCustomers();
+  };
+
+  const handleDelete = async (id: number, name: string) => {
+    if (!window.confirm(`Archive customer "${name}"? They will be moved to the Recycle Bin.`)) return;
+    try {
+      await api.delete(`/customers/${id}`);
+      toast.success('Customer archived');
+      fetchCustomers();
+    } catch {
+      toast.error('Failed to archive customer');
+    }
   };
 
   return (
@@ -119,8 +131,17 @@ export default function CustomersListPage() {
                     <td className="p-4 text-gray-600">
                       {new Date(cust.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </td>
-                    <td className="p-4 text-right">
-                      <ChevronRight className="w-5 h-5 text-gray-400 inline-block" />
+                    <td className="p-4 text-right" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleDelete(cust.id, cust.name)}
+                          className="p-1.5 rounded hover:bg-red-50 transition-colors"
+                          title="Archive"
+                        >
+                          <Trash2 size={14} className="text-gray-400 hover:text-red-500" />
+                        </button>
+                        <ChevronRight className="w-5 h-5 text-gray-400 inline-block cursor-pointer" onClick={() => navigate(`/admin/customers/${cust.id}`)} />
+                      </div>
                     </td>
                   </tr>
                 ))

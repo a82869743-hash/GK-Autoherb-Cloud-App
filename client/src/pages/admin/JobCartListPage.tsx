@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, ClipboardList } from 'lucide-react';
+import { Plus, ClipboardList, Trash2 } from 'lucide-react';
 import { useJobCarts } from '../../api/hooks/useJobCarts';
 import AdminTopBar from '../../components/layout/AdminTopBar';
 import Button from '../../components/ui/Button';
@@ -10,6 +10,9 @@ import DataTable, { Column } from '../../components/ui/DataTable';
 import StatusBadge from '../../components/shared/StatusBadge';
 import EmptyState from '../../components/shared/EmptyState';
 import { formatINR, formatDate } from '../../utils/formatters';
+import api from '../../api/axiosInstance';
+import toast from 'react-hot-toast';
+import { useQueryClient } from '@tanstack/react-query';
 
 const statusTabs = [
   { key: 'all', label: 'All' },
@@ -26,6 +29,18 @@ export default function JobCartListPage() {
   const limit = 20;
 
   const { data, isLoading } = useJobCarts({ search, status, page, limit });
+  const queryClient = useQueryClient();
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('Cancel this job cart? It will be moved to the Recycle Bin.')) return;
+    try {
+      await api.delete(`/job-carts/${id}`);
+      toast.success('Job cart cancelled');
+      queryClient.invalidateQueries({ queryKey: ['jobCarts'] });
+    } catch {
+      toast.error('Failed to cancel job cart');
+    }
+  };
 
   const columns: Column<any>[] = [
     {
@@ -67,6 +82,19 @@ export default function JobCartListPage() {
       key: 'status',
       header: 'Status',
       render: (row) => <StatusBadge status={row.status} />,
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (row) => row.status !== 'cancelled' ? (
+        <button
+          onClick={(e) => { e.stopPropagation(); handleDelete(row.id); }}
+          className="p-1.5 rounded hover:bg-red-50 transition-colors"
+          title="Cancel Job Cart"
+        >
+          <Trash2 size={14} className="text-gray-400 hover:text-red-500" />
+        </button>
+      ) : null,
     },
   ];
 

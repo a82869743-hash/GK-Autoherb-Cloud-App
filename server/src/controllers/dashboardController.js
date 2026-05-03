@@ -12,7 +12,7 @@ exports.getStats = async (req, res) => {
       [jobCarts], [activeDeliveries], [inquiries],
       [purchases], [pendingPay], [lowStock],
       [todayBookings], [totalCustomers], [recentCompletions],
-      [staffPresent]
+      [staffPresent], [expiringPkgs]
     ] = await Promise.all([
       // Revenue
       pool.query(
@@ -67,6 +67,17 @@ exports.getStats = async (req, res) => {
         `SELECT COUNT(*) AS total FROM staff_attendance 
          WHERE att_date = CURDATE() AND status = 'present'`
       ),
+      // Packages expiring in next 30 days
+      pool.query(
+        `SELECT up.id, up.end_date, u.name AS customer_name, u.mobile AS customer_mobile, p.name AS package_name
+         FROM user_packages up
+         JOIN users u ON up.user_id = u.id
+         JOIN packages p ON up.package_id = p.id
+         WHERE up.end_date IS NOT NULL
+           AND up.end_date > NOW()
+           AND up.end_date <= DATE_ADD(NOW(), INTERVAL 30 DAY)
+         ORDER BY up.end_date ASC`
+      ),
     ]);
 
     const todayRevVal = parseFloat(todayRev[0].total);
@@ -94,6 +105,8 @@ exports.getStats = async (req, res) => {
         todayBookings: todayBookings[0].total || 0,
         totalCustomers: totalCustomers[0].total || 0,
         staffPresent: staffPresent[0].total || 0,
+        expiring_packages: expiringPkgs.length,
+        expiring_package_details: expiringPkgs,
       }
     });
   } catch (err) {

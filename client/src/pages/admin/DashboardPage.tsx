@@ -178,6 +178,44 @@ export default function DashboardPage() {
           />
         </div>
       )}
+      {/* ── Package Expiry Notification ─────────── */}
+      {!statsLoading && stats?.expiring_packages > 0 && (
+        <div className="mb-6 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-amber-100 rounded-xl flex-shrink-0">
+              <AlertTriangle size={20} className="text-amber-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-bold text-amber-800 text-sm mb-1">
+                ⚠️ {stats.expiring_packages} Package{stats.expiring_packages > 1 ? 's' : ''} Expiring Soon
+              </h3>
+              <p className="text-xs text-amber-700 mb-3">
+                The following customer packages will expire within the next 30 days. Consider reaching out to them for renewal.
+              </p>
+              <div className="space-y-2">
+                {(stats.expiring_package_details || []).slice(0, 5).map((pkg: any) => {
+                  const endDate = new Date(pkg.end_date);
+                  const daysLeft = Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                  return (
+                    <div key={pkg.id} className="flex items-center justify-between bg-white/60 rounded-lg px-3 py-2 text-xs">
+                      <div>
+                        <span className="font-bold text-[#1c1b1b]">{pkg.customer_name}</span>
+                        <span className="text-gray-400 mx-1">•</span>
+                        <span className="text-gray-600">{pkg.customer_mobile}</span>
+                        <span className="text-gray-400 mx-1">•</span>
+                        <span className="text-amber-700 font-semibold">{pkg.package_name}</span>
+                      </div>
+                      <span className={`font-bold px-2 py-0.5 rounded-full ${daysLeft <= 7 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {daysLeft} day{daysLeft !== 1 ? 's' : ''} left
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Main Content Grid ────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

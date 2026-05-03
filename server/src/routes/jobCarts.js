@@ -31,4 +31,8 @@ router.delete('/:id/photos/:pid', auth, role(['admin', 'staff']), ctrl.deletePho
 // Invoice
 router.get('/:id/invoice', auth, role(['admin', 'customer']), ctrl.getInvoice);
 
+// Soft delete / restore
+router.delete('/:id',          auth, role(['admin']), ctrl.softDelete);
+router.post('/:id/restore',   auth, role(['admin']), ctrl.restore);
+
 module.exports = router;

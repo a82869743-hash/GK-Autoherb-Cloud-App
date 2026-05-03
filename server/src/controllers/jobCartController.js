@@ -603,3 +603,27 @@ exports.getInvoice = async (req, res) => {
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };
+
+// ─── SOFT DELETE (CANCEL) JOB CART ──────────────
+exports.softDelete = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query("UPDATE job_carts SET status = 'cancelled' WHERE id = ?", [id]);
+    res.json({ success: true, message: 'Job cart cancelled' });
+  } catch (err) {
+    console.error('Job cart soft-delete error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── RESTORE CANCELLED JOB CART ─────────────────
+exports.restore = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query("UPDATE job_carts SET status = 'open' WHERE id = ?", [id]);
+    res.json({ success: true, message: 'Job cart restored' });
+  } catch (err) {
+    console.error('Job cart restore error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};

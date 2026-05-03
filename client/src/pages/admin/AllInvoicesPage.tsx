@@ -3,8 +3,9 @@ import { useAuthStore } from '../../store/authStore';
 import {
   FileText, Download, Search, Filter, Calendar,
   RefreshCw, Loader2, ChevronLeft, ChevronRight,
-  Receipt, Wallet, ShoppingCart, ClipboardList, X
+  Receipt, Wallet, ShoppingCart, ClipboardList, X, Trash2
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 import api from '../../api/axiosInstance';
 
@@ -128,6 +129,24 @@ export default function AllInvoicesPage() {
 
   const totalPages = Math.ceil(total / limit);
   const hasFilters = search || fromDate || toDate;
+
+  const handleVoid = async (rec: InvoiceRecord) => {
+    const typeLabel = rec.type === 'manual_bill' ? 'bill' : rec.type === 'job_cart' ? 'job cart' : 'record';
+    if (!window.confirm(`Void this ${typeLabel}? It will be moved to the Recycle Bin.`)) return;
+    try {
+      if (rec.type === 'manual_bill') {
+        await api.delete(`/billing/${rec.id}`);
+      } else if (rec.type === 'job_cart') {
+        await api.delete(`/job-carts/${rec.id}`);
+      } else {
+        return;
+      }
+      toast.success(`${typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1)} voided`);
+      fetchRecords();
+    } catch {
+      toast.error(`Failed to void ${typeLabel}`);
+    }
+  };
 
   return (
     <div style={{ fontFamily: "'Segoe UI', sans-serif", minHeight: '100vh' }}>
@@ -293,7 +312,7 @@ export default function AllInvoicesPage() {
               key={dlKey}
               style={{
                 display: 'grid',
-                gridTemplateColumns: '140px 1fr 1fr 120px 120px 120px',
+                gridTemplateColumns: '140px 1fr 1fr 120px 120px 120px 40px',
                 padding: '14px 20px',
                 borderBottom: idx < records.length - 1 ? '1px solid #f5f0ef' : 'none',
                 alignItems: 'center',
@@ -372,6 +391,25 @@ export default function AllInvoicesPage() {
                   }
                   {isDownloading ? 'Generating...' : 'PDF'}
                 </button>
+              </div>
+
+              {/* Void */}
+              <div>
+                {(rec.type === 'manual_bill' || rec.type === 'job_cart') && (
+                  <button
+                    onClick={() => handleVoid(rec)}
+                    title="Void / Archive"
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      padding: '7px', borderRadius: '8px', border: 'none',
+                      background: 'transparent', cursor: 'pointer',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#FEE2E2')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <Trash2 size={14} color="#9e9e9e" />
+                  </button>
+                )}
               </div>
             </div>
           );

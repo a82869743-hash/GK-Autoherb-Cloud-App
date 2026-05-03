@@ -158,3 +158,24 @@ exports.downloadInvoice = async (req, res) => {
   }
 };
 
+// ─── SOFT DELETE (VOID) A BILL ──────────────────
+exports.softDelete = async (req, res) => {
+  try {
+    await pool.query("UPDATE manual_bills SET status = 'voided' WHERE id = ?", [req.params.id]);
+    res.json({ success: true, message: 'Bill voided' });
+  } catch (err) {
+    console.error('Bill soft-delete error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── RESTORE A VOIDED BILL ─────────────────────
+exports.restore = async (req, res) => {
+  try {
+    await pool.query("UPDATE manual_bills SET status = 'paid' WHERE id = ?", [req.params.id]);
+    res.json({ success: true, message: 'Bill restored' });
+  } catch (err) {
+    console.error('Bill restore error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};

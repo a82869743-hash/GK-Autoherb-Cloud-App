@@ -171,6 +171,30 @@ exports.createManual = async (req, res) => {
   }
 };
 
+// ─── SOFT DELETE CUSTOMER ─────────────────────
+exports.softDelete = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query("UPDATE users SET is_active = 0 WHERE id = ? AND role = 'customer'", [id]);
+    res.json({ success: true, message: 'Customer archived' });
+  } catch (err) {
+    console.error('Customer soft-delete error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── RESTORE CUSTOMER ────────────────────────
+exports.restore = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query("UPDATE users SET is_active = 1 WHERE id = ? AND role = 'customer'", [id]);
+    res.json({ success: true, message: 'Customer restored' });
+  } catch (err) {
+    console.error('Customer restore error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
 exports.listManual = async (req, res) => {
   try {
     const { search } = req.query;
