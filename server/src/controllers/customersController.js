@@ -116,7 +116,7 @@ exports.createManual = async (req, res) => {
       customerId = existing[0].id;
     } else {
       const [userResult] = await connection.query(
-        "INSERT INTO users (name, mobile, email, role, password) VALUES (?, ?, ?, 'customer', 'manual')",
+        "INSERT INTO users (name, mobile, email, role, password_hash) VALUES (?, ?, ?, 'customer', 'manual')",
         [name, mobile, email || null]
       );
       customerId = userResult.insertId;

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axiosInstance';
-import { PlusCircle, Search, User, Car, Phone, Mail, Box, Calendar, Loader2, DollarSign } from 'lucide-react';
+import { PlusCircle, Search, User, Car, Phone, Mail, Box, Calendar, Loader2, IndianRupee } from 'lucide-react';
 
 interface OfflineRegistration {
   customer_id: number;
@@ -183,7 +183,7 @@ export default function ManualRegistrationPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Final Price (₹)</label>
                   <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input type="number" name="price" value={formData.price} onChange={handleChange} className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500" placeholder="0" />
                   </div>
                 </div>
