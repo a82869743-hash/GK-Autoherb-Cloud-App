@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
-import { Wrench, Calendar, Gift, Car, User, LogOut, ClipboardList, LayoutDashboard, MoreHorizontal, X, PackageOpen } from 'lucide-react';
+import { useCustomerDashboard } from '../../api/hooks/useDashboard';
+import { Wrench, Calendar, Gift, Car, User, LogOut, ClipboardList, LayoutDashboard, MoreHorizontal, X, PackageOpen, Bell } from 'lucide-react';
 
 const tabItems = [
   { to: '/customer', icon: LayoutDashboard, label: 'Home', end: true },
@@ -22,6 +23,11 @@ export default function CustomerNavbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [showNotif, setShowNotif] = useState(false);
+  const { data } = useCustomerDashboard();
+
+  const activePackage = data?.active_package || null;
+  const hasExpiryWarning = activePackage?.end_date && Math.ceil((new Date(activePackage.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) <= 30;
 
   const handleLogout = () => {
     logout();
@@ -42,10 +48,54 @@ export default function CustomerNavbar() {
             <p className="text-[9px] text-gray-500 uppercase tracking-widest hidden sm:block">Premium Detail Studio</p>
           </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <span className="text-sm text-gray-400 font-medium hidden sm:inline">
             Hi, {user?.name?.split(' ')[0] || 'Customer'}
           </span>
+          {/* Notification Bell */}
+          <div className="relative">
+            <button
+              onClick={() => setShowNotif(!showNotif)}
+              className="relative p-2 rounded-lg hover:bg-white/5 transition-colors text-gray-400 hover:text-white"
+              title="Notifications"
+            >
+              <Bell size={18} />
+              {hasExpiryWarning && (
+                <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+              )}
+            </button>
+            {showNotif && (
+              <div className="absolute right-0 top-11 w-72 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+                  <p className="text-xs font-bold text-[#1c1b1b] uppercase tracking-wider">Notifications</p>
+                </div>
+                {activePackage?.end_date ? (() => {
+                  const daysLeft = Math.ceil((new Date(activePackage.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                  const startStr = activePackage.start_date ? new Date(activePackage.start_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+                  const endStr = new Date(activePackage.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+                  const isExpired = daysLeft <= 0;
+                  return (
+                    <div className="p-4">
+                      <div className={`rounded-xl p-3 ${isExpired ? 'bg-red-50 border border-red-200' : daysLeft <= 30 ? 'bg-amber-50 border border-amber-200' : 'bg-green-50 border border-green-200'}`}>
+                        <p className={`text-xs font-bold ${isExpired ? 'text-red-700' : daysLeft <= 30 ? 'text-amber-700' : 'text-green-700'}`}>
+                          {isExpired ? '❌ Package Expired' : daysLeft <= 30 ? `⚠️ Expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}` : '✅ Package Active'}
+                        </p>
+                        <p className="text-[10px] text-gray-600 mt-1 font-semibold">{activePackage.package_name}</p>
+                        <div className="flex gap-4 mt-2 text-[10px] text-gray-500">
+                          <span>📅 Start: <strong>{startStr}</strong></span>
+                          <span>📅 End: <strong>{endStr}</strong></span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })() : (
+                  <div className="p-6 text-center text-gray-400 text-xs">
+                    No active package
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <button
             onClick={handleLogout}
             className="text-gray-500 hover:text-[#D32F2F] transition-colors p-2 rounded-lg hover:bg-white/5"
