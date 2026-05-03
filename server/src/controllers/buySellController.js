@@ -137,7 +137,7 @@ exports.invoice = async (req, res) => {
     const pdfBuffer = await generateBuySellInvoicePDF(id);
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', \`attachment; filename=BuySell_Invoice_\${id}.pdf\`);
+    res.setHeader('Content-Disposition', `attachment; filename=BuySell_Invoice_${id}.pdf`);
     res.send(pdfBuffer);
   } catch (err) {
     console.error('Invoice generation error:', err);

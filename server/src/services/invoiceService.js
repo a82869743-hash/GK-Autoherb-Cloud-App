@@ -656,18 +656,18 @@ async function generateBuySellInvoicePDF(buySellId) {
     settingsRows.forEach(r => { settings[r.key_name] = r.value; });
 
     const invoiceTitle = record.type === 'buy' ? 'Purchase Invoice' : 'Sales Invoice';
-    const invoiceNumber = \`\${record.type === 'buy' ? 'PUR' : 'SAL'}-\${record.id}\`;
+    const invoiceNumber = `${record.type === 'buy' ? 'PUR' : 'SAL'}-${record.id}`;
     
     const invoiceDate = new Date(record.transaction_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
     const logoBase64 = getLogoBase64();
     const logoHtml = logoBase64
-      ? \`<img src="\${logoBase64}" alt="GK AutoHerb" style="max-width: 150px; height: auto;">\`
-      : \`<h1 style="margin:0;color:#c00;font-size:24px;">GK AUTOHERB</h1>\`;
+      ? `<img src="${logoBase64}" alt="GK AutoHerb" style="max-width: 150px; height: auto;">`
+      : `<h1 style="margin:0;color:#c00;font-size:24px;">GK AUTOHERB</h1>`;
 
     const grandTotal = parseFloat(record.total_amount) || 0;
     
-    const htmlContent = \`
+    const htmlContent = `
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -694,26 +694,26 @@ async function generateBuySellInvoicePDF(buySellId) {
     </head>
     <body>
       <div class="header">
-        <div>\${logoHtml}</div>
+        <div>${logoHtml}</div>
         <div class="company-details">
-          <strong style="font-size: 14px;">\${settings.studio_name || 'GK AutoHerb'}</strong><br>
-          \${settings.studio_address || 'Address line 1'}<br>
-          Mobile: \${settings.studio_mobile || 'N/A'} | Email: \${settings.studio_email || 'N/A'}<br>
-          \${settings.studio_gst ? \`GSTIN: \${settings.studio_gst}\` : ''}
+          <strong style="font-size: 14px;">${settings.studio_name || 'GK AutoHerb'}</strong><br>
+          ${settings.studio_address || 'Address line 1'}<br>
+          Mobile: ${settings.studio_mobile || 'N/A'} | Email: ${settings.studio_email || 'N/A'}<br>
+          ${settings.studio_gst ? `GSTIN: ${settings.studio_gst}` : ''}
         </div>
       </div>
 
-      <div class="title">Bill of Supply - \${invoiceTitle}</div>
+      <div class="title">Bill of Supply - ${invoiceTitle}</div>
 
       <div class="info-section">
         <div class="info-box">
           <p><strong>Billed To:</strong><br>
-          \${record.party_name}<br>
-          \${record.party_mobile ? 'Mob: ' + record.party_mobile : ''}</p>
+          ${record.party_name}<br>
+          ${record.party_mobile ? 'Mob: ' + record.party_mobile : ''}</p>
         </div>
         <div class="info-box" style="text-align: right;">
-          <p><strong>Invoice No:</strong> \${invoiceNumber}<br>
-          <strong>Date:</strong> \${invoiceDate}</p>
+          <p><strong>Invoice No:</strong> ${invoiceNumber}<br>
+          <strong>Date:</strong> ${invoiceDate}</p>
         </div>
       </div>
 
@@ -728,10 +728,10 @@ async function generateBuySellInvoicePDF(buySellId) {
         </thead>
         <tbody>
           <tr>
-            <td><strong>\${record.product_name}</strong></td>
-            <td>\${parseFloat(record.quantity)}</td>
-            <td>\${formatINR(record.unit_price)}</td>
-            <td style="text-align: right;">\${formatINR(record.total_amount)}</td>
+            <td><strong>${record.product_name}</strong></td>
+            <td>${parseFloat(record.quantity)}</td>
+            <td>${formatINR(record.unit_price)}</td>
+            <td style="text-align: right;">${formatINR(record.total_amount)}</td>
           </tr>
         </tbody>
       </table>
@@ -739,19 +739,19 @@ async function generateBuySellInvoicePDF(buySellId) {
       <div class="totals">
         <div class="totals-row grand">
           <span>Net Amount:</span>
-          <span>₹\${formatINR(grandTotal)}</span>
+          <span>₹${formatINR(grandTotal)}</span>
         </div>
       </div>
 
       <div class="amount-words">
-        <strong>Amount in words:</strong> \${amountInWords(grandTotal)}
+        <strong>Amount in words:</strong> ${amountInWords(grandTotal)}
       </div>
 
-      \${record.note ? \`
+      ${record.note ? `
       <div class="notes-section">
         <strong>Notes:</strong><br>
-        \${record.note}
-      </div>\` : ''}
+        ${record.note}
+      </div>` : ''}
 
       <div class="footer">
         <p>This is a computer-generated document. No signature is required.</p>
@@ -759,7 +759,7 @@ async function generateBuySellInvoicePDF(buySellId) {
       </div>
     </body>
     </html>
-    \`;
+    `;
 
     const puppeteer = require('puppeteer');
     const browser = await puppeteer.launch({
