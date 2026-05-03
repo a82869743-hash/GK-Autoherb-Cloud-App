@@ -80,7 +80,9 @@ export default function BookingPage() {
           setManualEntry(true);
         }
 
-        setActivePackages(activePkgRes.data.data || []);
+        // activePkgRes.data.data is a single object or null
+        const actPkg = activePkgRes.data.data;
+        setActivePackages(actPkg ? [actPkg] : []);
       } catch {} finally { setServicesLoading(false); }
     })();
   }, []);
@@ -278,9 +280,10 @@ export default function BookingPage() {
                           <p className="font-bold text-[#1c1b1b]">{pkg.package_name}</p>
                           <span className="ml-auto text-[10px] font-bold px-2 py-0.5 bg-green-100 text-green-700 rounded uppercase">Active</span>
                         </div>
-                        <div className="flex gap-4 mt-2 text-xs text-[#5f5e5e]">
-                          <span>{pkg.remaining_washes} washes left</span>
-                          <span>{pkg.remaining_coatings} coatings left</span>
+                        <div className="flex flex-col gap-1 mt-2 text-xs text-[#5f5e5e]">
+                          {pkg.usage && pkg.usage.map((u: any) => (
+                            <span key={u.service_name}>{u.remaining} {u.service_name} left</span>
+                          ))}
                         </div>
                       </button>
                     ))}
