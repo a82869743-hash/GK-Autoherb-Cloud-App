@@ -1,8 +1,8 @@
 const router = require('express').Router();
-const { protect } = require('../middleware/auth');
-const { adminOrStaff } = require('../middleware/role');
+const auth = require('../middleware/auth');
+const role = require('../middleware/role');
 const ctrl = require('../controllers/invoicesController');
 
-router.get('/', protect, adminOrStaff, ctrl.listAll);
+router.get('/', auth, role(['admin']), ctrl.listAll);
 
 module.exports = router;
