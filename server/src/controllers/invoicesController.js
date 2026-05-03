@@ -42,7 +42,7 @@ exports.listAll = async (req, res) => {
 
     // ── 2. Manual Bills ───────────────────────────────────────────────────
     if (type === 'all' || type === 'manual_bill') {
-      let where = '1=1';
+      let where = "mb.status != 'voided'";
       const params = [];
       if (from_date) { where += ' AND DATE(mb.created_at) >= ?'; params.push(from_date); }
       if (to_date)   { where += ' AND DATE(mb.created_at) <= ?'; params.push(to_date); }

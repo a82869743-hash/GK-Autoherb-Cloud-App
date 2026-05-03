@@ -1,14 +1,7 @@
 const { Client } = require('ssh2');
 const c = new Client();
 c.on('ready', () => {
-  const cmds = [
-    // 1. Add 'cancelled' to job_carts status enum
-    "ALTER TABLE job_carts MODIFY COLUMN status ENUM('draft','open','complete','cancelled') NOT NULL DEFAULT 'draft'",
-    // 2. Verify manual_bills status column exists
-    "SHOW COLUMNS FROM manual_bills LIKE 'status'",
-  ];
-  const sql = cmds.join('; ');
-  const cmd = `mysql -u root -p1234 gk_autoherb -e "${sql}" 2>&1`;
+  const cmd = 'cd /root/app && git pull origin main && cd client && npm run build && cp -r dist/* /var/www/gkauto/ && chown -R www-data:www-data /var/www/gkauto && cd /root/app && pm2 restart all';
   c.exec(cmd, (err, stream) => {
     if (err) { console.error(err); c.end(); return; }
     stream.on('close', () => c.end())

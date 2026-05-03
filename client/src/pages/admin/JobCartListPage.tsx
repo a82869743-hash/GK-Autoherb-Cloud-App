@@ -36,7 +36,7 @@ export default function JobCartListPage() {
     try {
       await api.delete(`/job-carts/${id}`);
       toast.success('Job cart cancelled');
-      queryClient.invalidateQueries({ queryKey: ['jobCarts'] });
+      queryClient.invalidateQueries({ queryKey: ['job-carts'] });
     } catch {
       toast.error('Failed to cancel job cart');
     }
