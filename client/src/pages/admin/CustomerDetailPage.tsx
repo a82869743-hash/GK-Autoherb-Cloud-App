@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/axiosInstance';
-import { UserCircle, Car, ArrowLeft, Loader2, Send, History, Calendar, ClipboardList } from 'lucide-react';
+import { UserCircle, Car, ArrowLeft, Loader2, Send, History, Calendar, ClipboardList, Package } from 'lucide-react';
 
 export default function CustomerDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [data, setData] = useState<any>(null);
+  const [activePackage, setActivePackage] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [newNote, setNewNote] = useState('');
   const [submittingNote, setSubmittingNote] = useState(false);
@@ -17,9 +18,15 @@ export default function CustomerDetailPage() {
 
   const fetchDetail = async () => {
     try {
-      const res = await api.get(`/customers/${id}`);
-      if (res.data.success) {
-        setData(res.data.data);
+      const [resCust, resPkg] = await Promise.all([
+        api.get(`/customers/${id}`),
+        api.get(`/packages/active?user_id=${id}`).catch(() => ({ data: { success: false, data: null } }))
+      ]);
+      if (resCust.data.success) {
+        setData(resCust.data.data);
+      }
+      if (resPkg.data && resPkg.data.success && resPkg.data.data) {
+        setActivePackage(resPkg.data.data);
       }
     } catch (err) {
       console.error(err);
@@ -104,6 +111,41 @@ export default function CustomerDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Active Package */}
+          {activePackage && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden p-6">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
+                <Package className="w-5 h-5 text-purple-600" />
+                Active Package
+              </h3>
+              <div className="p-4 bg-purple-50 border border-purple-100 rounded-xl relative">
+                <div className="font-bold text-gray-900">{activePackage.package_name}</div>
+                {activePackage.start_date && activePackage.end_date && (
+                  <div className="text-xs text-gray-500 mt-2 space-y-1">
+                    <div className="flex justify-between">
+                      <span>Purchased On:</span>
+                      <span className="font-medium text-gray-900">{new Date(activePackage.start_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Valid Till:</span>
+                      <span className="font-medium text-gray-900">{new Date(activePackage.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    </div>
+                  </div>
+                )}
+                {activePackage.usage && activePackage.usage.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-purple-200/50 space-y-1.5">
+                    {activePackage.usage.map((u: any) => (
+                      <div key={u.service_name} className="flex justify-between text-xs">
+                        <span className="text-gray-600">{u.service_name}</span>
+                        <span className={`font-bold ${u.remaining > 0 ? 'text-emerald-600' : 'text-red-500'}`}>{u.remaining} left</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Vehicles List */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden p-6">

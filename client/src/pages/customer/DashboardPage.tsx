@@ -148,7 +148,18 @@ export default function CustomerDashboardPage() {
               <div>
                 <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Your Package</p>
                 {activePackage ? (
-                  <p className="font-bold text-[#1c1b1b] text-sm">{activePackage.package_name}</p>
+                  <div>
+                    <p className="font-bold text-[#1c1b1b] text-sm">{activePackage.package_name}</p>
+                    {activePackage.end_date && (() => {
+                      const daysLeft = Math.ceil((new Date(activePackage.end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                      if (daysLeft > 0 && daysLeft <= 30) {
+                        return <p className="text-[10px] font-bold text-orange-600 mt-0.5">⚠️ Expires in {daysLeft} days!</p>;
+                      } else if (daysLeft <= 0) {
+                        return <p className="text-[10px] font-bold text-red-600 mt-0.5">⚠️ Expired</p>;
+                      }
+                      return null;
+                    })()}
+                  </div>
                 ) : (
                   <p className="text-gray-400 text-sm">No active package</p>
                 )}
@@ -163,6 +174,20 @@ export default function CustomerDashboardPage() {
               </button>
             )}
           </div>
+          
+          {activePackage && activePackage.start_date && activePackage.end_date && (
+            <div className="ml-12 mb-3 flex items-center gap-4 text-[10px] text-gray-500 font-medium">
+              <div>
+                <span className="text-gray-400 block mb-0.5">Purchased On</span>
+                {new Date(activePackage.start_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </div>
+              <div>
+                <span className="text-gray-400 block mb-0.5">Valid Till</span>
+                {new Date(activePackage.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </div>
+            </div>
+          )}
+
           {activePackage?.usage && activePackage.usage.length > 0 && (
             <div className="mt-2 ml-12 space-y-1">
               <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-1">Remaining:</p>

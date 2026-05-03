@@ -19,7 +19,7 @@ exports.list = async (req, res) => {
       SELECT id, name, mobile, email, created_at, is_active
       FROM users
       WHERE ${where}
-      ORDER BY name ASC
+      ORDER BY created_at DESC
       LIMIT ? OFFSET ?
     `, [...params, parseInt(limit), offset]);
 
@@ -141,6 +141,12 @@ exports.createManual = async (req, res) => {
       await connection.query(
         "INSERT INTO package_requests (customer_id, vehicle_id, package_id, status, price, approved_at) VALUES (?, ?, ?, 'approved', ?, NOW())",
         [customerId, vehicleId, package_id, price || 0]
+      );
+      
+      // Also insert into user_packages so the user actually gets the package!
+      await connection.query(
+        "INSERT INTO user_packages (user_id, package_id, end_date) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 1 YEAR))",
+        [customerId, package_id]
       );
       
       await connection.query(

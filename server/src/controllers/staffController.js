@@ -10,7 +10,7 @@ exports.list = async (req, res) => {
        FROM users u
        LEFT JOIN staff_profiles sp ON u.id = sp.user_id
        WHERE u.role = 'staff' AND u.is_active = 1
-       ORDER BY u.name ASC`
+       ORDER BY u.created_at DESC`
     );
 
     // Get today's attendance for each staff

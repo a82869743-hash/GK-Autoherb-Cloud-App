@@ -128,9 +128,9 @@ exports.assignPackage = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Package not found' });
     }
 
-    // Step 4: Insert into user_packages (start_date = NOW, end_date = NULL)
+    // Step 4: Insert into user_packages (start_date = NOW, end_date = 1 year from now)
     const [result] = await conn.query(
-      'INSERT INTO user_packages (user_id, package_id) VALUES (?, ?)',
+      'INSERT INTO user_packages (user_id, package_id, end_date) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 1 YEAR))',
       [user_id, package_id]
     );
     const userPackageId = result.insertId;

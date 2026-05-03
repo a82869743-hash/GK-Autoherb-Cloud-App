@@ -31,7 +31,7 @@ exports.list = async (req, res) => {
 
     if (published_only === 'true') where += ' AND is_published = 1';
 
-    const [rows] = await pool.query(`SELECT * FROM packages WHERE ${where} ORDER BY name ASC`);
+    const [rows] = await pool.query(`SELECT * FROM packages WHERE ${where} ORDER BY created_at DESC`);
     const enriched = await Promise.all(rows.map(enrichPackage));
     res.json({ success: true, data: enriched });
   } catch (err) {
@@ -319,7 +319,7 @@ exports.approveRequest = async (req, res) => {
 
     // 3. Add to user_packages
     await conn.query(
-      "INSERT INTO user_packages (user_id, package_id) VALUES (?, ?)",
+      "INSERT INTO user_packages (user_id, package_id, end_date) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 1 YEAR))",
       [reqData.customer_id, reqData.package_id]
     );
 
@@ -344,7 +344,7 @@ exports.downloadInvoice = async (req, res) => {
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Length': pdfBuffer.length,
-      'Content-Disposition': `attachment; filename="${invoiceNumber}.pdf"`
+      'Content-Disposition': 'attachment; filename="' + invoiceNumber + '.pdf"'
     });
     res.send(pdfBuffer);
   } catch (err) {
