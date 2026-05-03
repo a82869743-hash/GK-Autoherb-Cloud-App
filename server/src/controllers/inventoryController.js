@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const xlsx = require('xlsx');
 
 // ─── LIST ───────────────────────────────────
 exports.list = async (req, res) => {
@@ -127,5 +128,56 @@ exports.softDelete = async (req, res) => {
   } catch (err) {
     console.error('Inventory delete error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── BULK UPLOAD ────────────────────────────
+exports.bulkUpload = async (req, res) => {
+  if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+
+  const conn = await pool.getConnection();
+  try {
+    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+    if (!data.length) return res.status(400).json({ success: false, error: 'Empty file' });
+
+    await conn.beginTransaction();
+    let count = 0;
+
+    for (const row of data) {
+      const name = row['Product Name'] || row.product_name || row.name;
+      const unit = row['Unit'] || row.unit || 'pcs';
+      const quantity = parseInt(row['Quantity'] || row.quantity || 0, 10);
+      const lowStock = parseInt(row['Low Stock Threshold'] || row.low_stock_threshold || 5, 10);
+      const price = parseFloat(row['Price'] || row.price || 0);
+
+      if (!name) continue;
+
+      // Check if product exists
+      const [existing] = await conn.query('SELECT id FROM inventory WHERE product_name = ? AND is_deleted = 0', [name]);
+
+      if (existing.length) {
+        // Update quantity (add to existing)
+        await conn.query('UPDATE inventory SET quantity = quantity + ?, price = ? WHERE id = ?', [quantity, price, existing[0].id]);
+      } else {
+        // Insert new
+        await conn.query(
+          'INSERT INTO inventory (product_name, unit, quantity, low_stock_threshold, price) VALUES (?, ?, ?, ?, ?)',
+          [name, unit, quantity, lowStock, price]
+        );
+      }
+      count++;
+    }
+
+    await conn.commit();
+    res.status(201).json({ success: true, message: `Successfully imported ${count} products` });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Bulk upload error:', err);
+    res.status(500).json({ success: false, error: 'Server error processing file' });
+  } finally {
+    conn.release();
   }
 };

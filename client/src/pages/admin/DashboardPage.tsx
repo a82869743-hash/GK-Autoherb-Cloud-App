@@ -12,8 +12,11 @@ import { Link } from 'react-router-dom';
 import StatusBadge from '../../components/ui/StatusBadge';
 import api from '../../api/axiosInstance';
 import { formatTime, formatINR, timeAgo } from '../../utils/formatters';
+import io from 'socket.io-client';
+import { useAuthStore } from '../../store/authStore';
 
 export default function DashboardPage() {
+  const { token } = useAuthStore();
   const { data: stats, isLoading: statsLoading } = useDashboardStats();
   const { data: recentJobs, isLoading: jobsLoading } = useJobCarts({ limit: 5 });
 
@@ -27,19 +30,33 @@ export default function DashboardPage() {
     return () => clearInterval(t);
   }, []);
 
+  const fetchBookings = async () => {
+    try {
+      const res = await api.get('/bookings/pending', { params: { limit: 10 } });
+      setTodayBookings(res.data.data || []);
+    } catch {
+      setTodayBookings([]);
+    } finally {
+      setBookingsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    (async () => {
-      try {
-        const today = new Date().toISOString().slice(0, 10);
-        const res = await api.get('/bookings', { params: { page: 1, limit: 10 } });
-        setTodayBookings(res.data.data || []);
-      } catch {
-        setTodayBookings([]);
-      } finally {
-        setBookingsLoading(false);
-      }
-    })();
-  }, []);
+    fetchBookings();
+    
+    if (!token) return;
+    const socket = io(import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:5000', {
+      auth: { token }
+    });
+
+    socket.on('new_booking', () => {
+      fetchBookings();
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [token]);
 
   const jobs = recentJobs?.data || [];
   const greeting = currentTime.getHours() < 12 ? 'Good Morning' : currentTime.getHours() < 17 ? 'Good Afternoon' : 'Good Evening';
@@ -253,7 +270,7 @@ export default function DashboardPage() {
             <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <Calendar size={16} className="text-[#D32F2F]" />
-                <h2 className="font-bold text-[#1c1b1b]">Upcoming Bookings</h2>
+                <h2 className="font-bold text-[#1c1b1b]">Pending Approvals</h2>
               </div>
               <Link to="/admin/customer-bookings" className="text-[#D32F2F] text-xs font-bold uppercase hover:underline flex items-center gap-1">
                 All <ChevronRight size={12} />
@@ -304,7 +321,7 @@ export default function DashboardPage() {
               ) : (
                 <div className="p-8 text-center">
                   <Calendar size={32} className="text-gray-200 mx-auto mb-2" />
-                  <p className="text-gray-500 text-sm font-medium">No upcoming bookings</p>
+                  <p className="text-gray-500 text-sm font-medium">No pending approvals</p>
                 </div>
               )}
             </div>

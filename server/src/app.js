@@ -26,6 +26,8 @@ const io = new Server(server, {
   pingInterval: 25000,
 });
 
+app.set('io', io);
+
 // ─── Middleware ──────────────────────────────────────
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({
@@ -90,6 +92,7 @@ app.use('/api/user-packages', require('./routes/userPackages'));
 app.use('/api/reports',       require('./routes/reports'));
 app.use('/api/billing',       require('./routes/billing'));
 app.use('/api/vendors',       require('./routes/vendors'));
+app.use('/api/salary',        require('./routes/salary'));
 
 // ─── Socket.io Auth + GPS ───────────────────────────
 const jwt = require('jsonwebtoken');

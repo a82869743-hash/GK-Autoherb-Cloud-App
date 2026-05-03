@@ -3,7 +3,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
 import {
   LayoutDashboard, ClipboardList, Package, Calendar, CalendarCheck, Wrench, Users,
-  DollarSign, MessageSquare, HelpCircle, Upload, Settings, LogOut, X, ShoppingCart, Layers
+  DollarSign, MessageSquare, HelpCircle, Upload, Settings, LogOut, X, ShoppingCart, Layers, FileText, Wallet
 } from 'lucide-react';
 
 const navItems = [
@@ -16,7 +16,9 @@ const navItems = [
   { to: '/admin/services', icon: Wrench, label: 'Services' },
   { to: '/admin/packages', icon: Layers, label: 'Packages' },
   { to: '/admin/staff', icon: Users, label: 'Staff' },
+  { to: '/admin/salary', icon: Wallet, label: 'Salary' },
   { to: '/admin/accounts', icon: DollarSign, label: 'Accounts' },
+  { to: '/admin/billing', icon: FileText, label: 'Manual Billing' },
   { to: '/admin/messages', icon: MessageSquare, label: 'Messages' },
   { to: '/admin/inquiries', icon: HelpCircle, label: 'Inquiries' },
   { to: '/admin/import', icon: Upload, label: 'Import' },

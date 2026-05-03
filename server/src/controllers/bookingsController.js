@@ -76,6 +76,12 @@ exports.list = async (req, res) => {
   }
 };
 
+// ─── LIST PENDING BOOKINGS (Admin) ──────────
+exports.listPending = async (req, res) => {
+  req.query.status = 'pending_approval';
+  return exports.list(req, res);
+};
+
 // ─── GET ONE BOOKING ────────────────────────
 exports.getOne = async (req, res) => {
   try {
@@ -331,6 +337,11 @@ exports.create = async (req, res) => {
     }
 
     console.log(`[BOOKING] #${bookingId} created — pending_approval, customer=${customerId}, slot=${slot_id}`);
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('new_booking', { bookingId, status: 'pending_approval' });
+    }
 
     res.status(201).json({
       success: true,

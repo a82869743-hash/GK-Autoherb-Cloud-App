@@ -269,13 +269,16 @@ exports.getOne = async (req, res) => {
 exports.update = async (req, res) => {
   try {
     const { id } = req.params;
-    const { visit_date, notes } = req.body;
+    const { visit_date, notes, discount_type, discount_value, invoice_notes } = req.body;
 
     const [cart] = await pool.query('SELECT status FROM job_carts WHERE id = ?', [id]);
     if (!cart.length) return res.status(404).json({ success: false, error: 'Not found' });
     if (cart[0].status === 'complete') return res.status(422).json({ success: false, error: 'Cannot edit completed job cart' });
 
-    await pool.query('UPDATE job_carts SET visit_date = ?, notes = ? WHERE id = ?', [visit_date, notes, id]);
+    await pool.query(
+      'UPDATE job_carts SET visit_date = ?, notes = ?, discount_type = ?, discount_value = ?, invoice_notes = ? WHERE id = ?', 
+      [visit_date, notes, discount_type || null, discount_value || null, invoice_notes || null, id]
+    );
     res.json({ success: true, message: 'Job cart updated' });
   } catch (err) {
     console.error('Update error:', err);
@@ -352,7 +355,15 @@ exports.complete = async (req, res) => {
       FROM job_products jp JOIN job_services js ON jp.job_service_id = js.id
       WHERE js.job_cart_id = ?
     `, [id]);
-    const grandTotal = parseFloat(totalRows[0].svc_total) + parseFloat(prodTotal[0].prod_total);
+    let grandTotal = parseFloat(totalRows[0].svc_total) + parseFloat(prodTotal[0].prod_total);
+
+    let discountAmt = 0;
+    if (cart[0].discount_type === 'percentage') {
+      discountAmt = grandTotal * (parseFloat(cart[0].discount_value || 0) / 100);
+    } else if (cart[0].discount_type === 'fixed') {
+      discountAmt = parseFloat(cart[0].discount_value || 0);
+    }
+    grandTotal = Math.max(0, grandTotal - discountAmt);
 
     // 6. Create transaction
     await conn.query(

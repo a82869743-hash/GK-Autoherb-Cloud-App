@@ -7,23 +7,49 @@ exports.create = async (req, res) => {
     await conn.beginTransaction();
     const {
       customer_id, customer_name, customer_mobile,
-      amount, description, services, payment_method = 'cash'
+      amount, description, services, products, payment_method = 'cash',
+      discount_type, discount_value, loyalty_redeemed
     } = req.body;
 
     if (!amount || amount <= 0) {
       return res.status(400).json({ success: false, error: 'Valid amount is required' });
     }
 
+    // Process products inventory deduction if present
+    if (products && Array.isArray(products) && products.length > 0) {
+      for (const prod of products) {
+        if (prod.id && prod.quantity > 0) {
+          await conn.query('UPDATE inventory SET quantity = GREATEST(0, quantity - ?) WHERE id = ?', [prod.quantity, prod.id]);
+        }
+      }
+    }
+
+    // Deduct loyalty points if redeemed
+    if (loyalty_redeemed && customer_id && discount_type === 'fixed' && discount_value > 0) {
+      await conn.query('UPDATE loyalty SET credits = GREATEST(0, credits - ?) WHERE customer_id = ?', [discount_value, customer_id]);
+      
+      // Log the loyalty redemption transaction
+      await conn.query(
+        `INSERT INTO transactions (type, reference_id, amount, direction, note, transaction_date, created_by)
+         VALUES ('loyalty_redeem', ?, ?, 'out', ?, CURDATE(), ?)`,
+        [customer_id, discount_value, `Redeemed ₹${discount_value} for Manual Bill`, req.user.id]
+      );
+    }
+
     const [result] = await conn.query(
-      `INSERT INTO manual_bills (customer_id, customer_name, customer_mobile, amount, description, services_json, payment_method, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO manual_bills 
+       (customer_id, customer_name, customer_mobile, amount, discount_type, discount_value, description, services_json, products_json, payment_method, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         customer_id || null,
         customer_name || null,
         customer_mobile || null,
         amount,
+        discount_type || null,
+        discount_value || null,
         description || null,
         services ? JSON.stringify(services) : null,
+        products ? JSON.stringify(products) : null,
         payment_method,
         req.user.id
       ]
@@ -33,8 +59,17 @@ exports.create = async (req, res) => {
     await conn.query(
       `INSERT INTO transactions (type, reference_id, amount, direction, note, transaction_date, created_by)
        VALUES ('job_revenue', ?, ?, 'in', ?, CURDATE(), ?)`,
-      [result.insertId, amount, `Manual Bill #${result.insertId}: ${description || 'No description'}`, req.user.id]
+      [result.insertId, amount, `Manual Bill #${result.insertId}: ${description || 'POS Sale'}`, req.user.id]
     );
+
+    // If customer has mobile, send SMS
+    if (customer_mobile) {
+      try {
+        const sendSms = require('../utils/sendSms');
+        const msg = `GK AutoHerb: Thank you ${customer_name || 'Customer'}! Your bill for Rs.${amount} is confirmed.`;
+        sendSms(customer_mobile, msg).catch(() => {});
+      } catch (e) { /* ignore */ }
+    }
 
     await conn.commit();
     console.log(`[BILLING] Manual bill #${result.insertId} created — ₹${amount}`);

@@ -129,6 +129,15 @@ async function generateInvoicePDF(jobCartId) {
       };
     });
 
+    // 5b. Compute Discount & Final Total
+    let discountAmt = 0;
+    if (cart.discount_type === 'percentage') {
+      discountAmt = grandTotal * (parseFloat(cart.discount_value || 0) / 100);
+    } else if (cart.discount_type === 'fixed') {
+      discountAmt = parseFloat(cart.discount_value || 0);
+    }
+    const finalTotal = Math.max(0, grandTotal - discountAmt);
+
     // 6. Format date
     const invoiceDate = cart.completed_at
       ? new Date(cart.completed_at).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -546,24 +555,26 @@ async function generateInvoicePDF(jobCartId) {
           <div class="bank-row"><span class="bank-label">Bank:</span><span class="bank-value">Axis Bank, GOTRI SEVASI ROAD</span></div>
         </div>
         <div class="amounts-section">
-          <div class="amount-row total">
-            <span class="amount-label">Total Amount</span>
+          <div class="amount-row">
+            <span class="amount-label">Subtotal</span>
             <span class="amount-value">₹ ${formatINR(grandTotal)}</span>
+          </div>
+          ${discountAmt > 0 ? `
+          <div class="amount-row" style="color:#D32F2F;">
+            <span class="amount-label">Discount</span>
+            <span class="amount-value">- ₹ ${formatINR(discountAmt)}</span>
+          </div>
+          ` : ''}
+          <div class="amount-row total">
+            <span class="amount-label">Total Payable</span>
+            <span class="amount-value">₹ ${formatINR(finalTotal)}</span>
           </div>
           <div class="amount-row">
             <span class="amount-label">Received Amount</span>
-            <span class="amount-value">₹ ${formatINR(grandTotal)}</span>
+            <span class="amount-value">₹ ${formatINR(finalTotal)}</span>
           </div>
           <div class="amount-row">
             <span class="amount-label">Balance</span>
-            <span class="amount-value">₹ 0</span>
-          </div>
-          <div class="amount-row" style="margin-top:8px;">
-            <span class="amount-label">Previous Balance</span>
-            <span class="amount-value">₹ 0</span>
-          </div>
-          <div class="amount-row">
-            <span class="amount-label">Current Balance</span>
             <span class="amount-value">₹ 0</span>
           </div>
         </div>
@@ -572,6 +583,10 @@ async function generateInvoicePDF(jobCartId) {
       <!-- ═══ TERMS + AMOUNT IN WORDS ═══ -->
       <div class="terms-section">
         <div class="terms-left">
+          ${cart.invoice_notes ? `
+          <div class="terms-title">NOTES</div>
+          <div class="terms-text" style="margin-bottom:8px;">${cart.invoice_notes}</div>
+          ` : ''}
           <div class="terms-title">TERMS AND CONDITIONS</div>
           <div class="terms-text">
             1. Your car belongings are not our responsibility and make sure you check your belongings before dropping your car at our workshop.<br>
@@ -581,7 +596,7 @@ async function generateInvoicePDF(jobCartId) {
         </div>
         <div class="terms-right">
           <div class="words-label">Total Amount (in words)</div>
-          <div class="words-value">${amountInWords(grandTotal)}</div>
+          <div class="words-value">${amountInWords(finalTotal)}</div>
         </div>
       </div>
 

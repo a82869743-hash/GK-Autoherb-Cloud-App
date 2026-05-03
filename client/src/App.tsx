@@ -40,6 +40,7 @@ import CustomerDashboardPage from './pages/customer/DashboardPage';
 // Staff & Accounts pages
 import StaffPage from './pages/admin/StaffPage';
 import StaffDetailPage from './pages/admin/StaffDetailPage';
+import StaffSalaryPage from './pages/admin/StaffSalaryPage';
 import AccountsPage from './pages/admin/AccountsPage';
 import BuySellPage from './pages/admin/BuySellPage';
 import StaffJobCartsPage from './pages/staff/StaffJobCartsPage';
@@ -52,8 +53,10 @@ import ImportPage from './pages/admin/ImportPage';
 import StaffInquiryPage from './pages/staff/InquiryPage';
 
 // Settings & Dashboard Pages
+// Settings, Dashboard & Billing Pages
 import DashboardPage from './pages/admin/DashboardPage';
 import SettingsPage from './pages/admin/SettingsPage';
+import QuickBillingPage from './pages/admin/QuickBillingPage';
 
 // Delivery pages
 import DeliveryPage from './pages/staff/DeliveryPage';
@@ -131,7 +134,8 @@ export default function App() {
         <Route path="loyalty" element={<LoyaltyAwardPage />} />
         {/* ─── New Admin Routes ─── */}
         <Route path="reports" element={<Placeholder title="Reports" />} />
-        <Route path="billing" element={<Placeholder title="Manual Billing" />} />
+        <Route path="billing" element={<QuickBillingPage />} />
+        <Route path="salary" element={<StaffSalaryPage />} />
         <Route path="vendors" element={<Placeholder title="Vendor Management" />} />
       </Route>
 

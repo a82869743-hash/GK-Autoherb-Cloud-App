@@ -12,6 +12,8 @@ import Modal from '../../components/ui/Modal';
 import { SkeletonCard } from '../../components/ui/SkeletonLoader';
 import { formatTime } from '../../utils/formatters';
 import api from '../../api/axiosInstance';
+import io from 'socket.io-client';
+import { useAuthStore } from '../../store/authStore';
 
 const TABS = [
   { key: 'pending_approval', label: 'Pending Approvals', color: 'bg-yellow-500' },
@@ -43,12 +45,29 @@ export default function CustomerBookingsPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const { data, isLoading } = useBookings({
+  const { data, isLoading, refetch } = useBookings({
     page,
     limit,
     status: activeTab !== 'all' ? activeTab : undefined,
     search: searchDebounced || undefined,
   });
+
+  const { token } = useAuthStore();
+
+  useEffect(() => {
+    if (!token) return;
+    const socket = io(import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:5000', {
+      auth: { token }
+    });
+
+    socket.on('new_booking', () => {
+      refetch();
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [token, refetch]);
 
   const bookings = data?.data || [];
   const pagination = data?.pagination || { page: 1, total: 0, limit };

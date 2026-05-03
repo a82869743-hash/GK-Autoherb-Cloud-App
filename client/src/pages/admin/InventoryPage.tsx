@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Package, Edit2, Trash2, Check } from 'lucide-react';
+import { Plus, Package, Edit2, Trash2, Check, Upload } from 'lucide-react';
 import { useInventory, useCreateInventory, useUpdateInventory, useAdjustQuantity, useDeleteInventory } from '../../api/hooks/useInventory';
 import AdminTopBar from '../../components/layout/AdminTopBar';
 import Button from '../../components/ui/Button';
@@ -11,6 +11,7 @@ import Modal from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/shared/ConfirmDialog';
 import EmptyState from '../../components/shared/EmptyState';
 import { useUIStore } from '../../store/uiStore';
+import api from '../../api/axiosInstance';
 
 const unitOptions = [
   { value: 'ml', label: 'ml' },
@@ -52,6 +53,31 @@ export default function InventoryPage() {
   useEffect(() => {
     if (editingQtyId && qtyInputRef.current) qtyInputRef.current.focus();
   }, [editingQtyId]);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      setIsUploading(true);
+      const res = await api.post('/inventory/bulk-upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      toast('success', res.data.message || 'Import successful');
+      window.location.reload(); // Refresh data
+    } catch (err: any) {
+      toast('error', err.response?.data?.error || 'Failed to import file');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const openAddModal = () => {
     setEditItem(null);
@@ -210,9 +236,21 @@ export default function InventoryPage() {
         title="Inventory"
         subtitle={`${data?.pagination?.total || 0} products`}
         actions={
-          <Button onClick={openAddModal} icon={<Plus size={16} />}>
-            Add Product
-          </Button>
+          <div className="flex gap-2">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+            />
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()} icon={<Upload size={16} />} loading={isUploading}>
+              Import Excel
+            </Button>
+            <Button onClick={openAddModal} icon={<Plus size={16} />}>
+              Add Product
+            </Button>
+          </div>
         }
       />
 

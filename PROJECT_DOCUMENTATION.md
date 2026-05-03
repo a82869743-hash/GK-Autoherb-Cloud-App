@@ -1,128 +1,134 @@
-# GK AutoHerb - Project Documentation
+# GK AutoHerb - Comprehensive Project Documentation (0-100)
 
-## 1. Project Overview
-**GK AutoHerb** is a comprehensive, full-stack SaaS cloud application designed for automobile service centers. It provides specialized dashboards and features for administrators, staff, and customers, facilitating complete workshop management, vehicle tracking, job cart management, inventory, and online bookings.
-
-## 2. Technology Stack
-
-### Frontend (Client)
-- **Framework**: React 18 with TypeScript
-- **Build Tool**: Vite
-- **Styling**: Tailwind CSS, PostCSS, Autoprefixer
-- **State Management**: Zustand (Global State) & @tanstack/react-query (Server State)
-- **Routing**: React Router DOM (v6)
-- **Form Handling**: React Hook Form with Zod validation
-- **Real-time Communication**: Socket.io-client
-- **Maps/Tracking**: Google Maps JS API
-- **Data Export/Handling**: xlsx
-- **Icons & UI Utilities**: Lucide React, React Hot Toast, React Datepicker
-
-### Backend (Server)
-- **Environment**: Node.js
-- **Framework**: Express.js
-- **Database**: MySQL (using `mysql2` with connection pooling)
-- **Real-time Communication**: Socket.io (Used for live delivery/tracking updates)
-- **Authentication**: JSON Web Tokens (JWT) & bcryptjs
-- **File Uploads**: Multer with Cloudinary Storage (`multer-storage-cloudinary`)
-- **PDF Generation**: Puppeteer
-- **Scheduling/Background Tasks**: node-cron
-- **Security**: Helmet, CORS, Express-Validator
+## 1. Executive Summary
+**GK AutoHerb** is an advanced, full-stack Cloud/SaaS CRM application built specifically for automobile service centers and workshops. It handles the complete lifecycle of vehicle servicing—from customer booking, vehicle intake, job cart creation, inventory tracking, to final invoicing and delivery. The platform supports multiple user roles (Admin, Staff, Customer) and provides real-time features like GPS tracking and live socket communication.
 
 ---
 
-## 3. Architecture & Directory Structure
+## 2. Complete Technology Stack
 
-The project follows a standard client-server monorepo-style structure:
-```
-Software/
-├── client/           # React Frontend Application
-│   ├── public/       # Static assets
-│   ├── src/
-│   │   ├── api/      # Axios instances and API endpoint configurations
-│   │   ├── components/# Reusable UI components
-│   │   ├── pages/    # Route components (Admin, Customer, Staff, Auth)
-│   │   ├── router/   # React Router configurations
-│   │   ├── store/    # Zustand stores
-│   │   ├── types/    # TypeScript interfaces and types
-│   │   └── utils/    # Helper functions
-│   └── package.json
-├── server/           # Node.js/Express Backend Application
-│   ├── migrations/   # Database migration scripts
-│   ├── scripts/      # Utility scripts (seed, migrate)
-│   ├── src/
-│   │   ├── config/   # Configuration files (Database, Cloudinary, etc.)
-│   │   ├── controllers/# Request handlers with business logic
-│   │   ├── middleware/ # Express middlewares (Auth, Validation, Error Handling)
-│   │   ├── routes/   # API route definitions
-│   │   ├── services/ # Business logic layer and cron jobs
-│   │   └── app.js    # Express application setup and Socket.io initialization
-│   └── package.json
-└── .env              # Global Environment Variables
-```
+### Frontend (Client Application)
+*   **Core Framework**: React 18 with TypeScript for type safety.
+*   **Build System**: Vite (for rapid development and optimized builds).
+*   **Styling Engine**: Tailwind CSS, PostCSS, Autoprefixer for utility-first responsive design.
+*   **State Management**: 
+    *   **Zustand**: For global, persistent client state.
+    *   **@tanstack/react-query**: For server state management, caching, and data fetching.
+*   **Routing**: React Router DOM (v6).
+*   **Form Management & Validation**: React Hook Form paired with Zod schema validation.
+*   **Real-Time & Maps**: 
+    *   `socket.io-client`: For live notifications and real-time staff location tracking.
+    *   `@googlemaps/js-api-loader`: For embedding dynamic maps and plotting coordinates.
+*   **Data Handling**: `xlsx` for Excel data export/import.
+*   **UI Components**: `lucide-react` (Icons), `react-datepicker`, `react-hot-toast` (Toast notifications).
 
----
-
-## 4. Frontend Application (Client)
-
-The frontend is divided into role-based modules, ensuring secure and dedicated interfaces for different user types.
-
-### 4.1. Admin Dashboard
-The command center for workshop owners/managers.
-- **DashboardPage**: Aggregated statistical data, KPIs, revenue metrics, and live service overviews.
-- **JobCart (Create/List/Detail)**: Comprehensive management of ongoing vehicle repairs, parts usage, and labor.
-- **InventoryPage**: Stock management for auto parts and consumables.
-- **Bookings & Slots**: Management of customer appointments and workshop bay availability.
-- **Staff Management**: Tracking staff details, performance, and assignments.
-- **Accounts & Buy/Sell**: Financial tracking and managing vehicle trading (buy/sell).
-- **Settings & Loyalty**: System configuration and customer loyalty program management.
-- **Services & Packages**: Defining service offerings and bundled packages.
-
-### 4.2. Customer Dashboard
-A personalized portal for vehicle owners.
-- **DashboardPage**: Overview of customer's vehicles, upcoming bookings, and recent job carts.
-- **VehiclesPage**: Managing customer's registered vehicles.
-- **BookingPage**: Interface to schedule new service appointments.
-- **TrackingPage**: Live tracking of vehicle pick-up/drop-off using Google Maps & Socket.io.
-- **Loyalty & Profile**: Managing reward points and user profile details.
-
-### 4.3. Staff Dashboard
-A focused interface for mechanics and delivery personnel.
-- View assigned tasks and job carts.
-- Real-time location broadcasting for vehicle delivery/pickup routing.
+### Backend (Server Application)
+*   **Runtime Environment**: Node.js.
+*   **Web Framework**: Express.js.
+*   **Database**: MySQL (using `mysql2` with connection pooling for high concurrency).
+*   **Real-time Server**: Socket.io (for handling active WebSocket connections).
+*   **Authentication & Security**: 
+    *   JSON Web Tokens (JWT) for stateless authentication.
+    *   `bcryptjs` for secure password hashing.
+    *   `helmet` for HTTP header security.
+    *   `cors` for Cross-Origin Resource Sharing control.
+    *   `express-validator` for API payload sanitization.
+*   **Media Storage**: Cloudinary, integrated via `multer` and `multer-storage-cloudinary` for image/document uploads.
+*   **PDF Generation**: `puppeteer` (Headless Chrome) for generating pixel-perfect PDF invoices and job carts.
+*   **Data Import/Export**: `xlsx` and `exceljs` for processing bulk vehicle and inventory data.
+*   **Background Jobs**: `node-cron` for scheduling automated SMS, slot cleanup, and reminders.
 
 ---
 
-## 5. Backend Application (Server)
+## 3. Database Architecture (MySQL)
 
-The backend exposes a secure RESTful API under `/api/v1/` and manages real-time socket connections.
+The system relies on a robust relational database schema managed through sequenced SQL migrations (35+ tables).
 
-### 5.1. Core API Routes (`server/src/routes/`)
-- **Authentication (`/api/auth`)**: Login, registration, password resets.
-- **Job Carts (`/api/job-carts`)**: CRUD operations for workshop jobs, PDF invoice generation.
-- **Inventory (`/api/inventory`)**: Stock control APIs.
-- **Bookings & Slots (`/api/bookings`, `/api/slots`)**: Appointment scheduling logic.
-- **Services & Packages (`/api/services`, `/api/packages`, `/api/user-packages`)**: Catalog management.
-- **Vehicles (`/api/vehicles`)**: Customer vehicle registry.
-- **Deliveries (`/api/deliveries`)**: Managing pickup/drop-off logistics.
-- **Dashboard (`/api/dashboard`)**: Optimized endpoints aggregating stats for frontend KPIs.
+### Core Entities
+1.  **Users (`users`)**: Centralized identity table for Admins, Staff, and Customers with role-based flags.
+2.  **Vehicles (`vehicles`, `vehicle_master`)**: Registry of all customer vehicles (make, model, reg number, is_primary flags), backed by a master catalog of vehicle types.
+3.  **Job Carts (`job_carts`)**: The heart of the system. Tracks repairs, linked to customers, vehicles, and bookings. Statuses range from `pending` to `completed`.
+4.  **Job Relations (`job_services`, `job_products`, `job_photos`)**: Many-to-many tables linking a job cart to the specific services rendered, parts consumed, and inspection photos uploaded.
 
-### 5.2. Real-time Capabilities (Socket.io)
-Integrated directly into `app.js` to handle live updates:
-- **`join_delivery`**: Authenticates and connects users to specific delivery tracking rooms.
-- **`location_update`**: Broadcasts live GPS coordinates from staff to customers waiting for vehicle pickup/delivery.
+### Scheduling & Operations
+5.  **Bookings & Slots (`bookings`, `slots`)**: Manages customer appointments. Bookings are mapped to specific time slots, preventing double-booking. Includes an Admin Approval System.
+6.  **Staff & Deliveries (`staff`, `deliveries`, `staff_checkin`)**: Tracks mechanics and drivers. Logs check-ins and maps deliveries (pickup/drop-off) with GPS coordinates.
 
-### 5.3. Background Tasks & Services
-- **Cron Jobs**: Managed by `node-cron` (initialized in `services/cronService.js`) for tasks like sending automated reminders, updating statuses, or cleaning up expired slots.
-- **File Uploads**: Profiles, vehicle images, and documents are securely uploaded to Cloudinary.
+### Commerce & Inventory
+7.  **Inventory (`inventory`)**: Tracks auto parts, oils, and consumables. Monitors stock levels and pricing.
+8.  **Services & Categories (`services`, `service_categories`)**: Catalog of labor operations (e.g., "Oil Change", "Wheel Alignment") with predefined durations and costs.
+9.  **Packages (`packages`, `package_services`, `package_products`)**: Bundled offerings (e.g., "Annual Maintenance Contract") that group services and products together.
+10. **Customer Packages (`user_packages`, `package_usage`)**: Tracks which customers bought which packages, and how many redemptions/usages they have left.
+
+### Financials & CRM
+11. **Transactions & Billing (`transactions`, `billing_and_vendors`, `vendors`)**: Records all payments, invoice generation logs, and vendor supply chain expenses.
+12. **Loyalty (`loyalty`)**: Reward points system for customer retention.
+13. **Buy/Sell & Inquiries (`buy_sell`, `inquiries`)**: Marketplace features for listing used cars and capturing leads.
+14. **Messages Log (`messages_log`)**: Audit trail of all SMS/WhatsApp notifications sent (e.g., via 2Factor DLT templates).
+
+---
+
+## 4. Comprehensive Feature Matrix
+
+### 4.1. Admin Panel (Workshop Owners/Managers)
+*   **Business Dashboard**: Real-time KPI metrics, revenue charts, and operational overviews.
+*   **Job Cart Management**: 
+    *   Create digital job cards for incoming vehicles.
+    *   Attach services, deduct parts from inventory.
+    *   Upload inspection photos.
+    *   Generate and download PDF Invoices.
+*   **Booking Approval Workflow**: Review online booking requests from customers and approve/reject based on bay availability.
+*   **Inventory Control**: Add/edit stock, track low-stock items, and manage supplier details.
+*   **Staff Oversight**: Register mechanics, assign tasks, and monitor active deliveries.
+*   **Package Management**: Design subscription models (e.g., 3 Free Washes) and assign them to customer profiles.
+*   **Vehicle Trading**: Manage the Buy/Sell car listings.
+*   **System Settings**: Configure workshop details, tax rates, and SMS notification templates.
+
+### 4.2. Customer Portal
+*   **My Garage**: Add and manage personal vehicles, designating a "Primary" vehicle for quicker bookings.
+*   **Online Booking**: Select services or use active package balances to request an appointment on a calendar interface.
+*   **Live Tracking**: View the real-time Google Maps location of the staff member assigned to pick up or deliver their vehicle.
+*   **Service History**: Download past invoices and view job cart details.
+*   **Loyalty Points**: View accumulated points from past services.
+*   **Package Balances**: See remaining limits on purchased maintenance packages.
+
+### 4.3. Staff / Mechanic Interface
+*   **Task List**: View assigned job carts and daily duties.
+*   **Delivery Mode**: Initiate a delivery/pickup sequence. This connects to Socket.io and streams the device's GPS coordinates directly to the customer's tracking page.
+*   **Check-in System**: Log daily attendance.
 
 ---
 
-## 6. Security & Best Practices
+## 5. Core System Workflows
 
-- **Authentication**: JWT-based authentication with role-based access control (RBAC). Middleware verifies tokens before granting access to protected routes.
-- **Environment Management**: Secrets (DB credentials, JWT secrets, Cloudinary keys) are strictly managed via `.env`.
-- **Validation**: Strict schema validation on the client (Zod) and server (Express-Validator) to prevent bad data injection.
-- **Performance**: High-performance Express backend with optimized MySQL queries. The React frontend uses `@tanstack/react-query` for aggressive caching and stale-while-revalidate data fetching.
+### The Repair Lifecycle (Job Cart Workflow)
+1.  **Intake**: Vehicle arrives (walk-in or via booking). Admin creates a Job Cart.
+2.  **Inspection**: Mechanic assesses the car. Admin adds required *Services* and *Products* to the cart.
+3.  **Execution**: Work is performed. Inventory is automatically deducted as parts are marked "used" in the cart.
+4.  **Completion**: Job is marked complete. The system calculates totals, applies taxes, and checks for any valid package redemptions to offset costs.
+5.  **Invoicing**: Puppeteer generates a high-fidelity PDF invoice. The customer is notified via SMS/Email.
+
+### Real-Time Logistics Workflow
+1.  Staff is assigned to pick up a customer's car.
+2.  Staff opens the app and clicks "Start Trip".
+3.  The frontend captures `navigator.geolocation` data.
+4.  Data is emitted via WebSocket (`socket.emit('location_update', data)`).
+5.  The Customer, logged into their dashboard, is listening to the same WebSocket room.
+6.  The customer sees a Google Map with a moving marker representing the staff member.
+
+### Subscription & Package Workflow
+1.  Admin creates a "Gold Wash Package" containing 5 Car Washes.
+2.  Customer purchases the package. A record is created in `user_packages`.
+3.  Customer books an appointment and selects the "Gold Wash Package".
+4.  Upon job completion, the system records a `package_usage` entry and decrements the customer's available wash count.
 
 ---
-*Documentation generated for GK AutoHerb platform.*
+
+## 6. Security and Compliance Mechanisms
+
+*   **Role-Based Access Control (RBAC)**: Backend endpoints strictly check the decoded JWT payload to ensure Staff cannot access Admin financial routes.
+*   **Telecom Compliance (India)**: SMS notifications use the 2Factor API and are strictly mapped to pre-approved DLT (Distributed Ledger Technology) templates to ensure deliverability and prevent spam blocking.
+*   **Data Integrity**: Zod handles frontend validation before payload submission, while `express-validator` acts as a secondary shield on the backend, preventing SQL injection and malformed data.
+
+---
+*This document serves as the holistic 0-100 master reference for the GK AutoHerb Cloud Application.*
