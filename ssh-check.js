@@ -3,10 +3,20 @@ const c = new Client();
 c.on('ready', () => {
   const code = `
     const pool = require('/root/app/server/src/config/db.js');
-    pool.query('SELECT id, status, completed_at FROM job_carts').then(([rows]) => {
-      console.log(rows);
-      process.exit(0);
-    }).catch(console.error);
+    (async () => {
+      try {
+        const [pkg] = await pool.query("SHOW CREATE TABLE packages");
+        console.log(pkg[0]['Create Table']);
+        const [cpkg] = await pool.query("SHOW CREATE TABLE customer_packages");
+        console.log(cpkg[0]['Create Table']);
+        const [veh] = await pool.query("SHOW CREATE TABLE vehicles");
+        console.log(veh[0]['Create Table']);
+        process.exit(0);
+      } catch (err) {
+        console.error(err);
+        process.exit(1);
+      }
+    })();
   `;
   c.exec(`node -e "${code.replace(/\n/g, ' ')}"`, (err, stream) => {
     if (err) throw err;

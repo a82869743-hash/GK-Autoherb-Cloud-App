@@ -256,3 +256,100 @@ exports.delete = async (req, res) => {
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };
+
+// ─── CUSTOMER: SUBMIT PACKAGE REQUEST ───────
+exports.createRequest = async (req, res) => {
+  try {
+    const customerId = req.user.id;
+    const { vehicle_id, package_id, price } = req.body;
+
+    if (!vehicle_id || !package_id || price === undefined) {
+      return res.status(400).json({ success: false, error: 'vehicle_id, package_id, and price are required' });
+    }
+
+    const [result] = await pool.query(
+      "INSERT INTO package_requests (customer_id, vehicle_id, package_id, price, status) VALUES (?, ?, ?, ?, 'pending')",
+      [customerId, vehicle_id, package_id, price]
+    );
+
+    res.status(201).json({ success: true, message: 'Package request submitted to admin for approval' });
+  } catch (err) {
+    console.error('Package request create error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── ADMIN: LIST PACKAGE REQUESTS ───────────
+exports.listRequests = async (req, res) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT pr.*, u.name as customer_name, u.mobile as customer_mobile,
+             v.registration_no, v.brand, v.model,
+             p.name as package_name
+      FROM package_requests pr
+      JOIN users u ON pr.customer_id = u.id
+      JOIN vehicles v ON pr.vehicle_id = v.id
+      JOIN packages p ON pr.package_id = p.id
+      ORDER BY pr.created_at DESC
+    `);
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('Package list requests error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── ADMIN: APPROVE PACKAGE REQUEST ─────────
+exports.approveRequest = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const { id } = req.params;
+
+    // 1. Get request details
+    const [rows] = await conn.query("SELECT * FROM package_requests WHERE id = ? AND status = 'pending'", [id]);
+    if (!rows.length) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, error: 'Pending request not found' });
+    }
+    const reqData = rows[0];
+
+    // 2. Mark approved
+    await conn.query("UPDATE package_requests SET status = 'approved', approved_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
+
+    // 3. Add to user_packages
+    await conn.query(
+      "INSERT INTO user_packages (user_id, package_id) VALUES (?, ?)",
+      [reqData.customer_id, reqData.package_id]
+    );
+
+    await conn.commit();
+    res.json({ success: true, message: 'Package request approved successfully' });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Package approve error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  } finally {
+    conn.release();
+  }
+};
+
+// ─── DOWNLOAD INVOICE ───────────────────────
+exports.downloadInvoice = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { generatePackageInvoicePDF } = require('../services/invoiceService');
+    const { pdfBuffer, invoiceNumber } = await generatePackageInvoicePDF(id);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Length': pdfBuffer.length,
+      'Content-Disposition': \`attachment; filename="\${invoiceNumber}.pdf"\`
+    });
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error('Download package invoice error:', err);
+    res.status(500).json({ success: false, error: err.message || 'Error generating invoice' });
+  }
+};
+

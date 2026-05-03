@@ -11,6 +11,12 @@ const userPkgCtrl = require('../controllers/userPackagesController');
 router.get('/',              optionalAuth, ctrl.list);
 router.get('/:id',           ctrl.getOne);
 
+// ─── Package Purchase Requests ────────────────────────────────
+router.post('/requests',            auth, role(['customer']), ctrl.createRequest);
+router.get('/requests',             auth, role(['admin']), ctrl.listRequests);
+router.put('/requests/:id/approve', auth, role(['admin']), ctrl.approveRequest);
+router.get('/requests/:id/invoice', optionalAuth, ctrl.downloadInvoice);
+
 // ─── Admin-only CRUD ────────────────────────────────────────
 router.post('/',             auth, role(['admin']), ctrl.create);
 router.put('/:id',           auth, role(['admin']), ctrl.update);

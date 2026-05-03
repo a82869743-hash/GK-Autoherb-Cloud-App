@@ -122,6 +122,35 @@ exports.listAll = async (req, res) => {
       results.push(...rows);
     }
 
+    // ── 5. Package Purchases ──────────────────────────────────────────────
+    if (type === 'all' || type === 'package_purchase') {
+      let where = "pr.status = 'approved'";
+      const params = [];
+      if (from_date) { where += ' AND DATE(pr.approved_at) >= ?'; params.push(from_date); }
+      if (to_date)   { where += ' AND DATE(pr.approved_at) <= ?'; params.push(to_date); }
+      if (search)    { where += ' AND (u.name LIKE ? OR v.registration_no LIKE ?)'; const s = `%${search}%`; params.push(s,s); }
+
+      const [rows] = await pool.query(`
+        SELECT
+          pr.id,
+          'package_purchase' AS type,
+          CONCAT('PKG-', pr.id) AS reference,
+          u.name AS party_name,
+          u.mobile AS party_mobile,
+          COALESCE(pr.approved_at, pr.created_at) AS date,
+          pr.price AS amount,
+          v.registration_no,
+          NULL AS discount_type,
+          NULL AS discount_value
+        FROM package_requests pr
+        JOIN users u ON pr.customer_id = u.id
+        JOIN vehicles v ON pr.vehicle_id = v.id
+        WHERE ${where}
+        ORDER BY date DESC
+      `, params);
+      results.push(...rows);
+    }
+
     // ── Sort all results newest first ─────────────────────────────────────
     results.sort((a, b) => new Date(b.date) - new Date(a.date));
 

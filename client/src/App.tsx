@@ -36,6 +36,7 @@ import LoyaltyPage from './pages/customer/LoyaltyPage';
 import VehiclesPage from './pages/customer/VehiclesPage';
 import ProfilePage from './pages/customer/ProfilePage';
 import CustomerDashboardPage from './pages/customer/DashboardPage';
+import CustomerBuyPackagesPage from './pages/customer/BuyPackagesPage';
 
 // Staff & Accounts pages
 import StaffPage from './pages/admin/StaffPage';
@@ -43,6 +44,9 @@ import StaffDetailPage from './pages/admin/StaffDetailPage';
 import StaffSalaryPage from './pages/admin/StaffSalaryPage';
 import AccountsPage from './pages/admin/AccountsPage';
 import BuySellPage from './pages/admin/BuySellPage';
+import CustomersListPage from './pages/admin/CustomersListPage';
+import CustomerDetailPage from './pages/admin/CustomerDetailPage';
+import PackageApprovalsPage from './pages/admin/PackageApprovalsPage';
 import StaffJobCartsPage from './pages/staff/StaffJobCartsPage';
 import StaffBenefitsPage from './pages/staff/StaffBenefitsPage';
 
@@ -133,6 +137,9 @@ export default function App() {
         <Route path="import" element={<ImportPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="loyalty" element={<LoyaltyAwardPage />} />
+        <Route path="customers" element={<CustomersListPage />} />
+        <Route path="customers/:id" element={<CustomerDetailPage />} />
+        <Route path="package-approvals" element={<PackageApprovalsPage />} />
         {/* ─── New Admin Routes ─── */}
         <Route path="reports" element={<Placeholder title="Reports" />} />
         <Route path="billing" element={<QuickBillingPage />} />
@@ -152,6 +159,7 @@ export default function App() {
         <Route path="bookings/new" element={<BookingPage />} />
         <Route path="loyalty" element={<LoyaltyPage />} />
         <Route path="vehicles" element={<VehiclesPage />} />
+        <Route path="buy-packages" element={<CustomerBuyPackagesPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="delivery/:id" element={<TrackingPage />} />
       </Route>

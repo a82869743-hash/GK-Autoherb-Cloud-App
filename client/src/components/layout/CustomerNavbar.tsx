@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
-import { Wrench, Calendar, Gift, Car, User, LogOut, ClipboardList, LayoutDashboard, MoreHorizontal, X } from 'lucide-react';
+import { Wrench, Calendar, Gift, Car, User, LogOut, ClipboardList, LayoutDashboard, MoreHorizontal, X, PackageOpen } from 'lucide-react';
 
 const tabItems = [
   { to: '/customer', icon: LayoutDashboard, label: 'Home', end: true },
@@ -9,6 +9,7 @@ const tabItems = [
   { to: '/customer/job-carts', icon: ClipboardList, label: 'Jobs' },
   { to: '/customer/bookings', icon: Calendar, label: 'Bookings' },
   { to: '/customer/loyalty', icon: Gift, label: 'Loyalty' },
+  { to: '/customer/buy-packages', icon: PackageOpen, label: 'Buy Packages' },
   { to: '/customer/vehicles', icon: Car, label: 'My Cars' },
   { to: '/customer/profile', icon: User, label: 'Profile' },
 ];

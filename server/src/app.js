@@ -86,6 +86,7 @@ app.use('/api/deliveries', require('./routes/deliveries'));
 app.use('/api/settings',   require('./routes/settings'));
 app.use('/api/dashboard',  require('./routes/dashboard'));
 app.use('/api/vehicles',   require('./routes/vehicles'));
+app.use('/api/customers',  require('./routes/customers'));
 
 // ─── New Feature Routes ─────────────────────────────────────
 app.use('/api/user-packages', require('./routes/userPackages'));
