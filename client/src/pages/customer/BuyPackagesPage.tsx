@@ -35,7 +35,7 @@ export default function BuyPackagesPage() {
     async function loadData() {
       try {
         const [vehRes, pkgRes] = await Promise.all([
-          api.get('/vehicles'),
+          api.get('/vehicles/my-vehicles'),
           api.get('/packages')
         ]);
         if (vehRes.data.success) {
