@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/axiosInstance';
-import { UserCircle, Car, ArrowLeft, Loader2, Send, History, Calendar } from 'lucide-react';
+import { UserCircle, Car, ArrowLeft, Loader2, Send, History, Calendar, ClipboardList } from 'lucide-react';
 
 export default function CustomerDetailPage() {
   const { id } = useParams();
