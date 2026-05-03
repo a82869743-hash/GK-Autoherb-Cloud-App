@@ -9,7 +9,7 @@ c.on('ready', () => {
     http.get({
       hostname: 'localhost',
       port: 5000,
-      path: '/api/staff',
+      path: '/api/invoices?from_date=2026-05-03&to_date=2026-05-03',
       headers: { 'Authorization': 'Bearer ' + token }
     }, (res) => {
       let data = '';

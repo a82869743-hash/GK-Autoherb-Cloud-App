@@ -6,7 +6,7 @@ import {
   Receipt, Wallet, ShoppingCart, ClipboardList, X
 } from 'lucide-react';
 
-const API = import.meta.env.VITE_API_URL ?? '';
+import api from '../../api/axiosInstance';
 
 type BillType = 'all' | 'job_cart' | 'manual_bill' | 'salary' | 'buy_sell_buy' | 'buy_sell_sell';
 
@@ -60,7 +60,7 @@ export default function AllInvoicesPage() {
   const [total, setTotal] = useState(0);
   const limit = 25;
 
-  const headers = { Authorization: `Bearer ${token}` };
+  const { token } = useAuthStore();
 
   // Resolve api type filter — buy_sell_buy/sell both map to buy_sell on the server
   const apiType = activeType === 'buy_sell_buy' || activeType === 'buy_sell_sell' ? 'buy_sell' : activeType;
@@ -68,17 +68,17 @@ export default function AllInvoicesPage() {
   const fetchRecords = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({
+      const params: any = {
         page: String(page),
         limit: String(limit),
         type: apiType,
-      });
-      if (search)   params.set('search', search);
-      if (fromDate) params.set('from_date', fromDate);
-      if (toDate)   params.set('to_date', toDate);
+      };
+      if (search)   params.search = search;
+      if (fromDate) params.from_date = fromDate;
+      if (toDate)   params.to_date = toDate;
 
-      const res = await fetch(`${API}/api/invoices?${params}`, { headers });
-      const json = await res.json();
+      const res = await api.get('/invoices', { params });
+      const json = res.data;
       if (json.success) {
         // Client-side filter for buy/sell sub-types
         let data: InvoiceRecord[] = json.data;
@@ -101,16 +101,15 @@ export default function AllInvoicesPage() {
     const key = `${rec.type}-${rec.id}`;
     setDownloading(key);
     try {
-      let url = '';
-      if (rec.type === 'job_cart')    url = `${API}/api/job-carts/${rec.id}/invoice?token=${token}`;
-      if (rec.type === 'manual_bill') url = `${API}/api/billing/${rec.id}/invoice?token=${token}`;
-      if (rec.type === 'salary')      url = `${API}/api/salary/${rec.id}/slip?token=${token}`;
-      if (rec.type.startsWith('buy_sell')) url = `${API}/api/buy-sell/${rec.id}/invoice?token=${token}`;
+      let path = '';
+      if (rec.type === 'job_cart')    path = `/job-carts/${rec.id}/invoice`;
+      if (rec.type === 'manual_bill') path = `/billing/${rec.id}/invoice`;
+      if (rec.type === 'salary')      path = `/salary/${rec.id}/slip`;
+      if (rec.type.startsWith('buy_sell')) path = `/buy-sell/${rec.id}/invoice`;
 
-      if (!url) return;
-      const resp = await fetch(url, { headers });
-      if (!resp.ok) throw new Error('Failed');
-      const blob = await resp.blob();
+      if (!path) return;
+      const resp = await api.get(path, { responseType: 'blob' });
+      const blob = new Blob([resp.data], { type: 'application/pdf' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
       link.download = `${rec.reference}.pdf`;
