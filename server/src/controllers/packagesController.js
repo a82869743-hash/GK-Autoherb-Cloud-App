@@ -344,7 +344,7 @@ exports.downloadInvoice = async (req, res) => {
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Length': pdfBuffer.length,
-      'Content-Disposition': \`attachment; filename="\${invoiceNumber}.pdf"\`
+      'Content-Disposition': `attachment; filename="${invoiceNumber}.pdf"`
     });
     res.send(pdfBuffer);
   } catch (err) {
