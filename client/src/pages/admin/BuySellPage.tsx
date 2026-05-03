@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Plus, ShoppingCart } from 'lucide-react';
-import { useBuySellList, useCreateBuySell, useCompleteBuySell } from '../../api/hooks/useBuySell';
+import { Plus, ShoppingCart, Download } from 'lucide-react';
+import { useBuySellList, useCreateBuySell, useCompleteBuySell, downloadBuySellInvoice } from '../../api/hooks/useBuySell';
 import { useInventory } from '../../api/hooks/useInventory';
 import { useUIStore } from '../../store/uiStore';
 import PageHeader from '../../components/shared/PageHeader';
@@ -20,6 +20,7 @@ export default function BuySellPage() {
   
   const createBuySellMutation = useCreateBuySell();
   const completeBuySellMutation = useCompleteBuySell();
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
 
   const [showBsModal, setShowBsModal] = useState(false);
   const [bsForm, setBsForm] = useState({
@@ -62,6 +63,17 @@ export default function BuySellPage() {
     }
   };
 
+  const handleDownloadInvoice = async (id: number) => {
+    setDownloadingId(id);
+    try {
+      await downloadBuySellInvoice(id);
+    } catch (err) {
+      toast('error', 'Failed to download invoice');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -95,7 +107,11 @@ export default function BuySellPage() {
               { key: 'actions', header: 'Action', render: (row: any) => 
                 row.status === 'pending' ? (
                   <Button variant="secondary" size="sm" onClick={() => handleCompleteBs(row.id)} loading={completeBuySellMutation.isPending}>Complete</Button>
-                ) : <span className="text-gray-400 text-sm font-medium">Done</span>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={() => handleDownloadInvoice(row.id)} loading={downloadingId === row.id} icon={<Download size={14} />}>
+                    Invoice
+                  </Button>
+                )
               }
             ]}
             data={buySell?.data || []}

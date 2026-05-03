@@ -36,3 +36,14 @@ export const useCompleteBuySell = () => {
     },
   });
 };
+
+export const downloadBuySellInvoice = async (id: number) => {
+  const res = await api.get(`/buy-sell/${id}/invoice`, { responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([res.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', \`BuySell_Invoice_\${id}.pdf\`);
+  document.body.appendChild(link);
+  link.click();
+  link.parentNode?.removeChild(link);
+};

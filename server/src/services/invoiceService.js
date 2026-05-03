@@ -640,4 +640,149 @@ async function generateInvoicePDF(jobCartId) {
   }
 }
 
-module.exports = { generateInvoicePDF };
+/**
+ * Generate "Bill of Supply" PDF for Buy/Sell transactions matching exact GK AutoHerb template
+ */
+async function generateBuySellInvoicePDF(buySellId) {
+  const conn = await pool.getConnection();
+  try {
+    const [records] = await conn.query('SELECT * FROM buy_sell WHERE id = ?', [buySellId]);
+    if (!records.length) throw new Error('Record not found');
+    const record = records[0];
+
+    // Fetch settings
+    const [settingsRows] = await conn.query('SELECT key_name, value FROM settings');
+    const settings = {};
+    settingsRows.forEach(r => { settings[r.key_name] = r.value; });
+
+    const invoiceTitle = record.type === 'buy' ? 'Purchase Invoice' : 'Sales Invoice';
+    const invoiceNumber = \`\${record.type === 'buy' ? 'PUR' : 'SAL'}-\${record.id}\`;
+    
+    const invoiceDate = new Date(record.transaction_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    const logoBase64 = getLogoBase64();
+    const logoHtml = logoBase64
+      ? \`<img src="\${logoBase64}" alt="GK AutoHerb" style="max-width: 150px; height: auto;">\`
+      : \`<h1 style="margin:0;color:#c00;font-size:24px;">GK AUTOHERB</h1>\`;
+
+    const grandTotal = parseFloat(record.total_amount) || 0;
+    
+    const htmlContent = \`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
+        body { font-family: 'Montserrat', sans-serif; color: #333; line-height: 1.4; padding: 40px; margin: 0; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; }
+        .company-details { text-align: right; font-size: 11px; }
+        .title { color: #5f5e5e; font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; border-bottom: 2px solid #D32F2F; padding-bottom: 5px; margin-bottom: 20px; text-align: center; }
+        .info-section { display: flex; justify-content: space-between; margin-bottom: 30px; font-size: 12px; }
+        .info-box { width: 48%; }
+        .info-box strong { color: #D32F2F; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 11px; }
+        th { background-color: #1c1b1b; color: white; padding: 10px; text-align: left; text-transform: uppercase; letter-spacing: 1px; }
+        td { padding: 10px; border-bottom: 1px solid #eee; }
+        .totals { margin-left: auto; width: 40%; font-size: 12px; }
+        .totals-row { display: flex; justify-content: space-between; padding: 5px 0; }
+        .totals-row.grand { font-weight: 700; font-size: 14px; border-top: 2px solid #1c1b1b; padding-top: 10px; margin-top: 5px; }
+        .amount-words { margin-top: 30px; font-size: 11px; color: #5f5e5e; }
+        .footer { margin-top: 50px; border-top: 1px solid #eee; padding-top: 20px; font-size: 10px; color: #777; text-align: center; }
+        .notes-section { margin-top: 20px; padding: 10px; background-color: #f9f9f9; border-left: 3px solid #D32F2F; font-size: 11px; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <div>\${logoHtml}</div>
+        <div class="company-details">
+          <strong style="font-size: 14px;">\${settings.studio_name || 'GK AutoHerb'}</strong><br>
+          \${settings.studio_address || 'Address line 1'}<br>
+          Mobile: \${settings.studio_mobile || 'N/A'} | Email: \${settings.studio_email || 'N/A'}<br>
+          \${settings.studio_gst ? \`GSTIN: \${settings.studio_gst}\` : ''}
+        </div>
+      </div>
+
+      <div class="title">Bill of Supply - \${invoiceTitle}</div>
+
+      <div class="info-section">
+        <div class="info-box">
+          <p><strong>Billed To:</strong><br>
+          \${record.party_name}<br>
+          \${record.party_mobile ? 'Mob: ' + record.party_mobile : ''}</p>
+        </div>
+        <div class="info-box" style="text-align: right;">
+          <p><strong>Invoice No:</strong> \${invoiceNumber}<br>
+          <strong>Date:</strong> \${invoiceDate}</p>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 50%">Item / Product</th>
+            <th style="width: 15%">Qty</th>
+            <th style="width: 15%">Rate</th>
+            <th style="width: 20%; text-align: right;">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>\${record.product_name}</strong></td>
+            <td>\${parseFloat(record.quantity)}</td>
+            <td>\${formatINR(record.unit_price)}</td>
+            <td style="text-align: right;">\${formatINR(record.total_amount)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="totals">
+        <div class="totals-row grand">
+          <span>Net Amount:</span>
+          <span>₹\${formatINR(grandTotal)}</span>
+        </div>
+      </div>
+
+      <div class="amount-words">
+        <strong>Amount in words:</strong> \${amountInWords(grandTotal)}
+      </div>
+
+      \${record.note ? \`
+      <div class="notes-section">
+        <strong>Notes:</strong><br>
+        \${record.note}
+      </div>\` : ''}
+
+      <div class="footer">
+        <p>This is a computer-generated document. No signature is required.</p>
+        <p>Thank you for your business!</p>
+      </div>
+    </body>
+    </html>
+    \`;
+
+    const puppeteer = require('puppeteer');
+    const browser = await puppeteer.launch({
+      headless: 'new',
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
+    });
+    
+    try {
+      const page = await browser.newPage();
+      await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+      const pdfBuffer = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        margin: { top: '8mm', right: '8mm', bottom: '8mm', left: '8mm' }
+      });
+      return pdfBuffer;
+    } finally {
+      await browser.close();
+    }
+  } finally {
+    conn.release();
+  }
+}
+
+module.exports = { generateInvoicePDF, generateBuySellInvoicePDF };

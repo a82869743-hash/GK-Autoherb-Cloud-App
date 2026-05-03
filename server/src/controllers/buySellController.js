@@ -128,3 +128,22 @@ exports.complete = async (req, res) => {
     conn.release();
   }
 };
+
+// ─── INVOICE ────────────────────────────────
+exports.invoice = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { generateBuySellInvoicePDF } = require('../services/invoiceService');
+    const pdfBuffer = await generateBuySellInvoicePDF(id);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', \`attachment; filename=BuySell_Invoice_\${id}.pdf\`);
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error('Invoice generation error:', err);
+    if (err.message === 'Record not found') {
+      return res.status(404).json({ success: false, error: 'Record not found' });
+    }
+    res.status(500).json({ success: false, error: 'Failed to generate invoice' });
+  }
+};
