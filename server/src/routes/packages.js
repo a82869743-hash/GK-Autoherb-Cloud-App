@@ -9,13 +9,14 @@ const userPkgCtrl = require('../controllers/userPackagesController');
 // optionalAuth: If JWT present → req.user is set (admin sees all).
 // If no JWT or invalid → req.user = null (customer-filtered view).
 router.get('/',              optionalAuth, ctrl.list);
-router.get('/:id',           ctrl.getOne);
 
 // ─── Package Purchase Requests ────────────────────────────────
 router.post('/requests',            auth, role(['customer']), ctrl.createRequest);
 router.get('/requests',             auth, role(['admin']), ctrl.listRequests);
 router.put('/requests/:id/approve', auth, role(['admin']), ctrl.approveRequest);
 router.get('/requests/:id/invoice', optionalAuth, ctrl.downloadInvoice);
+
+router.get('/:id',           ctrl.getOne);
 
 // ─── Admin-only CRUD ────────────────────────────────────────
 router.post('/',             auth, role(['admin']), ctrl.create);

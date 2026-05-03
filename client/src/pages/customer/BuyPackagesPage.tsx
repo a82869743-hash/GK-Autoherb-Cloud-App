@@ -136,12 +136,22 @@ export default function BuyPackagesPage() {
             const price = getPrice(pkg, selectedVehicle.category);
             const isSubmitting = submittingId === pkg.id;
 
+            const [tierName, washType] = pkg.name.includes(' - ') ? pkg.name.split(' - ') : [pkg.name, ''];
+
             return (
               <div key={pkg.id} className="bg-white rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] overflow-hidden flex flex-col transition-transform hover:-translate-y-1 duration-300">
-                <div className="bg-gradient-to-br from-red-600 to-red-800 p-6 text-white text-center">
-                  <h3 className="text-xl font-bold mb-1">{pkg.name}</h3>
+                <div className="bg-gradient-to-br from-gray-900 to-black p-6 text-white text-center relative overflow-hidden">
+                  {/* Decorative Background Icon */}
+                  <PackageOpen className="absolute -right-6 -bottom-6 w-32 h-32 text-white/5" />
+                  
+                  <h3 className="text-xl font-bold mb-1 relative z-10">{tierName}</h3>
+                  {washType && (
+                    <div className="text-red-400 text-sm font-semibold uppercase tracking-wide relative z-10 mb-2">
+                      {washType}
+                    </div>
+                  )}
                   {pkg.wash_count > 0 && (
-                    <div className="inline-block bg-white/20 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider backdrop-blur-sm mt-2">
+                    <div className="inline-block bg-white/10 border border-white/20 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider backdrop-blur-sm relative z-10 mt-1">
                       {pkg.wash_count} Washes Included
                     </div>
                   )}
