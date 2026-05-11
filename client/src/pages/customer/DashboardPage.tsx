@@ -37,7 +37,8 @@ export default function CustomerDashboardPage() {
   const upcomingBookings = data?.upcoming_bookings || [];
   const recentJobs = data?.recent_jobs || [];
   const totalVisits = data?.total_visits || 0;
-  const primaryCar = data?.primary_car || null;
+  // Primary car: prefer explicit primary_car from API, fallback to first vehicle
+  const primaryCar = data?.primary_car || (vehicles.length > 0 ? vehicles[0] : null);
   const activePackage = data?.active_package || null;
 
   return (

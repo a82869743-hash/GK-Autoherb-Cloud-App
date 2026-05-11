@@ -3,7 +3,8 @@ const pool = require('../config/db');
 // ─── ADMIN STATS ────────────────────────────
 exports.getStats = async (req, res) => {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const monthStart = today.slice(0, 8) + '01';
 
     // Run all queries in parallel for speed

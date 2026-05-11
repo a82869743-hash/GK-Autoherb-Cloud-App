@@ -27,7 +27,7 @@ exports.create = async (req, res) => {
     }
 
     // Resolve customer and vehicle
-    let resolvedCustomerId = customer_id;
+    let resolvedCustomerId = customer_id || null;
     let resolvedVehicleId = vehicle_id || null;
     let resolvedBrand = vehicle_brand || null;
     let resolvedModel = vehicle_model || null;
@@ -46,7 +46,8 @@ exports.create = async (req, res) => {
     }
 
     // Get or create a "walk-in" slot for today
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     let [existingSlots] = await conn.query(
       "SELECT id FROM slots WHERE slot_date = ? AND start_time = '00:00:00' AND end_time = '23:59:59' LIMIT 1",
       [today]
@@ -69,6 +70,10 @@ exports.create = async (req, res) => {
     );
     const queuePosition = (queueRows[0]?.cnt || 0) + 1;
 
+    // Sanitize vehicle_category to valid ENUM values
+    const validCategories = ['hatchback', 'medium_hatchback', 'sedan', 'premium_sedan', 'suv'];
+    const safeCategory = validCategories.includes(vehicle_category) ? vehicle_category : null;
+
     // Insert quick wash booking
     const [result] = await conn.query(`
       INSERT INTO bookings
@@ -78,7 +83,7 @@ exports.create = async (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'quick_wash', 'confirmed', 'pending', ?, ?)
     `, [
       resolvedCustomerId, resolvedVehicleId, slotId, service_id || null,
-      resolvedBrand, resolvedModel, resolvedRegNo, vehicle_category || null,
+      resolvedBrand, resolvedModel, resolvedRegNo, safeCategory,
       queuePosition, notes || null
     ]);
 
@@ -100,8 +105,8 @@ exports.create = async (req, res) => {
     });
   } catch (err) {
     await conn.rollback();
-    console.error('Quick wash create error:', err);
-    res.status(500).json({ success: false, error: 'Failed to create quick wash booking' });
+    console.error('Quick wash create error:', err.message, err.sql || '');
+    res.status(500).json({ success: false, error: err.message || 'Failed to create quick wash booking' });
   } finally {
     conn.release();
   }

@@ -109,8 +109,13 @@ export default function BookingPage() {
   const selectedPackageObj = activePackages.find((p) => p.package_id === selectedPackage) || packages.find((p) => p.id === selectedPackage);
 
   // ─── Calendar helpers ───────────────────
+  // Format date as YYYY-MM-DD using LOCAL time (avoids UTC timezone shift)
+  const formatLocalDate = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const todayStr = formatLocalDate(today);
 
   const calDays = useMemo(() => {
     const y = calMonth.getFullYear();
@@ -161,7 +166,7 @@ export default function BookingPage() {
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-[#5f5e5e]">Date</span>
-            <span className="font-bold">{new Date(selectedDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+            <span className="font-bold">{new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-[#5f5e5e]">Time</span>
@@ -428,10 +433,10 @@ export default function BookingPage() {
           <div className="grid grid-cols-7 gap-1">
             {calDays.map((d, i) => {
               if (!d) return <div key={i} />;
-              const dateStr = d.toISOString().split('T')[0];
+              const dateStr = formatLocalDate(d);
               const isPast = d < today;
               const isSelected = dateStr === selectedDate;
-              const isToday = dateStr === today.toISOString().split('T')[0];
+              const isToday = dateStr === todayStr;
 
               return (
                 <button
@@ -457,7 +462,7 @@ export default function BookingPage() {
       {step === 3 && (
         <div className="bg-white rounded-lg p-6 shadow-sm">
           <p className="text-xs text-[#5f5e5e] mb-4">
-            Available slots for <span className="font-bold text-[#1c1b1b]">{new Date(selectedDate).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+            Available slots for <span className="font-bold text-[#1c1b1b]">{new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
           </p>
 
           {slotsLoading ? (

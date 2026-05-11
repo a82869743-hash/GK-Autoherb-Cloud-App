@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axiosInstance';
 import { useAuthStore } from '../../store/authStore';
-import { PackageOpen, Car, CheckCircle, Loader2, ArrowRight } from 'lucide-react';
+import { useToastStore } from '../../store/toastStore';
+import { PackageOpen, Car, CheckCircle, Loader2, ArrowRight, ShieldCheck, X } from 'lucide-react';
 
 interface Vehicle {
   id: number;
@@ -25,11 +26,14 @@ interface Pkg {
 
 export default function BuyPackagesPage() {
   const { user } = useAuthStore();
+  const { addToast } = useToastStore();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [packages, setPackages] = useState<Pkg[]>([]);
   const [loading, setLoading] = useState(true);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
+  // Confirmation modal state
+  const [confirmPkg, setConfirmPkg] = useState<Pkg | null>(null);
 
   useEffect(() => {
     async function loadData() {
@@ -67,23 +71,34 @@ export default function BuyPackagesPage() {
     }
   };
 
-  const handleBuy = async (pkg: Pkg) => {
-    if (!selectedVehicle) return alert('Please select a vehicle first.');
-    setSubmittingId(pkg.id);
+  // Step 1: User clicks "Request to Buy" → show confirmation modal
+  const handleBuyClick = (pkg: Pkg) => {
+    if (!selectedVehicle) {
+      addToast('error', 'Please select a vehicle first.');
+      return;
+    }
+    setConfirmPkg(pkg);
+  };
+
+  // Step 2: User confirms "Yes" → submit to admin
+  const handleConfirmPurchase = async () => {
+    if (!confirmPkg || !selectedVehicle) return;
+    setSubmittingId(confirmPkg.id);
     try {
-      const price = getPrice(pkg, selectedVehicle.category);
+      const price = getPrice(confirmPkg, selectedVehicle.category);
       const res = await api.post('/packages/requests', {
         vehicle_id: selectedVehicle.id,
-        package_id: pkg.id,
+        package_id: confirmPkg.id,
         price
       });
       if (res.data.success) {
-        alert('Package request submitted successfully! An admin will review and approve it shortly.');
+        addToast('success', 'Package request submitted! Admin will review and approve it shortly.');
       }
     } catch (err) {
-      alert('Failed to submit package request. Please try again.');
+      addToast('error', 'Failed to submit package request. Please try again.');
     } finally {
       setSubmittingId(null);
+      setConfirmPkg(null);
     }
   };
 
@@ -168,7 +183,7 @@ export default function BuyPackagesPage() {
                   </p>
 
                   <button
-                    onClick={() => handleBuy(pkg)}
+                    onClick={() => handleBuyClick(pkg)}
                     disabled={isSubmitting}
                     className="w-full py-3.5 px-4 rounded-xl font-bold text-sm text-white bg-red-600 hover:bg-red-700 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                   >
@@ -184,6 +199,81 @@ export default function BuyPackagesPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ─── Confirmation Modal ─────────────────────── */}
+      {confirmPkg && selectedVehicle && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-red-600 to-red-700 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                <ShieldCheck size={20} />
+                Confirm Purchase Request
+              </h3>
+              <button
+                onClick={() => setConfirmPkg(null)}
+                className="text-white/80 hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6">
+              <p className="text-gray-600 text-sm mb-5">
+                You are requesting to purchase the following package. An admin will review and approve your request.
+              </p>
+
+              <div className="bg-gray-50 rounded-xl p-4 space-y-3 mb-5">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Package</span>
+                  <span className="font-bold text-gray-900">{confirmPkg.name}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Vehicle</span>
+                  <span className="font-semibold text-gray-900">
+                    {selectedVehicle.brand} {selectedVehicle.model}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Reg No</span>
+                  <span className="font-medium text-gray-700">{selectedVehicle.registration_no || '—'}</span>
+                </div>
+                <div className="border-t border-gray-200 pt-3 flex justify-between">
+                  <span className="text-gray-500 text-sm">Price</span>
+                  <span className="text-xl font-extrabold text-red-600">
+                    ₹{getPrice(confirmPkg, selectedVehicle.category)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setConfirmPkg(null)}
+                  disabled={submittingId === confirmPkg.id}
+                  className="flex-1 py-3 px-4 bg-gray-100 text-gray-700 rounded-xl font-semibold text-sm hover:bg-gray-200 transition-all disabled:opacity-50"
+                >
+                  No, Cancel
+                </button>
+                <button
+                  onClick={handleConfirmPurchase}
+                  disabled={submittingId === confirmPkg.id}
+                  className="flex-1 py-3 px-4 bg-red-600 text-white rounded-xl font-bold text-sm hover:bg-red-700 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+                >
+                  {submittingId === confirmPkg.id ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <CheckCircle size={16} />
+                      Yes, Request
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
