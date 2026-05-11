@@ -474,7 +474,7 @@ export default function BookingPage() {
                 const isSelected = selectedSlot?.id === slot.id;
                 
                 // Filter out past slots for today
-                const isToday = selectedDate === today.toISOString().split('T')[0];
+                const isToday = selectedDate === todayStr;
                 if (isToday) {
                   const [hour, minute] = slot.start_time.split(':').map(Number);
                   const now = new Date();

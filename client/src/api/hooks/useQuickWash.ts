@@ -7,7 +7,7 @@ export const useQuickWashes = (params?: { status?: string; date?: string; page?:
   return useQuery<QuickWashBooking[]>({
     queryKey: ['quick-washes', params],
     queryFn: async () => {
-      const { data } = await api.get('/api/quick-wash', { params });
+      const { data } = await api.get('/quick-wash', { params });
       return data.data;
     },
     refetchInterval: 15000, // Auto-refresh every 15 sec for live queue
@@ -19,7 +19,7 @@ export const useQuickWashStats = () => {
   return useQuery<QuickWashStats>({
     queryKey: ['quick-wash-stats'],
     queryFn: async () => {
-      const { data } = await api.get('/api/quick-wash/stats');
+      const { data } = await api.get('/quick-wash/stats');
       return data.data;
     },
     refetchInterval: 10000,
@@ -40,7 +40,7 @@ export const useCreateQuickWash = () => {
       vehicle_category?: string;
       notes?: string;
     }) => {
-      const { data } = await api.post('/api/quick-wash', payload);
+      const { data } = await api.post('/quick-wash', payload);
       return data;
     },
     onSuccess: () => {
@@ -55,7 +55,7 @@ export const useUpdateWashStatus = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, wash_status }: { id: number; wash_status: string }) => {
-      const { data } = await api.patch(`/api/quick-wash/${id}/status`, { wash_status });
+      const { data } = await api.patch(`/quick-wash/${id}/status`, { wash_status });
       return data;
     },
     onSuccess: () => {

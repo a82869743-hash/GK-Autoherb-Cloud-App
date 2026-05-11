@@ -480,10 +480,24 @@ exports.listUserPackages = async (req, res) => {
 // DASHBOARD PACKAGE DATA
 // ═══════════════════════════════════════════════════════════
 exports.getDashboardPackageData = async (userId) => {
-  const [primaryCar] = await pool.query(
-    'SELECT id, brand, model, registration_no FROM vehicles WHERE customer_id = ? AND is_primary = 1 LIMIT 1',
-    [userId]
-  );
+  let primaryCar = [];
+  try {
+    [primaryCar] = await pool.query(
+      'SELECT id, brand, model, registration_no FROM vehicles WHERE customer_id = ? AND is_primary = 1 LIMIT 1',
+      [userId]
+    );
+  } catch (e) {
+    // is_primary column may not exist — fallback below
+  }
+  // Fallback: if no primary car found, get the first car for this customer
+  if (!primaryCar.length) {
+    try {
+      [primaryCar] = await pool.query(
+        'SELECT id, brand, model, registration_no FROM vehicles WHERE customer_id = ? ORDER BY created_at ASC LIMIT 1',
+        [userId]
+      );
+    } catch (e) { /* ignore */ }
+  }
 
   const [activePackages] = await pool.query(`
     SELECT up.id, up.package_id, up.start_date, up.end_date,
