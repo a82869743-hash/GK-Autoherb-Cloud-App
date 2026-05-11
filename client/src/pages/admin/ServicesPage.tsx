@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Wrench, Edit2, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, Wrench, Edit2, Trash2, ToggleLeft, ToggleRight, Sparkles } from 'lucide-react';
 import { useServices, useCreateService, useUpdateService, useToggleService, useDeleteService } from '../../api/hooks/useServices';
 import AdminTopBar from '../../components/layout/AdminTopBar';
 import Button from '../../components/ui/Button';
@@ -38,6 +38,7 @@ export default function ServicesPage() {
 
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [premium, setPremium] = useState(false);
 
   const services = data?.data || [];
 
@@ -46,7 +47,7 @@ export default function ServicesPage() {
   const openAdd = () => {
     setEditItem(null); setName(''); setDesc('');
     setPrices({ price_hatchback: 0, price_medium_hatchback: 0, price_sedan: 0, price_premium_sedan: 0, price_suv: 0 });
-    setActive(true); setModalOpen(true);
+    setActive(true); setPremium(false); setModalOpen(true);
   };
 
   const openEdit = (svc: any) => {
@@ -58,13 +59,13 @@ export default function ServicesPage() {
       price_premium_sedan: parseFloat(svc.price_premium_sedan) || 0,
       price_suv: parseFloat(svc.price_suv) || 0,
     });
-    setActive(!!svc.is_active); setModalOpen(true);
+    setActive(!!svc.is_active); setPremium(!!svc.is_premium); setModalOpen(true);
   };
 
   const handleSave = async () => {
     if (!name.trim()) { toast('error', 'Name is required'); return; }
     try {
-      const payload = { name, description: desc, ...prices, is_active: active };
+      const payload = { name, description: desc, ...prices, is_active: active, is_premium: premium };
       if (editItem) {
         await updateMut.mutateAsync({ id: editItem.id, ...payload });
         toast('success', 'Service updated');
@@ -106,6 +107,7 @@ export default function ServicesPage() {
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <h3 className="font-bold text-[#1c1b1b] text-sm">{svc.name}</h3>
+                  {svc.is_premium ? <span className="text-[8px] font-extrabold uppercase tracking-widest px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded mt-1 inline-block">Premium</span> : null}
                   {svc.description && <p className="text-xs text-[#5f5e5e] mt-1 line-clamp-2">{svc.description}</p>}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
@@ -144,12 +146,20 @@ export default function ServicesPage() {
               ))}
             </div>
           </div>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <button type="button" onClick={() => setActive(!active)} className={`w-10 h-5 rounded-full transition-colors ${active ? 'bg-green-500' : 'bg-gray-300'}`}>
-              <div className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform ${active ? 'translate-x-5' : 'translate-x-0.5'}`} />
-            </button>
-            <span className="text-xs font-bold uppercase tracking-wider text-[#5f5e5e]">{active ? 'Active' : 'Inactive'}</span>
-          </label>
+          <div className="flex items-center gap-6">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <button type="button" onClick={() => setActive(!active)} className={`w-10 h-5 rounded-full transition-colors ${active ? 'bg-green-500' : 'bg-gray-300'}`}>
+                <div className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform ${active ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+              <span className="text-xs font-bold uppercase tracking-wider text-[#5f5e5e]">{active ? 'Active' : 'Inactive'}</span>
+            </label>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <button type="button" onClick={() => setPremium(!premium)} className={`w-10 h-5 rounded-full transition-colors ${premium ? 'bg-amber-500' : 'bg-gray-300'}`}>
+                <div className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform ${premium ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+              <span className="text-xs font-bold uppercase tracking-wider text-[#5f5e5e] flex items-center gap-1"><Sparkles size={12} /> {premium ? 'Premium' : 'Standard'}</span>
+            </label>
+          </div>
         </div>
       </Modal>
 

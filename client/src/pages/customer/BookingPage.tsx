@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Check, Calendar, Clock, Car, Sparkles, Loader2 } from 'lucide-react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, Check, Calendar, Clock, Car, Sparkles, Loader2, ArrowLeft } from 'lucide-react';
 import { useSlots } from '../../api/hooks/useSlots';
 import { useCreateBooking } from '../../api/hooks/useBookings';
 import Button from '../../components/ui/Button';
@@ -14,6 +14,7 @@ const STEPS = ['Service', 'Vehicle', 'Date', 'Time', 'Confirm'];
 
 export default function BookingPage() {
   const toast = useUIStore((s) => s.toast);
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const createMut = useCreateBooking();
 
@@ -171,15 +172,31 @@ export default function BookingPage() {
             <span className="font-bold">{brand} {model}</span>
           </div>
         </div>
-        <Button className="mt-6" onClick={() => window.location.reload()}>
-          Book Another
-        </Button>
+        <div className="flex gap-3 mt-6">
+          <Button variant="ghost" onClick={() => navigate('/customer/bookings')}>
+            View Bookings
+          </Button>
+          <Button onClick={() => { setBookingResult(null); setStep(0); setSelectedServices([]); setSelectedPackage(null); setSelectedSlot(null); setSelectedDate(''); }}>
+            Book Another
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="pt-4 max-w-2xl mx-auto">
+      {/* Back to bookings */}
+      <button
+        onClick={() => {
+          if (step > 0 && !window.confirm('You have unsaved booking progress. Leave this page?')) return;
+          navigate('/customer/bookings');
+        }}
+        className="flex items-center gap-2 text-gray-500 hover:text-gray-900 mb-4 text-sm font-medium transition-colors"
+      >
+        <ArrowLeft size={14} /> Back to My Bookings
+      </button>
+
       {/* Progress Stepper */}
       <div className="flex items-center justify-between mb-8">
         {STEPS.map((label, i) => (

@@ -36,6 +36,9 @@ export interface PackageUsageItem {
   remaining: number;
 }
 
+export type PackageStatus = 'active' | 'expired' | 'cancelled' | 'renewed';
+export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
+
 export interface UserPackage {
   id: number;
   package_id: number;
@@ -44,7 +47,18 @@ export interface UserPackage {
   is_active: boolean;
   package_name: string;
   package_description?: string;
+  description?: string;
   usage: PackageUsageItem[];
+  package_status: PackageStatus;
+  payment_status: PaymentStatus;
+  price_paid?: number;
+  vehicle_segment?: string;
+  vehicle_id?: number;
+  renewed_from_id?: number;
+  renewed_at?: string;
+  days_remaining?: number | null;
+  wash_count?: number;
+  wax_count?: number;
 }
 
 export type JobCartStatus = 'draft' | 'open' | 'complete';
@@ -223,7 +237,6 @@ export interface Loyalty {
 // STAFF
 // ═══════════════════════════════════════════
 export type AttendanceStatus = 'present' | 'absent' | 'half_day';
-export type PaymentStatus = 'pending' | 'paid';
 
 export interface StaffProfile {
   specialisations?: string;
@@ -452,4 +465,135 @@ export interface ServiceCategory {
   sort_order: number;
   is_active: boolean;
   created_at: string;
+}
+
+// ═══════════════════════════════════════════
+// PHASE 2: LOYALTY TRANSACTIONS
+// ═══════════════════════════════════════════
+export type LoyaltyTransactionType = 'earn' | 'redeem' | 'bonus' | 'adjustment' | 'expire';
+
+export interface LoyaltyTransaction {
+  id: number;
+  customer_id: number;
+  type: LoyaltyTransactionType;
+  points: number;
+  balance_after: number;
+  reference_type?: string;
+  reference_id?: number;
+  description?: string;
+  created_by?: number;
+  created_by_name?: string;
+  created_at: string;
+}
+
+export interface LoyaltyData {
+  customer_id: number;
+  credits: number;
+  free_washes: number;
+  wax_count: number;
+  points: number;
+  loyalty_settings?: LoyaltySettings;
+}
+
+export interface LoyaltySettings {
+  points_ratio: number;
+  min_redeem: number;
+  point_value: number;
+  enabled: boolean;
+}
+
+// ═══════════════════════════════════════════
+// PHASE 2: QUICK WASH
+// ═══════════════════════════════════════════
+export type WashStatus = 'pending' | 'washing' | 'completed' | 'delivered';
+
+export interface QuickWashBooking {
+  id: number;
+  customer_id: number;
+  vehicle_id?: number;
+  slot_id: number;
+  service_id?: number;
+  vehicle_brand?: string;
+  vehicle_model?: string;
+  vehicle_reg_no?: string;
+  vehicle_category?: string;
+  job_type: 'quick_wash';
+  status: string;
+  wash_status: WashStatus;
+  queue_position: number;
+  notes?: string;
+  started_at?: string;
+  completed_at?: string;
+  delivered_at?: string;
+  created_at: string;
+  customer_name?: string;
+  customer_mobile?: string;
+  service_name?: string;
+}
+
+export interface QuickWashStats {
+  pending_count: number;
+  washing_count: number;
+  completed_count: number;
+  delivered_count: number;
+  total_today: number;
+}
+
+// ═══════════════════════════════════════════
+// PHASE 2: SEARCH
+// ═══════════════════════════════════════════
+export interface SearchCustomer {
+  id: number;
+  name: string;
+  mobile: string;
+  email?: string;
+  vehicle_count?: number;
+  job_count?: number;
+}
+
+export interface SearchVehicle {
+  id: number;
+  registration_no: string;
+  brand: string;
+  model: string;
+  customer_id: number;
+  customer_name?: string;
+  customer_mobile?: string;
+}
+
+export interface GlobalSearchResult {
+  customers: SearchCustomer[];
+  vehicles: SearchVehicle[];
+  inventory: Array<{ id: number; product_name: string; quantity: number }>;
+  vendors: Array<{ id: number; name: string; phone?: string }>;
+}
+
+// ═══════════════════════════════════════════
+// PHASE 2: PREMIUM SERVICES
+// ═══════════════════════════════════════════
+export interface ServiceAddon {
+  id: number;
+  service_id: number;
+  addon_name: string;
+  addon_price: number;
+  duration_minutes: number;
+  is_active: boolean;
+}
+
+export interface PremiumService {
+  id: number;
+  name: string;
+  description?: string;
+  price_hatchback: number;
+  price_medium_hatchback: number;
+  price_sedan: number;
+  price_premium_sedan: number;
+  price_suv: number;
+  price_luxury: number;
+  duration_minutes: number;
+  is_premium: boolean;
+  is_active: boolean;
+  image_url?: string;
+  sort_order: number;
+  addons?: ServiceAddon[];
 }

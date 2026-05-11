@@ -16,4 +16,10 @@ router.post('/categories',        auth, role(['admin']), ctrl.createCategory);
 router.put('/categories/:id',     auth, role(['admin']), ctrl.updateCategory);
 router.delete('/categories/:id',  auth, role(['admin']), ctrl.deleteCategory);
 
+// ─── Service Add-ons ───────────────────────────────
+router.get('/:serviceId/addons',           ctrl.listAddons);   // public
+router.post('/:serviceId/addons',          auth, role(['admin']), ctrl.createAddon);
+router.put('/:serviceId/addons/:addonId',  auth, role(['admin']), ctrl.updateAddon);
+router.delete('/:serviceId/addons/:addonId', auth, role(['admin']), ctrl.deleteAddon);
+
 module.exports = router;

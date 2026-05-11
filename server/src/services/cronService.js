@@ -116,6 +116,22 @@ exports.initCronJobs = () => {
       }
     }
   });
+
+  // 4. PACKAGE EXPIRY — Mark expired packages daily at midnight
+  cron.schedule('0 0 * * *', async () => {
+    console.log('[CRON] Running package expiry check');
+    try {
+      const userPackagesCtrl = require('../controllers/userPackagesController');
+      const expired = await userPackagesCtrl.expirePackages();
+      if (expired > 0) {
+        console.log(`[CRON] Expired ${expired} package subscription(s)`);
+      }
+    } catch (err) {
+      if (err.code !== 'ER_BAD_FIELD_ERROR' && err.code !== 'ER_NO_SUCH_TABLE') {
+        console.error('[CRON] Error in package expiry task:', err);
+      }
+    }
+  });
   
   console.log('[CRON] Jobs initialized successfully');
 };

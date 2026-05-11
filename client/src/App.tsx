@@ -65,6 +65,11 @@ import QuickBillingPage from './pages/admin/QuickBillingPage';
 import AllInvoicesPage from './pages/admin/AllInvoicesPage';
 import ArchivePage from './pages/admin/ArchivePage';
 
+// Phase 2 pages
+import QuickWashPage from './pages/admin/QuickWashPage';
+import LoyaltySettingsPage from './pages/admin/LoyaltySettingsPage';
+import PremiumServicesPage from './pages/admin/PremiumServicesPage';
+
 // Delivery pages
 import DeliveryPage from './pages/staff/DeliveryPage';
 import TrackingPage from './pages/customer/TrackingPage';
@@ -138,7 +143,6 @@ export default function App() {
         <Route path="inquiries" element={<InquiriesPage />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="settings" element={<SettingsPage />} />
-        <Route path="loyalty" element={<LoyaltyAwardPage />} />
         <Route path="customers" element={<CustomersListPage />} />
         <Route path="customers/:id" element={<CustomerDetailPage />} />
         <Route path="add-customer" element={<ManualRegistrationPage />} />
@@ -150,6 +154,10 @@ export default function App() {
         <Route path="salary" element={<StaffSalaryPage />} />
         <Route path="vendors" element={<Placeholder title="Vendor Management" />} />
         <Route path="archive" element={<ArchivePage />} />
+        {/* ─── Phase 2 Routes ─── */}
+        <Route path="quick-wash" element={<QuickWashPage />} />
+        <Route path="loyalty" element={<LoyaltySettingsPage />} />
+        <Route path="premium-services" element={<PremiumServicesPage />} />
       </Route>
 
       {/* Customer routes */}

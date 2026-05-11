@@ -97,6 +97,10 @@ app.use('/api/salary',        require('./routes/salary'));
 app.use('/api/invoices',      require('./routes/invoices'));
 app.use('/api/archive',       require('./routes/archive'));
 
+// ─── Phase 2 Routes ────────────────────────────────────────
+app.use('/api/search',        require('./routes/search'));
+app.use('/api/quick-wash',    require('./routes/quickWash'));
+
 // ─── Socket.io Auth + GPS ───────────────────────────
 const jwt = require('jsonwebtoken');
 

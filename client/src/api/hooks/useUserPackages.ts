@@ -43,3 +43,24 @@ export const useAssignPackage = () => {
     },
   });
 };
+
+/** Admin: renew an expiring/expired package */
+export const useRenewPackage = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      user_package_id: number;
+      package_id?: number; // optional: upgrade to different package
+      payment_amount?: number;
+      payment_mode?: string;
+    }) => {
+      const res = await api.post(`/user-packages/${payload.user_package_id}/renew`, payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['user-packages'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['package-approvals'] });
+    },
+  });
+};

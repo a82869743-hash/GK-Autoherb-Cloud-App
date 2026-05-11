@@ -1,0 +1,242 @@
+/**
+ * ═══════════════════════════════════════════════════════════
+ * QUICK WASH CONTROLLER
+ * ═══════════════════════════════════════════════════════════
+ * Handles quick wash bookings without full job card workflow.
+ * Uses bookings table with job_type = 'quick_wash'.
+ */
+
+const pool = require('../config/db');
+
+// ─── CREATE QUICK WASH ──────────────────────
+exports.create = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const {
+      customer_id, vehicle_id, service_id,
+      vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category,
+      notes
+    } = req.body;
+
+    // Validate
+    if (!customer_id && !vehicle_reg_no) {
+      await conn.rollback();
+      return res.status(400).json({ success: false, error: 'Customer or vehicle registration is required' });
+    }
+
+    // Resolve customer and vehicle
+    let resolvedCustomerId = customer_id;
+    let resolvedVehicleId = vehicle_id || null;
+    let resolvedBrand = vehicle_brand || null;
+    let resolvedModel = vehicle_model || null;
+    let resolvedRegNo = vehicle_reg_no || null;
+
+    if (vehicle_id && !vehicle_brand) {
+      const [vRows] = await conn.query(
+        'SELECT id, brand, model, registration_no, customer_id FROM vehicles WHERE id = ?', [vehicle_id]
+      );
+      if (vRows.length) {
+        resolvedBrand = vRows[0].brand;
+        resolvedModel = vRows[0].model;
+        resolvedRegNo = vRows[0].registration_no;
+        if (!resolvedCustomerId) resolvedCustomerId = vRows[0].customer_id;
+      }
+    }
+
+    // Get or create a "walk-in" slot for today
+    const today = new Date().toISOString().split('T')[0];
+    let [existingSlots] = await conn.query(
+      "SELECT id FROM slots WHERE slot_date = ? AND start_time = '00:00:00' AND end_time = '23:59:59' LIMIT 1",
+      [today]
+    );
+
+    let slotId;
+    if (existingSlots.length) {
+      slotId = existingSlots[0].id;
+    } else {
+      const [slotResult] = await conn.query(
+        "INSERT INTO slots (slot_date, start_time, end_time, max_capacity, booked_count) VALUES (?, '00:00:00', '23:59:59', 999, 0)",
+        [today]
+      );
+      slotId = slotResult.insertId;
+    }
+
+    // Calculate queue position
+    const [queueRows] = await conn.query(
+      "SELECT COUNT(*) AS cnt FROM bookings WHERE job_type = 'quick_wash' AND wash_status IN ('pending','washing') AND DATE(created_at) = CURDATE()"
+    );
+    const queuePosition = (queueRows[0]?.cnt || 0) + 1;
+
+    // Insert quick wash booking
+    const [result] = await conn.query(`
+      INSERT INTO bookings
+        (customer_id, vehicle_id, slot_id, service_id,
+         vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category,
+         job_type, status, wash_status, queue_position, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'quick_wash', 'confirmed', 'pending', ?, ?)
+    `, [
+      resolvedCustomerId, resolvedVehicleId, slotId, service_id || null,
+      resolvedBrand, resolvedModel, resolvedRegNo, vehicle_category || null,
+      queuePosition, notes || null
+    ]);
+
+    // Increment slot count
+    await conn.query('UPDATE slots SET booked_count = booked_count + 1 WHERE id = ?', [slotId]);
+
+    await conn.commit();
+
+    // Socket notification
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('quick_wash_created', { bookingId: result.insertId, queuePosition });
+    }
+
+    res.status(201).json({
+      success: true,
+      data: { id: result.insertId, queue_position: queuePosition },
+      message: `Quick wash booked — Queue #${queuePosition}`,
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Quick wash create error:', err);
+    res.status(500).json({ success: false, error: 'Failed to create quick wash booking' });
+  } finally {
+    conn.release();
+  }
+};
+
+// ─── LIST QUICK WASHES ──────────────────────
+exports.list = async (req, res) => {
+  try {
+    const { status, date, page = 1, limit = 50 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    let where = "b.job_type = 'quick_wash'";
+    const params = [];
+
+    if (status && status !== 'all') {
+      where += ' AND b.wash_status = ?';
+      params.push(status);
+    }
+
+    if (date) {
+      where += ' AND DATE(b.created_at) = ?';
+      params.push(date);
+    } else {
+      // Default to today
+      where += ' AND DATE(b.created_at) = CURDATE()';
+    }
+
+    const [countRows] = await pool.query(
+      `SELECT COUNT(*) AS total FROM bookings b WHERE ${where}`, params
+    );
+
+    const [rows] = await pool.query(`
+      SELECT b.*,
+        u.name AS customer_name, u.mobile AS customer_mobile,
+        svc.name AS service_name,
+        v.brand AS linked_vehicle_brand, v.model AS linked_vehicle_model,
+        v.registration_no AS linked_vehicle_reg_no
+      FROM bookings b
+      LEFT JOIN users u ON b.customer_id = u.id
+      LEFT JOIN services svc ON b.service_id = svc.id
+      LEFT JOIN vehicles v ON b.vehicle_id = v.id
+      WHERE ${where}
+      ORDER BY b.queue_position ASC, b.created_at ASC
+      LIMIT ? OFFSET ?
+    `, [...params, parseInt(limit), offset]);
+
+    const enriched = rows.map(r => ({
+      ...r,
+      vehicle_brand: r.linked_vehicle_brand || r.vehicle_brand,
+      vehicle_model: r.linked_vehicle_model || r.vehicle_model,
+      vehicle_reg_no: r.linked_vehicle_reg_no || r.vehicle_reg_no,
+    }));
+
+    res.json({
+      success: true,
+      data: enriched,
+      pagination: { page: parseInt(page), limit: parseInt(limit), total: countRows[0].total },
+    });
+  } catch (err) {
+    console.error('Quick wash list error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── UPDATE WASH STATUS ─────────────────────
+exports.updateStatus = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const { id } = req.params;
+    const { wash_status } = req.body;
+
+    const validStatuses = ['pending', 'washing', 'completed', 'delivered'];
+    if (!validStatuses.includes(wash_status)) {
+      await conn.rollback();
+      return res.status(400).json({ success: false, error: `Invalid status. Must be: ${validStatuses.join(', ')}` });
+    }
+
+    const [existing] = await conn.query(
+      "SELECT * FROM bookings WHERE id = ? AND job_type = 'quick_wash'", [id]
+    );
+    if (!existing.length) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, error: 'Quick wash booking not found' });
+    }
+
+    const updates = { wash_status };
+    if (wash_status === 'washing') updates.started_at = new Date();
+    if (wash_status === 'completed') {
+      updates.completed_at = new Date();
+      updates.status = 'completed';
+    }
+    if (wash_status === 'delivered') updates.delivered_at = new Date();
+
+    const setClauses = Object.entries(updates).map(([k]) => `${k} = ?`).join(', ');
+    const values = Object.values(updates);
+
+    await conn.query(
+      `UPDATE bookings SET ${setClauses} WHERE id = ?`,
+      [...values, id]
+    );
+
+    await conn.commit();
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('quick_wash_updated', { bookingId: parseInt(id), wash_status });
+    }
+
+    res.json({ success: true, message: `Wash status updated to ${wash_status}` });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Quick wash status update error:', err);
+    res.status(500).json({ success: false, error: 'Failed to update status' });
+  } finally {
+    conn.release();
+  }
+};
+
+// ─── QUEUE STATS ────────────────────────────
+exports.queueStats = async (req, res) => {
+  try {
+    const [stats] = await pool.query(`
+      SELECT
+        COUNT(CASE WHEN wash_status = 'pending' THEN 1 END) AS pending_count,
+        COUNT(CASE WHEN wash_status = 'washing' THEN 1 END) AS washing_count,
+        COUNT(CASE WHEN wash_status = 'completed' THEN 1 END) AS completed_count,
+        COUNT(CASE WHEN wash_status = 'delivered' THEN 1 END) AS delivered_count,
+        COUNT(*) AS total_today
+      FROM bookings
+      WHERE job_type = 'quick_wash' AND DATE(created_at) = CURDATE()
+    `);
+
+    res.json({ success: true, data: stats[0] });
+  } catch (err) {
+    console.error('Quick wash stats error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};

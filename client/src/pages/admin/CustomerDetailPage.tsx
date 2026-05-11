@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/axiosInstance';
-import { UserCircle, Car, ArrowLeft, Loader2, Send, History, Calendar, ClipboardList, Package } from 'lucide-react';
+import { UserCircle, Car, ArrowLeft, Loader2, Send, History, Calendar, ClipboardList, Package, Clock, RefreshCw } from 'lucide-react';
 
 export default function CustomerDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [data, setData] = useState<any>(null);
   const [activePackage, setActivePackage] = useState<any>(null);
+  const [packageHistory, setPackageHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [newNote, setNewNote] = useState('');
   const [submittingNote, setSubmittingNote] = useState(false);
@@ -18,9 +19,10 @@ export default function CustomerDetailPage() {
 
   const fetchDetail = async () => {
     try {
-      const [resCust, resPkg] = await Promise.all([
+      const [resCust, resPkg, resPkgHistory] = await Promise.all([
         api.get(`/customers/${id}`),
-        api.get(`/packages/active?user_id=${id}`).catch(() => ({ data: { success: false, data: null } }))
+        api.get(`/packages/active?user_id=${id}`).catch(() => ({ data: { success: false, data: null } })),
+        api.get(`/user-packages/history?user_id=${id}`).catch(() => ({ data: { success: false, data: [] } })),
       ]);
       if (resCust.data.success) {
         setData(resCust.data.data);
@@ -28,6 +30,10 @@ export default function CustomerDetailPage() {
       if (resPkg.data && resPkg.data.success && resPkg.data.data) {
         setActivePackage(resPkg.data.data);
       }
+      // Package history — filter out the active one
+      const allPkgs = resPkgHistory.data?.data || [];
+      const activePkgId = resPkg.data?.data?.id;
+      setPackageHistory(allPkgs.filter((p: any) => p.id !== activePkgId));
     } catch (err) {
       console.error(err);
       alert('Failed to load customer details.');
@@ -143,6 +149,41 @@ export default function CustomerDetailPage() {
                     ))}
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Package History */}
+          {packageHistory.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden p-6">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
+                <RefreshCw className="w-5 h-5 text-gray-400" />
+                Package History
+              </h3>
+              <div className="space-y-3">
+                {packageHistory.map((pkg: any) => {
+                  const isExpired = pkg.status === 'expired' || (pkg.end_date && new Date(pkg.end_date) < new Date());
+                  return (
+                    <div key={pkg.id} className={`p-3 rounded-xl border relative ${isExpired ? 'bg-gray-50 border-gray-100 opacity-70' : 'bg-blue-50 border-blue-100'}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-gray-900 text-sm">{pkg.package_name || pkg.name || 'Package'}</span>
+                        <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
+                          isExpired ? 'bg-gray-200 text-gray-500' : pkg.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {pkg.status || (isExpired ? 'Expired' : 'Active')}
+                        </span>
+                      </div>
+                      {pkg.start_date && (
+                        <div className="text-[11px] text-gray-500 mt-1.5 flex items-center gap-3">
+                          <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {new Date(pkg.start_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                          {pkg.end_date && (
+                            <span>→ {new Date(pkg.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

@@ -56,7 +56,7 @@ exports.create = async (req, res) => {
 // ─── UPDATE ─────────────────────────────────
 exports.update = async (req, res) => {
   try {
-    const { name, description, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, duration_minutes, category_id, is_active } = req.body;
+    const { name, description, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, duration_minutes, category_id, is_active, is_premium, sort_order } = req.body;
     const [existing] = await pool.query('SELECT id FROM services WHERE id = ?', [req.params.id]);
     if (!existing.length) return res.status(404).json({ success: false, error: 'Service not found' });
 
@@ -71,6 +71,8 @@ exports.update = async (req, res) => {
     if (duration_minutes !== undefined) { updates.push('duration_minutes = ?'); params.push(duration_minutes); }
     if (category_id !== undefined) { updates.push('category_id = ?'); params.push(category_id || null); }
     if (is_active !== undefined) { updates.push('is_active = ?'); params.push(is_active ? 1 : 0); }
+    if (is_premium !== undefined) { updates.push('is_premium = ?'); params.push(is_premium ? 1 : 0); }
+    if (sort_order !== undefined) { updates.push('sort_order = ?'); params.push(sort_order); }
 
     if (!updates.length) return res.status(400).json({ success: false, error: 'No fields to update' });
     params.push(req.params.id);
@@ -177,6 +179,77 @@ exports.deleteCategory = async (req, res) => {
     res.json({ success: true, message: 'Category deleted' });
   } catch (err) {
     console.error('Delete category error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+// SERVICE ADD-ONS — CRUD for premium service add-ons
+// ═══════════════════════════════════════════════════════════
+
+// ─── LIST ADD-ONS FOR A SERVICE ─────────────
+exports.listAddons = async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      'SELECT * FROM service_addons WHERE service_id = ? ORDER BY addon_name ASC',
+      [req.params.serviceId]
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('List addons error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── CREATE ADD-ON ──────────────────────────
+exports.createAddon = async (req, res) => {
+  try {
+    const { addon_name, addon_price = 0, duration_minutes = 30, is_active = true } = req.body;
+    if (!addon_name) return res.status(400).json({ success: false, error: 'Add-on name is required' });
+
+    const [result] = await pool.query(
+      'INSERT INTO service_addons (service_id, addon_name, addon_price, duration_minutes, is_active) VALUES (?, ?, ?, ?, ?)',
+      [req.params.serviceId, addon_name.trim(), addon_price, duration_minutes, is_active ? 1 : 0]
+    );
+    res.status(201).json({ success: true, data: { id: result.insertId }, message: 'Add-on created' });
+  } catch (err) {
+    console.error('Create addon error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── UPDATE ADD-ON ──────────────────────────
+exports.updateAddon = async (req, res) => {
+  try {
+    const { addon_name, addon_price, duration_minutes, is_active } = req.body;
+    const [existing] = await pool.query('SELECT id FROM service_addons WHERE id = ?', [req.params.addonId]);
+    if (!existing.length) return res.status(404).json({ success: false, error: 'Add-on not found' });
+
+    const updates = []; const params = [];
+    if (addon_name !== undefined) { updates.push('addon_name = ?'); params.push(addon_name.trim()); }
+    if (addon_price !== undefined) { updates.push('addon_price = ?'); params.push(addon_price); }
+    if (duration_minutes !== undefined) { updates.push('duration_minutes = ?'); params.push(duration_minutes); }
+    if (is_active !== undefined) { updates.push('is_active = ?'); params.push(is_active ? 1 : 0); }
+
+    if (!updates.length) return res.status(400).json({ success: false, error: 'No fields to update' });
+    params.push(req.params.addonId);
+    await pool.query(`UPDATE service_addons SET ${updates.join(', ')} WHERE id = ?`, params);
+    res.json({ success: true, message: 'Add-on updated' });
+  } catch (err) {
+    console.error('Update addon error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── DELETE ADD-ON ──────────────────────────
+exports.deleteAddon = async (req, res) => {
+  try {
+    const [existing] = await pool.query('SELECT id FROM service_addons WHERE id = ?', [req.params.addonId]);
+    if (!existing.length) return res.status(404).json({ success: false, error: 'Add-on not found' });
+    await pool.query('DELETE FROM service_addons WHERE id = ?', [req.params.addonId]);
+    res.json({ success: true, message: 'Add-on deleted' });
+  } catch (err) {
+    console.error('Delete addon error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };

@@ -7,18 +7,20 @@ const role = require('../middleware/role');
 // Import controller
 const loyaltyController = require('../controllers/loyaltyController');
 
-// Map exports exactly to what exists
-const getLoyalty = loyaltyController.get || loyaltyController.getLoyalty;
-const updateLoyalty = loyaltyController.update || loyaltyController.updateLoyalty;
-const getLoyaltyHistory = loyaltyController.history || loyaltyController.getLoyaltyHistory;
-const searchLoyalty = loyaltyController.search;
+// ─── Customer routes ─────────────────────────
+router.get('/mine',          protect, role(['customer']), loyaltyController.get);
+router.get('/mine/history',  protect, role(['customer']), loyaltyController.history);
 
-// Routes
-router.get('/mine', protect, role(['customer']), getLoyalty);
-router.get('/mine/history', protect, role(['customer']), getLoyaltyHistory);
-router.get('/search', protect, role(['admin']), searchLoyalty);
-router.get('/:customerId', protect, role(['admin']), getLoyalty);
-router.get('/:customerId/history', protect, role(['admin']), getLoyaltyHistory);
-router.patch('/:customerId', protect, role(['admin']), updateLoyalty);
+// ─── Admin routes ────────────────────────────
+router.get('/search',        protect, role(['admin']), loyaltyController.search);
+router.get('/settings',      protect, role(['admin']), loyaltyController.getSettings);
+router.patch('/settings',    protect, role(['admin']), loyaltyController.updateSettings);
+router.get('/:customerId',           protect, role(['admin']), loyaltyController.get);
+router.get('/:customerId/history',   protect, role(['admin']), loyaltyController.history);
+router.patch('/:customerId',         protect, role(['admin']), loyaltyController.update);
+
+// ─── Points operations ──────────────────────
+router.post('/earn',         protect, role(['admin']), loyaltyController.earnPoints);
+router.post('/redeem',       protect, role(['admin', 'customer']), loyaltyController.redeemPoints);
 
 module.exports = router;
