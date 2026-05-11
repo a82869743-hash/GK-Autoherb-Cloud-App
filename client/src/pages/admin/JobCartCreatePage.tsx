@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Plus, Trash2, Search, CheckCircle, Loader2, X } from 'lucide-react';
 import { useCreateJobCart, useVehicleLookup, useAddService, useUploadPhoto } from '../../api/hooks/useJobCarts';
-import { useBrands, useModels } from '../../api/hooks/useVehicles';
+import { useBrands, useModels, useVariants } from '../../api/hooks/useVehicles';
 import api from '../../api/axiosInstance';
 import AdminTopBar from '../../components/layout/AdminTopBar';
 import Button from '../../components/ui/Button';
@@ -61,7 +61,10 @@ export default function JobCartCreatePage() {
   const [customerEmail, setCustomerEmail] = useState(prefill?.customer_email || '');
   const [carBrand, setCarBrand] = useState(prefill?.car_brand || '');
   const [carModel, setCarModel] = useState(prefill?.car_model || '');
-  const [visitDate, setVisitDate] = useState(new Date().toISOString().split('T')[0]);
+  const [carVariant, setCarVariant] = useState(prefill?.car_variant || '');
+  // Fix timezone: use local date instead of toISOString() which shifts dates in IST
+  const now = new Date();
+  const [visitDate, setVisitDate] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
   const [notes, setNotes] = useState(prefill?.notes || '');
   const [customerId, setCustomerId] = useState<number | null>(null);
   const [isReturning, setIsReturning] = useState(false);
@@ -71,6 +74,12 @@ export default function JobCartCreatePage() {
   // Autocomplete data
   const { data: brandsRes } = useBrands();
   const { data: modelsRes } = useModels(carBrand);
+  const { data: variantsRes } = useVariants(carBrand, carModel);
+
+  // Build dropdown options from API data
+  const brandOptions = (brandsRes?.data || []).map((b: string) => ({ value: b, label: b }));
+  const modelOptions = (modelsRes?.data || []).map((m: string) => ({ value: m, label: m }));
+  const variantOptions = (variantsRes?.data || []).map((v: string) => ({ value: v, label: v }));
 
   // Services
   const [serviceBlocks, setServiceBlocks] = useState<ServiceBlock[]>(() => {
@@ -323,8 +332,30 @@ export default function JobCartCreatePage() {
             <Input label="Customer Name" value={customerName} onChange={e => setCustomerName(e.target.value)} disabled={!!customerId} />
             <Input label="Mobile Number" value={customerMobile} onChange={e => setCustomerMobile(e.target.value)} disabled={!!customerId} />
             <Input label="Email (Optional)" value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} disabled={!!customerId} />
-            <Input label="Car Brand" value={carBrand} onChange={e => setCarBrand(e.target.value)} placeholder="e.g. Maruti" disabled={!!customerId} listOptions={brandsRes?.data} />
-            <Input label="Car Model" value={carModel} onChange={e => setCarModel(e.target.value)} placeholder="e.g. Swift" disabled={!!customerId} listOptions={modelsRes?.data} />
+            <Select
+              label="Car Brand"
+              options={brandOptions}
+              value={carBrand}
+              onChange={e => { setCarBrand(e.target.value); setCarModel(''); setCarVariant(''); }}
+              placeholder="Select brand..."
+              disabled={!!customerId}
+            />
+            <Select
+              label="Car Model"
+              options={modelOptions}
+              value={carModel}
+              onChange={e => { setCarModel(e.target.value); setCarVariant(''); }}
+              placeholder={carBrand ? 'Select model...' : 'Select brand first'}
+              disabled={!!customerId || !carBrand}
+            />
+            <Select
+              label="Variant"
+              options={variantOptions}
+              value={carVariant}
+              onChange={e => setCarVariant(e.target.value)}
+              placeholder={carModel ? 'Select variant...' : 'Select model first'}
+              disabled={!!customerId || !carModel}
+            />
             <Input label="Visit Date" type="date" value={visitDate} onChange={e => setVisitDate(e.target.value)} />
           </div>
           <div className="mt-5">
