@@ -159,9 +159,69 @@ exports.completeDelivery = async (req, res) => {
 
     await pool.query('UPDATE deliveries SET status = "delivered", delivered_at = NOW() WHERE id = ?', [req.params.id]);
 
+    // Emit socket event for real-time update
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`delivery_${req.params.id}`).emit('delivery_completed', { delivery_id: parseInt(req.params.id) });
+    }
+
     res.json({ success: true, message: 'Delivery completed' });
   } catch (err) {
     console.error('Delivery complete error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── UPDATE LOCATION (Staff → live tracking) ────
+exports.updateLocation = async (req, res) => {
+  try {
+    const { lat, lng } = req.body;
+    const { id } = req.params;
+
+    const [rows] = await pool.query('SELECT * FROM deliveries WHERE id = ? AND status = "in_transit"', [id]);
+    if (!rows.length) return res.status(404).json({ success: false, error: 'No active delivery found' });
+
+    const delivery = rows[0];
+    if (delivery.staff_id !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+
+    await pool.query(
+      'UPDATE deliveries SET last_lat = ?, last_lng = ?, location_updated_at = NOW() WHERE id = ?',
+      [lat, lng, id]
+    );
+
+    // Emit to Socket.io room for live tracking
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`delivery_${id}`).emit('location_update', {
+        delivery_id: parseInt(id),
+        lat: parseFloat(lat),
+        lng: parseFloat(lng),
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    res.json({ success: true, message: 'Location updated' });
+  } catch (err) {
+    console.error('Delivery location update error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── GET LOCATION (for tracking) ────
+exports.getLocation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [rows] = await pool.query(
+      'SELECT last_lat, last_lng, location_updated_at, status FROM deliveries WHERE id = ?',
+      [id]
+    );
+    if (!rows.length) return res.status(404).json({ success: false, error: 'Delivery not found' });
+
+    res.json({ success: true, data: rows[0] });
+  } catch (err) {
+    console.error('Delivery location get error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };

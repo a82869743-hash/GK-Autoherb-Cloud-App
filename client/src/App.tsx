@@ -69,6 +69,7 @@ import ArchivePage from './pages/admin/ArchivePage';
 import QuickWashPage from './pages/admin/QuickWashPage';
 import LoyaltySettingsPage from './pages/admin/LoyaltySettingsPage';
 import PremiumServicesPage from './pages/admin/PremiumServicesPage';
+import AdminDeliveriesPage from './pages/admin/DeliveriesPage';
 
 // Delivery pages
 import DeliveryPage from './pages/staff/DeliveryPage';
@@ -158,6 +159,7 @@ export default function App() {
         <Route path="quick-wash" element={<QuickWashPage />} />
         <Route path="loyalty" element={<LoyaltySettingsPage />} />
         <Route path="premium-services" element={<PremiumServicesPage />} />
+        <Route path="deliveries" element={<AdminDeliveriesPage />} />
       </Route>
 
       {/* Customer routes */}

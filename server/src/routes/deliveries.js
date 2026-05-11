@@ -13,5 +13,7 @@ router.get('/:id', deliveriesController.getOne);
 // Staff specific routes
 router.post('/', authorize('admin', 'staff'), deliveriesController.startDelivery);
 router.patch('/:id/complete', authorize('admin', 'staff'), deliveriesController.completeDelivery);
+router.patch('/:id/location', authorize('admin', 'staff'), deliveriesController.updateLocation);
+router.get('/:id/location', deliveriesController.getLocation);
 
 module.exports = router;

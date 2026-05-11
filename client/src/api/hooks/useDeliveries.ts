@@ -59,3 +59,23 @@ export const useCompleteDelivery = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['deliveries'] }),
   });
 };
+
+export const useUpdateDeliveryLocation = () => {
+  return useMutation({
+    mutationFn: async ({ id, lat, lng }: { id: number; lat: number; lng: number }) => {
+      const res = await api.patch(`/deliveries/${id}/location`, { lat, lng });
+      return res.data;
+    },
+  });
+};
+
+export const useDeliveryLocation = (id: number | undefined) =>
+  useQuery({
+    queryKey: ['delivery-location', id],
+    queryFn: async () => {
+      const res = await api.get(`/deliveries/${id}/location`);
+      return res.data.data;
+    },
+    enabled: !!id,
+    refetchInterval: 5000, // Poll every 5 seconds for live tracking
+  });

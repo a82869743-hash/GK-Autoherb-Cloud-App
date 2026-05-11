@@ -193,12 +193,9 @@ exports.updateStatus = async (req, res) => {
     }
 
     const updates = { wash_status };
-    if (wash_status === 'washing') updates.started_at = new Date();
     if (wash_status === 'completed') {
-      updates.completed_at = new Date();
       updates.status = 'completed';
     }
-    if (wash_status === 'delivered') updates.delivered_at = new Date();
 
     const setClauses = Object.entries(updates).map(([k]) => `${k} = ?`).join(', ');
     const values = Object.values(updates);

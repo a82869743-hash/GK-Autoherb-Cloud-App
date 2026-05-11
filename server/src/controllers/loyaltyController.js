@@ -25,7 +25,7 @@ const pool = require('../config/db');
 async function getLoyaltySettings(conn) {
   const db = conn || pool;
   const [settings] = await db.query(
-    "SELECT setting_key, setting_value FROM settings WHERE setting_key LIKE 'loyalty_%'"
+    "SELECT key_name, value FROM settings WHERE key_name LIKE 'loyalty_%'"
   );
   const config = {
     points_ratio: 100,   // ₹100 spent = 1 point
@@ -34,10 +34,10 @@ async function getLoyaltySettings(conn) {
     enabled: true,
   };
   for (const s of settings) {
-    if (s.setting_key === 'loyalty_points_ratio') config.points_ratio = parseFloat(s.setting_value) || 100;
-    if (s.setting_key === 'loyalty_min_redeem') config.min_redeem = parseFloat(s.setting_value) || 50;
-    if (s.setting_key === 'loyalty_point_value') config.point_value = parseFloat(s.setting_value) || 1;
-    if (s.setting_key === 'loyalty_enabled') config.enabled = s.setting_value === '1';
+    if (s.key_name === 'loyalty_points_ratio') config.points_ratio = parseFloat(s.value) || 100;
+    if (s.key_name === 'loyalty_min_redeem') config.min_redeem = parseFloat(s.value) || 50;
+    if (s.key_name === 'loyalty_point_value') config.point_value = parseFloat(s.value) || 1;
+    if (s.key_name === 'loyalty_enabled') config.enabled = s.value === '1';
   }
   return config;
 }
@@ -414,9 +414,17 @@ exports.updateSettings = async (req, res) => {
     if (point_value !== undefined) updates.push(['loyalty_point_value', String(point_value)]);
     if (enabled !== undefined) updates.push(['loyalty_enabled', enabled ? '1' : '0']);
 
+    // Ensure settings rows exist before updating
+    for (const [key] of updates) {
+      await pool.query(
+        'INSERT IGNORE INTO settings (key_name, value) VALUES (?, ?)',
+        [key, '']
+      );
+    }
+
     for (const [key, val] of updates) {
       await pool.query(
-        'UPDATE settings SET setting_value = ? WHERE setting_key = ?',
+        'UPDATE settings SET value = ? WHERE key_name = ?',
         [val, key]
       );
     }

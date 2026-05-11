@@ -532,7 +532,7 @@ export default function BookingPage() {
             <div className="flex items-center gap-3 py-2 border-b border-gray-50">
               <Calendar size={16} className="text-[#D32F2F] shrink-0" />
               <span className="text-[#5f5e5e]">Date</span>
-              <span className="ml-auto font-bold text-[#1c1b1b]">{new Date(selectedDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+              <span className="ml-auto font-bold text-[#1c1b1b]">{new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
             </div>
             <div className="flex items-center gap-3 py-2">
               <Clock size={16} className="text-[#D32F2F] shrink-0" />
