@@ -27,5 +27,5 @@ CREATE TABLE IF NOT EXISTS loyalty_transactions (
 
 -- Add loyalty points column to loyalty table (separate from credits)
 ALTER TABLE loyalty
-  ADD COLUMN IF NOT EXISTS points DECIMAL(10,2) NOT NULL DEFAULT 0
+  ADD COLUMN points DECIMAL(10,2) NOT NULL DEFAULT 0
     COMMENT 'Loyalty points balance (configurable earn ratio)';

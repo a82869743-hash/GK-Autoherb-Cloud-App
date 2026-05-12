@@ -20,8 +20,8 @@ CREATE TABLE IF NOT EXISTS package_vehicle_pricing (
 
 -- Add luxury pricing to packages table
 ALTER TABLE packages
-  ADD COLUMN IF NOT EXISTS price_luxury DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER price_suv;
+  ADD COLUMN price_luxury DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER price_suv;
 
 -- Add luxury pricing to services table
 ALTER TABLE services
-  ADD COLUMN IF NOT EXISTS price_luxury DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER price_suv;
+  ADD COLUMN price_luxury DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER price_suv;

@@ -1,4 +1,4 @@
-﻿const pool = require('../config/db');
+const pool = require('../config/db');
 const path = require('path');
 const fs = require('fs');
 
@@ -124,8 +124,8 @@ async function generateInvoicePDF(jobCartId) {
       return {
         name: (s.service_name || '').toUpperCase(),
         qty: '1 PCS',
-        rate: formatINR(amount),
-        amount: formatINR(amount),
+        rate: `₹${formatINR(amount)}`,
+        amount: `₹${formatINR(amount)}`,
       };
     });
 
@@ -462,7 +462,7 @@ async function generateInvoicePDF(jobCartId) {
     </head>
     <body>
 
-      <!-- â•â•â• BILL HEADER â•â•â• -->
+      <!-- --- BILL HEADER --- -->
       <div class="bill-header">
         <div>
           <span class="bill-title">BILL OF SUPPLY</span>
@@ -470,7 +470,7 @@ async function generateInvoicePDF(jobCartId) {
         </div>
       </div>
 
-      <!-- â•â•â• COMPANY HEADER â•â•â• -->
+      <!-- --- COMPANY HEADER --- -->
       <div class="company-header">
         <div class="company-logo">
           ${logoHtml}
@@ -488,7 +488,7 @@ async function generateInvoicePDF(jobCartId) {
         </div>
       </div>
 
-      <!-- â•â•â• INVOICE META â•â•â• -->
+      <!-- --- INVOICE META --- -->
       <div class="invoice-meta">
         <div class="invoice-meta-left">
           <span class="meta-label">Invoice No.: </span>
@@ -500,12 +500,12 @@ async function generateInvoicePDF(jobCartId) {
         </div>
       </div>
 
-      <!-- â•â•â• BILL TO + VEHICLE â•â•â• -->
+      <!-- --- BILL TO + VEHICLE --- -->
       <div class="bill-details">
         <div class="bill-to-section">
           <div class="bill-to-label">BILL TO</div>
-          <div class="bill-to-name">${cart.customer_name || 'â€”'}</div>
-          <div class="bill-to-detail">Mobile: ${cart.customer_mobile || 'â€”'}</div>
+          <div class="bill-to-name">${cart.customer_name || '-'}</div>
+          <div class="bill-to-detail">Mobile: ${cart.customer_mobile || '-'}</div>
           <div class="bill-to-detail">Place of Supply: Gujarat</div>
         </div>
         <div class="vehicle-section">
@@ -515,12 +515,12 @@ async function generateInvoicePDF(jobCartId) {
           </div>
           <div style="margin-top:8px;">
             <span class="vehicle-label">Vehicle No.</span>
-            <div class="vehicle-value">${cart.registration_no || 'â€”'}</div>
+            <div class="vehicle-value">${cart.registration_no || '-'}</div>
           </div>
         </div>
       </div>
 
-      <!-- â•â•â• SERVICES TABLE â•â•â• -->
+      <!-- --- SERVICES TABLE --- -->
       <table class="services-table">
         <thead>
           <tr>
@@ -536,16 +536,16 @@ async function generateInvoicePDF(jobCartId) {
         </tbody>
       </table>
 
-      <!-- â•â•â• SUBTOTAL â•â•â• -->
+      <!-- --- SUBTOTAL --- -->
       <div class="subtotal-row">
         <div><span style="font-size:11px;font-weight:700;">SUBTOTAL</span></div>
         <div style="display:flex;gap:40px;">
           <span>${totalQty}</span>
-          <span>â‚¹ ${formatINR(grandTotal)}</span>
+          <span>₹ ${formatINR(grandTotal)}</span>
         </div>
       </div>
 
-      <!-- â•â•â• BANK + AMOUNTS â•â•â• -->
+      <!-- --- BANK + AMOUNTS --- -->
       <div class="bottom-grid">
         <div class="bank-section">
           <div class="bank-title">BANK DETAILS</div>
@@ -557,30 +557,30 @@ async function generateInvoicePDF(jobCartId) {
         <div class="amounts-section">
           <div class="amount-row">
             <span class="amount-label">Subtotal</span>
-            <span class="amount-value">â‚¹ ${formatINR(grandTotal)}</span>
+            <span class="amount-value">₹ ${formatINR(grandTotal)}</span>
           </div>
           ${discountAmt > 0 ? `
           <div class="amount-row" style="color:#D32F2F;">
             <span class="amount-label">Discount</span>
-            <span class="amount-value">- â‚¹ ${formatINR(discountAmt)}</span>
+            <span class="amount-value">- ₹ ${formatINR(discountAmt)}</span>
           </div>
           ` : ''}
           <div class="amount-row total">
             <span class="amount-label">Total Payable</span>
-            <span class="amount-value">â‚¹ ${formatINR(finalTotal)}</span>
+            <span class="amount-value">₹ ${formatINR(finalTotal)}</span>
           </div>
           <div class="amount-row">
             <span class="amount-label">Received Amount</span>
-            <span class="amount-value">â‚¹ ${formatINR(finalTotal)}</span>
+            <span class="amount-value">₹ ${formatINR(finalTotal)}</span>
           </div>
           <div class="amount-row">
             <span class="amount-label">Balance</span>
-            <span class="amount-value">â‚¹ 0</span>
+            <span class="amount-value">₹ 0</span>
           </div>
         </div>
       </div>
 
-      <!-- â•â•â• TERMS + AMOUNT IN WORDS â•â•â• -->
+      <!-- --- TERMS + AMOUNT IN WORDS --- -->
       <div class="terms-section">
         <div class="terms-left">
           ${cart.invoice_notes ? `
@@ -600,7 +600,7 @@ async function generateInvoicePDF(jobCartId) {
         </div>
       </div>
 
-      <!-- â•â•â• AUTHORISED SIGNATORY â•â•â• -->
+      <!-- --- AUTHORISED SIGNATORY --- -->
       <div class="signatory">
         <div class="signatory-line">
           <div style="border-top:1px solid #999;padding-top:6px;margin-top:30px;">
@@ -730,8 +730,8 @@ async function generateBuySellInvoicePDF(buySellId) {
           <tr>
             <td><strong>${record.product_name}</strong></td>
             <td>${parseFloat(record.quantity)}</td>
-            <td>${formatINR(record.unit_price)}</td>
-            <td style="text-align: right;">${formatINR(record.total_amount)}</td>
+            <td>₹${formatINR(record.unit_price)}</td>
+            <td style="text-align: right;">₹${formatINR(record.total_amount)}</td>
           </tr>
         </tbody>
       </table>
@@ -739,7 +739,7 @@ async function generateBuySellInvoicePDF(buySellId) {
       <div class="totals">
         <div class="totals-row grand">
           <span>Net Amount:</span>
-          <span>â‚¹${formatINR(grandTotal)}</span>
+          <span>₹${formatINR(grandTotal)}</span>
         </div>
       </div>
 
@@ -820,14 +820,14 @@ async function generateManualBillPDF(billId) {
     for (const s of services) {
       const price = parseFloat(s.price || s.service_price || 0);
       grandTotal += price;
-      itemRows.push({ name: (s.service_name || s.name || 'Service').toUpperCase(), qty: '1 PCS', rate: formatINR(price), amount: formatINR(price) });
+      itemRows.push({ name: (s.service_name || s.name || 'Service').toUpperCase(), qty: '1 PCS', rate: `₹${formatINR(price)}`, amount: `₹${formatINR(price)}` });
     }
     for (const p of products) {
       const qty = parseInt(p.quantity || 1);
       const price = parseFloat(p.price || p.unit_cost || 0);
       const total = price * qty;
       grandTotal += total;
-      itemRows.push({ name: (p.product_name || p.name || 'Product').toUpperCase(), qty: `${qty} PCS`, rate: formatINR(price), amount: formatINR(total) });
+      itemRows.push({ name: (p.product_name || p.name || 'Product').toUpperCase(), qty: `${qty} PCS`, rate: `₹${formatINR(price)}`, amount: `₹${formatINR(total)}` });
     }
 
     let discountAmt = 0;
@@ -862,7 +862,7 @@ async function generateManualBillPDF(billId) {
       invoiceDate,
       logoHtml,
       partyName: bill.customer_name || 'Walk-in Customer',
-      partyMobile: bill.customer_mobile || 'â€”',
+      partyMobile: bill.customer_mobile || '-',
       rightLabel: 'Payment Method',
       rightValue: (bill.payment_method || 'cash').toUpperCase(),
       serviceRowsHtml,
@@ -909,8 +909,8 @@ async function generateSalarySlipPDF(salaryId) {
     const grandTotal = base + bonus;
 
     const serviceRowsHtml = `
-      <tr><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;">BASE SALARY â€” ${rec.month_year}</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:center;">1</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">${formatINR(base)}</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">${formatINR(base)}</td></tr>
-      ${bonus > 0 ? `<tr><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;">BONUS</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:center;">1</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">${formatINR(bonus)}</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">${formatINR(bonus)}</td></tr>` : ''}
+      <tr><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;">BASE SALARY - ${rec.month_year}</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:center;">1</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">₹${formatINR(base)}</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">₹${formatINR(base)}</td></tr>
+      ${bonus > 0 ? `<tr><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;">BONUS</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:center;">1</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">₹${formatINR(bonus)}</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">₹${formatINR(bonus)}</td></tr>` : ''}
     `;
     const emptyCount = Math.max(0, 6 - (bonus > 0 ? 2 : 1));
     const emptyRows = Array(emptyCount).fill(`<tr><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;">&nbsp;</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;">&nbsp;</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;">&nbsp;</td><td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;">&nbsp;</td></tr>`).join('');
@@ -921,7 +921,7 @@ async function generateSalarySlipPDF(salaryId) {
       invoiceDate,
       logoHtml,
       partyName: rec.staff_name,
-      partyMobile: rec.staff_mobile || 'â€”',
+      partyMobile: rec.staff_mobile || '-',
       rightLabel: 'Month',
       rightValue: rec.month_year,
       serviceRowsHtml,
@@ -1058,7 +1058,7 @@ function buildInvoiceHTML({ title, invoiceNumber, invoiceDate, logoHtml, partyNa
       <div><span style="font-size:11px;font-weight:700;">SUBTOTAL</span></div>
       <div style="display:flex;gap:40px;">
         <span>${totalQty}</span>
-        <span>â‚¹ ${formatINR(grandTotal)}</span>
+        <span>₹ ${formatINR(grandTotal)}</span>
       </div>
     </div>
     <div class="bottom-grid">
@@ -1070,11 +1070,11 @@ function buildInvoiceHTML({ title, invoiceNumber, invoiceDate, logoHtml, partyNa
         <div class="bank-row"><span class="bank-label">Bank:</span><span class="bank-value">Axis Bank, GOTRI SEVASI ROAD</span></div>
       </div>
       <div class="amounts-section">
-        <div class="amount-row"><span>Subtotal</span><span>â‚¹ ${formatINR(grandTotal)}</span></div>
-        ${discountAmt > 0 ? `<div class="amount-row" style="color:#D32F2F;"><span>Deduction / Discount</span><span>- â‚¹ ${formatINR(discountAmt)}</span></div>` : ''}
-        <div class="amount-row total"><span>Total Payable</span><span>â‚¹ ${formatINR(finalTotal)}</span></div>
-        <div class="amount-row"><span>Received Amount</span><span>â‚¹ ${formatINR(finalTotal)}</span></div>
-        <div class="amount-row"><span>Balance</span><span>â‚¹ 0</span></div>
+        <div class="amount-row"><span>Subtotal</span><span>₹ ${formatINR(grandTotal)}</span></div>
+        ${discountAmt > 0 ? `<div class="amount-row" style="color:#D32F2F;"><span>Deduction / Discount</span><span>- ₹ ${formatINR(discountAmt)}</span></div>` : ''}
+        <div class="amount-row total"><span>Total Payable</span><span>₹ ${formatINR(finalTotal)}</span></div>
+        <div class="amount-row"><span>Received Amount</span><span>₹ ${formatINR(finalTotal)}</span></div>
+        <div class="amount-row"><span>Balance</span><span>₹ 0</span></div>
       </div>
     </div>
     <div class="terms-section">
@@ -1248,13 +1248,13 @@ async function generatePackageInvoicePDF(requestId) {
       <div class="bill-details">
         <div class="bill-to-section">
           <div class="bill-to-label">BILL TO</div>
-          <div class="bill-to-name">${record.customer_name || 'â€”'}</div>
-          <div class="bill-to-detail">Mobile: ${record.customer_mobile || 'â€”'}</div>
+          <div class="bill-to-name">${record.customer_name || '-'}</div>
+          <div class="bill-to-detail">Mobile: ${record.customer_mobile || '-'}</div>
           <div class="bill-to-detail">Place of Supply: Gujarat</div>
         </div>
         <div class="vehicle-section">
           <div><span class="vehicle-label">Vehicle Name</span><div class="vehicle-value">${(record.brand || '')} ${(record.model || '').toUpperCase()}</div></div>
-          <div style="margin-top:8px;"><span class="vehicle-label">Vehicle No.</span><div class="vehicle-value">${record.registration_no || 'â€”'}</div></div>
+          <div style="margin-top:8px;"><span class="vehicle-label">Vehicle No.</span><div class="vehicle-value">${record.registration_no || '-'}</div></div>
         </div>
       </div>
       <table class="services-table">
@@ -1270,14 +1270,14 @@ async function generatePackageInvoicePDF(requestId) {
           <tr>
             <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-transform:uppercase;">${record.package_name}</td>
             <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:center;">1</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">${formatINR(grandTotal)}</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">${formatINR(grandTotal)}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">₹${formatINR(grandTotal)}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">₹${formatINR(grandTotal)}</td>
           </tr>
         </tbody>
       </table>
       <div class="subtotal-row">
         <div><span style="font-size:11px;font-weight:700;">SUBTOTAL</span></div>
-        <div style="display:flex;gap:40px;"><span>1</span><span>â‚¹ ${formatINR(grandTotal)}</span></div>
+        <div style="display:flex;gap:40px;"><span>1</span><span>₹ ${formatINR(grandTotal)}</span></div>
       </div>
       <div class="bottom-grid">
         <div class="bank-section">
@@ -1288,10 +1288,10 @@ async function generatePackageInvoicePDF(requestId) {
           <div class="bank-row"><span class="bank-label">Bank:</span><span class="bank-value">Axis Bank, GOTRI SEVASI ROAD</span></div>
         </div>
         <div class="amounts-section">
-          <div class="amount-row"><span class="amount-label">Subtotal</span><span class="amount-value">â‚¹ ${formatINR(grandTotal)}</span></div>
-          <div class="amount-row total"><span class="amount-label">Total Payable</span><span class="amount-value">â‚¹ ${formatINR(grandTotal)}</span></div>
-          <div class="amount-row"><span class="amount-label">Received Amount</span><span class="amount-value">â‚¹ ${formatINR(grandTotal)}</span></div>
-          <div class="amount-row"><span class="amount-label">Balance</span><span class="amount-value">â‚¹ 0</span></div>
+          <div class="amount-row"><span class="amount-label">Subtotal</span><span class="amount-value">₹ ${formatINR(grandTotal)}</span></div>
+          <div class="amount-row total"><span class="amount-label">Total Payable</span><span class="amount-value">₹ ${formatINR(grandTotal)}</span></div>
+          <div class="amount-row"><span class="amount-label">Received Amount</span><span class="amount-value">₹ ${formatINR(grandTotal)}</span></div>
+          <div class="amount-row"><span class="amount-label">Balance</span><span class="amount-value">₹ 0</span></div>
         </div>
       </div>
       <div class="terms-section">
@@ -1322,6 +1322,9 @@ async function generatePackageInvoicePDF(requestId) {
   }
 }
 
+
+
+
 module.exports = { generateInvoicePDF, generateBuySellInvoicePDF, generateManualBillPDF, generateSalarySlipPDF, generatePackageInvoicePDF, generateQuickWashInvoicePDF };
 
 /**
@@ -1333,12 +1336,23 @@ async function generateQuickWashInvoicePDF(bookingId) {
     const [bookings] = await conn.query(`
       SELECT b.*,
              u.name AS customer_name, u.mobile AS customer_mobile, u.email AS customer_email,
-             svc.name AS service_name, svc.price AS service_price,
+             svc.name AS service_name, 
+             CASE b.vehicle_category
+                WHEN 'hatchback' THEN svc.price_hatchback
+                WHEN 'medium_hatchback' THEN svc.price_medium_hatchback
+                WHEN 'sedan' THEN svc.price_sedan
+                WHEN 'premium_sedan' THEN svc.price_premium_sedan
+                WHEN 'suv' THEN svc.price_suv
+                ELSE svc.price_hatchback
+             END AS service_price,
+             pkg.name AS package_name,
              v.brand AS linked_vehicle_brand, v.model AS linked_vehicle_model, v.registration_no AS linked_vehicle_reg_no
       FROM bookings b
       LEFT JOIN users u ON b.customer_id = u.id
       LEFT JOIN services svc ON b.service_id = svc.id
       LEFT JOIN vehicles v ON b.vehicle_id = v.id
+      LEFT JOIN user_packages up ON b.package_id = up.id
+      LEFT JOIN packages pkg ON up.package_id = pkg.id
       WHERE b.id = ? AND b.job_type = 'quick_wash'
     `, [bookingId]);
 
@@ -1348,13 +1362,14 @@ async function generateQuickWashInvoicePDF(bookingId) {
     // Format fields
     const brand = record.linked_vehicle_brand || record.vehicle_brand || '';
     const model = record.linked_vehicle_model || record.vehicle_model || '';
-    const regNo = record.linked_vehicle_reg_no || record.vehicle_reg_no || 'â€”';
+    const regNo = record.linked_vehicle_reg_no || record.vehicle_reg_no || '-';
     const customerName = record.customer_name || 'Walk-in Customer';
-    const customerMobile = record.customer_mobile || 'â€”';
+    const customerMobile = record.customer_mobile || '-';
     
     // Service calculation
     const serviceName = record.service_name || 'Quick Wash Service';
-    const servicePrice = parseFloat(record.service_price) || 0;
+    const hasPackage = !!record.package_id;
+    const servicePrice = hasPackage ? 0 : (parseFloat(record.service_price) || 0);
     const grandTotal = servicePrice;
     
     const invoiceNumber = `QW-${record.id}`;
@@ -1368,10 +1383,10 @@ async function generateQuickWashInvoicePDF(bookingId) {
 
     const serviceRowsHtml = `
       <tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-transform:uppercase;">${serviceName}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-transform:uppercase;">${serviceName}${hasPackage ? ` (Package: ${record.package_name || 'Subscription'})` : ''}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:center;">1</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">${formatINR(servicePrice)}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">${formatINR(servicePrice)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">${hasPackage ? 'Included' : `₹ ${formatINR(servicePrice)}`}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">${hasPackage ? '₹ 0.00' : `₹ ${formatINR(servicePrice)}`}</td>
       </tr>
     `;
     const emptyRowsCount = Math.max(0, 6 - 1);
@@ -1384,10 +1399,10 @@ async function generateQuickWashInvoicePDF(bookingId) {
       </tr>
     `).join('');
 
-    const rightValue = `${brand} ${model.toUpperCase()}` + (regNo !== 'â€”' ? ` (${regNo})` : '');
+    const rightValue = `${brand} ${model.toUpperCase()}` + (regNo !== '-' ? ` (${regNo})` : '');
 
     const html = buildInvoiceHTML({
-      title: 'BILL OF SUPPLY â€” QUICK WASH',
+      title: 'BILL OF SUPPLY - QUICK WASH',
       invoiceNumber,
       invoiceDate,
       logoHtml,
@@ -1404,7 +1419,7 @@ async function generateQuickWashInvoicePDF(bookingId) {
       notes: record.notes || '',
     });
 
-    return renderPDF(html, invoiceNumber);
+    return await renderPDF(html, invoiceNumber);
   } finally {
     conn.release();
   }

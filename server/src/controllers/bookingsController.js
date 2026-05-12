@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { cancelReservation } = require('./userPackagesController');
 
 // ─── LIST BOOKINGS ──────────────────────────
 exports.list = async (req, res) => {
@@ -446,6 +447,30 @@ exports.reject = async (req, res) => {
       );
     }
 
+    // Restore package usage if booking used a package service
+    if (booking.package_id && booking.service_id) {
+      try {
+        const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [booking.service_id]);
+        if (svcRows.length) {
+          const serviceName = svcRows[0].name;
+          // Find the user's active user_package for this package
+          const [userPkgs] = await conn.query(
+            `SELECT id FROM user_packages 
+             WHERE user_id = ? AND package_id = ? AND package_status = 'active'
+             ORDER BY start_date DESC LIMIT 1`,
+            [booking.customer_id, booking.package_id]
+          );
+          if (userPkgs.length) {
+            await cancelReservation(conn, userPkgs[0].id, serviceName);
+            console.log(`[BOOKING] Package credit restored for booking #${id} — service: ${serviceName}`);
+          }
+        }
+      } catch (pkgErr) {
+        console.error(`[BOOKING] Failed to restore package credit for booking #${id}:`, pkgErr.message);
+        // Non-fatal — don't block the rejection
+      }
+    }
+
     await conn.commit();
     console.log(`[BOOKING] #${id} rejected by admin ${req.user.id}`);
     res.json({ success: true, message: 'Booking rejected' });
@@ -492,6 +517,30 @@ exports.cancel = async (req, res) => {
         'UPDATE loyalty SET free_washes = free_washes + 1 WHERE customer_id = ?',
         [booking.customer_id]
       );
+    }
+
+    // 4. Restore package usage if booking used a package service
+    if (booking.package_id && booking.service_id) {
+      try {
+        const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [booking.service_id]);
+        if (svcRows.length) {
+          const serviceName = svcRows[0].name;
+          // Find the user's active user_package for this package
+          const [userPkgs] = await conn.query(
+            `SELECT id FROM user_packages 
+             WHERE user_id = ? AND package_id = ? AND package_status = 'active'
+             ORDER BY start_date DESC LIMIT 1`,
+            [booking.customer_id, booking.package_id]
+          );
+          if (userPkgs.length) {
+            await cancelReservation(conn, userPkgs[0].id, serviceName);
+            console.log(`[BOOKING] Package credit restored for cancelled booking #${id} — service: ${serviceName}`);
+          }
+        }
+      } catch (pkgErr) {
+        console.error(`[BOOKING] Failed to restore package credit for booking #${id}:`, pkgErr.message);
+        // Non-fatal — don't block the cancellation
+      }
     }
 
     await conn.commit();

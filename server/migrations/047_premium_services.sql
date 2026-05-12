@@ -5,12 +5,12 @@
 
 -- Add premium fields to services
 ALTER TABLE services
-  ADD COLUMN IF NOT EXISTS is_premium TINYINT(1) NOT NULL DEFAULT 0
+  ADD COLUMN is_premium TINYINT(1) NOT NULL DEFAULT 0
     COMMENT '1 = premium/detailing service',
-  ADD COLUMN IF NOT EXISTS image_url VARCHAR(500) NULL
+  ADD COLUMN image_url VARCHAR(500) NULL
     COMMENT 'Cloudinary or static image URL',
-  ADD COLUMN IF NOT EXISTS image_public_id VARCHAR(200) NULL,
-  ADD COLUMN IF NOT EXISTS sort_order INT NOT NULL DEFAULT 0;
+  ADD COLUMN image_public_id VARCHAR(200) NULL,
+  ADD COLUMN sort_order INT NOT NULL DEFAULT 0;
 
 -- Service add-ons (e.g., engine bay cleaning with interior detail)
 CREATE TABLE IF NOT EXISTS service_addons (

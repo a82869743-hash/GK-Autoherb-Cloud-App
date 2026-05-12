@@ -32,7 +32,7 @@ AND NOT EXISTS (SELECT 1 FROM services WHERE name = 'Premium Wash');
 -- (table already exists per SHOW TABLES check)
 
 -- Ensure settings table has loyalty keys
-INSERT IGNORE INTO settings (setting_key, setting_value) VALUES ('loyalty_points_ratio', '100');
-INSERT IGNORE INTO settings (setting_key, setting_value) VALUES ('loyalty_min_redeem', '50');
-INSERT IGNORE INTO settings (setting_key, setting_value) VALUES ('loyalty_point_value', '1');
-INSERT IGNORE INTO settings (setting_key, setting_value) VALUES ('loyalty_enabled', '1');
+INSERT IGNORE INTO settings (key_name, value) VALUES ('loyalty_points_ratio', '100');
+INSERT IGNORE INTO settings (key_name, value) VALUES ('loyalty_min_redeem', '50');
+INSERT IGNORE INTO settings (key_name, value) VALUES ('loyalty_point_value', '1');
+INSERT IGNORE INTO settings (key_name, value) VALUES ('loyalty_enabled', '1');

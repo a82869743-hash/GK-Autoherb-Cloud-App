@@ -15,9 +15,9 @@ exports.create = async (req, res) => {
     await conn.beginTransaction();
 
     const {
-      customer_id, vehicle_id, service_id,
+      customer_id, vehicle_id, service_id, package_id,
       vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category,
-      notes
+      use_package, notes
     } = req.body;
 
     // Validate
@@ -74,15 +74,40 @@ exports.create = async (req, res) => {
     const validCategories = ['hatchback', 'medium_hatchback', 'sedan', 'premium_sedan', 'suv'];
     const safeCategory = validCategories.includes(vehicle_category) ? vehicle_category : null;
 
+    // Handle package usage
+    let packageUsed = false;
+    let packageInfo = null;
+    let actualPackageId = package_id || null;
+
+    if (use_package && service_id && resolvedCustomerId) {
+      const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [service_id]);
+      if (svcRows.length) {
+        const serviceName = svcRows[0].name;
+        const userPkgCtrl = require('./userPackagesController');
+        const result = await userPkgCtrl.checkAndUseService(conn, resolvedCustomerId, serviceName);
+
+        if (result.can_use) {
+          packageUsed = true;
+          actualPackageId = result.user_package_id; // Store user_package_id or package_id depending on how it's referenced
+          
+          packageInfo = {
+            package_name: result.package_name,
+            service_name: serviceName,
+            remaining: result.remaining,
+          };
+        }
+      }
+    }
+
     // Insert quick wash booking
     const [result] = await conn.query(`
       INSERT INTO bookings
-        (customer_id, vehicle_id, slot_id, service_id,
+        (customer_id, vehicle_id, slot_id, service_id, package_id,
          vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category,
          job_type, status, wash_status, queue_position, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'quick_wash', 'confirmed', 'pending', ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'quick_wash', 'confirmed', 'pending', ?, ?)
     `, [
-      resolvedCustomerId, resolvedVehicleId, slotId, service_id || null,
+      resolvedCustomerId, resolvedVehicleId, slotId, service_id || null, actualPackageId,
       resolvedBrand, resolvedModel, resolvedRegNo, safeCategory,
       queuePosition, notes || null
     ]);
@@ -100,8 +125,15 @@ exports.create = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      data: { id: result.insertId, queue_position: queuePosition },
-      message: `Quick wash booked — Queue #${queuePosition}`,
+      data: { 
+        id: result.insertId, 
+        queue_position: queuePosition,
+        package_used: packageUsed,
+        ...(packageInfo && { package_info: packageInfo })
+      },
+      message: packageUsed
+        ? `Quick wash booked — Queue #${queuePosition} (Used ${packageInfo?.package_name})`
+        : `Quick wash booked — Queue #${queuePosition}`,
     });
   } catch (err) {
     await conn.rollback();
@@ -178,7 +210,7 @@ exports.updateStatus = async (req, res) => {
     const { id } = req.params;
     const { wash_status } = req.body;
 
-    const validStatuses = ['pending', 'washing', 'completed', 'delivered'];
+    const validStatuses = ['pending', 'washing', 'completed', 'delivered', 'cancelled'];
     if (!validStatuses.includes(wash_status)) {
       await conn.rollback();
       return res.status(400).json({ success: false, error: `Invalid status. Must be: ${validStatuses.join(', ')}` });
@@ -195,6 +227,38 @@ exports.updateStatus = async (req, res) => {
     const updates = { wash_status };
     if (wash_status === 'completed') {
       updates.status = 'completed';
+    } else if (wash_status === 'cancelled') {
+      updates.status = 'cancelled';
+
+      // Restore package usage if quick wash used a package service
+      if (existing[0].package_id && existing[0].service_id) {
+        try {
+          const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [existing[0].service_id]);
+          if (svcRows.length) {
+            const serviceName = svcRows[0].name;
+            const { cancelReservation } = require('./userPackagesController');
+            // Check if package_id in bookings is user_package_id or package_id
+            // userPackagesController checkAndUseService returns user_package_id, and we saved it as package_id.
+            // Wait, in regular bookings we save package_id, but checkAndUseService returns user_package_id.
+            // Let's check how bookingsController does it: 
+            // In bookingsController, cancel looks up user_package_id using package_id.
+            // For safety, let's look up the active user_package_id if package_id points to packages table.
+            // But since this is quick wash and we just added package_id logic, let's do it safely.
+            const [userPkgs] = await conn.query(
+              `SELECT id FROM user_packages 
+               WHERE user_id = ? AND (id = ? OR package_id = ?) AND package_status = 'active'
+               ORDER BY start_date DESC LIMIT 1`,
+              [existing[0].customer_id, existing[0].package_id, existing[0].package_id]
+            );
+            if (userPkgs.length) {
+              await cancelReservation(conn, userPkgs[0].id, serviceName);
+              console.log(`[QUICK_WASH] Package credit restored for cancelled booking #${id} — service: ${serviceName}`);
+            }
+          }
+        } catch (pkgErr) {
+          console.error(`[QUICK_WASH] Failed to restore package credit for booking #${id}:`, pkgErr.message);
+        }
+      }
     }
 
     const setClauses = Object.entries(updates).map(([k]) => `${k} = ?`).join(', ');

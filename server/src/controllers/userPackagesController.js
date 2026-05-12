@@ -285,13 +285,13 @@ exports.checkAndUseService = async (conn, userId, serviceName) => {
   // Reserve (increment used_count) — consumption confirmed later
   if (usage.length) {
     await conn.query(
-      'UPDATE package_usage SET used_count = used_count + 1, usage_status = ?, reserved_at = NOW() WHERE id = ?',
-      ['reserved', usage[0].id]
+      'UPDATE package_usage SET used_count = used_count + 1 WHERE id = ?',
+      [usage[0].id]
     );
   } else {
     await conn.query(
-      'INSERT INTO package_usage (user_package_id, service_name, used_count, usage_status, reserved_at) VALUES (?, ?, 1, ?, NOW())',
-      [userPackageId, serviceName, 'reserved']
+      'INSERT INTO package_usage (user_package_id, service_name, used_count) VALUES (?, ?, 1)',
+      [userPackageId, serviceName]
     );
   }
 
@@ -352,10 +352,8 @@ exports.cancelReservation = async (conn, userPackageId, serviceName) => {
   try {
     await conn.query(
       `UPDATE package_usage
-       SET used_count = GREATEST(0, used_count - 1),
-           usage_status = 'cancelled',
-           cancelled_at = NOW()
-       WHERE user_package_id = ? AND service_name = ? AND usage_status = 'reserved'
+       SET used_count = GREATEST(0, used_count - 1)
+       WHERE user_package_id = ? AND service_name = ?
        LIMIT 1`,
       [userPackageId, serviceName]
     );
