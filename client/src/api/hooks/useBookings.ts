@@ -46,7 +46,7 @@ export const useCreateBooking = () => {
       vehicle_id?: number;
       vehicle_brand?: string; vehicle_model?: string; vehicle_reg_no?: string;
       vehicle_category?: string;
-      is_free_wash?: boolean; notes?: string;
+      is_free_wash?: boolean; use_package?: boolean; notes?: string;
     }) => {
       const res = await api.post('/bookings', payload);
       return res.data;

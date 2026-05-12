@@ -7,6 +7,7 @@ const ctrl = require('../controllers/quickWashController');
 router.get('/',             auth, role(['admin', 'staff']), ctrl.list);
 router.get('/stats',        auth, role(['admin', 'staff']), ctrl.queueStats);
 router.post('/',            auth, role(['admin', 'staff']), ctrl.create);
+router.get('/:id/invoice',  auth, role(['admin', 'staff']), ctrl.getInvoice);
 router.patch('/:id/status', auth, role(['admin', 'staff']), ctrl.updateStatus);
 
 module.exports = router;

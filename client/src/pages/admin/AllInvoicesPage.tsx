@@ -30,11 +30,13 @@ const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; ic
   salary:        { label: 'Salary Slip', color: '#6A1B9A', bg: '#F3E5F5', icon: Wallet },
   buy_sell_buy:  { label: 'Purchase',    color: '#E65100', bg: '#FFF3E0', icon: ShoppingCart },
   buy_sell_sell: { label: 'Sale',        color: '#00695C', bg: '#E0F2F1', icon: ShoppingCart },
+  quick_wash:    { label: 'Quick Wash',  color: '#0277BD', bg: '#E1F5FE', icon: Receipt },
 };
 
-const TAB_FILTERS: { key: BillType; label: string; icon: typeof FileText }[] = [
+const TAB_FILTERS: { key: BillType | 'quick_wash'; label: string; icon: typeof FileText }[] = [
   { key: 'all',           label: 'All Bills',    icon: FileText },
   { key: 'job_cart',      label: 'Job Cards',    icon: ClipboardList },
+  { key: 'quick_wash',    label: 'Quick Washes', icon: Receipt },
   { key: 'manual_bill',   label: 'Manual Bills', icon: Receipt },
   { key: 'salary',        label: 'Salary Slips', icon: Wallet },
   { key: 'buy_sell_buy',  label: 'Purchases',    icon: ShoppingCart },
@@ -53,7 +55,7 @@ export default function AllInvoicesPage() {
   const [records, setRecords] = useState<InvoiceRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
-  const [activeType, setActiveType] = useState<BillType>('all');
+  const [activeType, setActiveType] = useState<BillType | 'quick_wash'>('all');
   const [search, setSearch] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -103,6 +105,7 @@ export default function AllInvoicesPage() {
       if (rec.type === 'job_cart')    path = `/job-carts/${rec.id}/invoice`;
       if (rec.type === 'manual_bill') path = `/billing/${rec.id}/invoice`;
       if (rec.type === 'salary')      path = `/salary/${rec.id}/slip`;
+      if (rec.type === 'quick_wash')  path = `/quick-wash/${rec.id}/invoice`;
       if (rec.type.startsWith('buy_sell')) path = `/buy-sell/${rec.id}/invoice`;
 
       if (!path) return;

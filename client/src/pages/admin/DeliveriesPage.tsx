@@ -4,6 +4,8 @@ import api from '../../api/axiosInstance';
 import AdminTopBar from '../../components/layout/AdminTopBar';
 import { useToastStore } from '../../store/toastStore';
 import { formatDate } from '../../utils/formatters';
+import { useAuthStore } from '../../store/authStore';
+import { io } from 'socket.io-client';
 
 interface Delivery {
   id: number;
@@ -43,6 +45,7 @@ export default function DeliveriesPage() {
   const [trackingId, setTrackingId] = useState<number | null>(null);
   const [liveLocation, setLiveLocation] = useState<{ lat: number; lng: number; timestamp: number } | null>(null);
   const { addToast } = useToastStore();
+  const { token } = useAuthStore();
 
   const fetchDeliveries = async () => {
     try {
@@ -66,28 +69,66 @@ export default function DeliveriesPage() {
     return () => clearInterval(interval);
   }, [filter]);
 
-  // Poll live location for tracked delivery
+  // Poll live location for tracked delivery and connect socket
   useEffect(() => {
     if (!trackingId) {
       setLiveLocation(null);
       return;
     }
+
     const fetchLocation = async () => {
       try {
         const res = await api.get(`/deliveries/${trackingId}/location`);
         if (res.data?.success && res.data.data) {
-          setLiveLocation({
-            lat: res.data.data.last_lat,
-            lng: res.data.data.last_lng,
-            timestamp: new Date(res.data.data.location_updated_at).getTime(),
-          });
+          const lat = parseFloat(res.data.data.last_lat);
+          const lng = parseFloat(res.data.data.last_lng);
+          if (!isNaN(lat) && !isNaN(lng)) {
+            setLiveLocation({
+              lat,
+              lng,
+              timestamp: res.data.data.location_updated_at ? new Date(res.data.data.location_updated_at).getTime() : Date.now(),
+            });
+          }
         }
-      } catch { /* ignore */ }
+      } catch (err) {
+        console.error('Failed to fetch live location:', err);
+      }
     };
     fetchLocation();
     const interval = setInterval(fetchLocation, 5000);
-    return () => clearInterval(interval);
-  }, [trackingId]);
+
+    // Socket.io for real-time updates
+    let socket: any = null;
+    try {
+      const socketUrl = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:5000';
+      socket = io(socketUrl, { auth: { token }, transports: ['websocket', 'polling'] });
+
+      socket.on('connect', () => {
+        socket.emit('join_delivery', { deliveryId: trackingId });
+      });
+
+      const handleLocationUpdate = (loc: any) => {
+        if (!loc) return;
+        const lat = parseFloat(loc.lat);
+        const lng = parseFloat(loc.lng);
+        if (!isNaN(lat) && !isNaN(lng)) {
+          setLiveLocation({ lat, lng, timestamp: Date.now() });
+        }
+      };
+
+      socket.on('location_update', handleLocationUpdate);
+      socket.on('location', handleLocationUpdate);
+    } catch (err) {
+      console.error('Socket initialization failed:', err);
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (socket) {
+        socket.disconnect();
+      }
+    };
+  }, [trackingId, token]);
 
   const handleComplete = async (id: number) => {
     if (!confirm('Mark this delivery as completed?')) return;
@@ -155,36 +196,56 @@ export default function DeliveriesPage() {
         ))}
       </div>
 
-      {/* Live Tracking Banner */}
-      {trackingId && liveLocation && (
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 flex items-center gap-4">
-          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center animate-pulse">
-            <MapPin size={20} className="text-blue-600" />
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-bold text-gray-900">
-              Live Tracking — Delivery #{trackingId}
-            </p>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Lat: {liveLocation.lat.toFixed(6)}, Lng: {liveLocation.lng.toFixed(6)}
-              {' · '}
-              Updated {Math.round((Date.now() - liveLocation.timestamp) / 1000)}s ago
-            </p>
-            <a
-              href={`https://maps.google.com/?q=${liveLocation.lat},${liveLocation.lng}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-blue-600 font-semibold hover:underline mt-1 inline-block"
+      {trackingId && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center animate-pulse">
+                <MapPin size={20} className="text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-900">
+                  Live Tracking — Delivery #{trackingId}
+                </p>
+                {liveLocation ? (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Lat: {!isNaN(liveLocation.lat) ? liveLocation.lat.toFixed(6) : 'N/A'}, Lng: {!isNaN(liveLocation.lng) ? liveLocation.lng.toFixed(6) : 'N/A'}
+                    {liveLocation.timestamp ? ` · Updated ${Math.max(0, Math.round((Date.now() - liveLocation.timestamp) / 1000))}s ago` : ''}
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-500 mt-0.5">Fetching location...</p>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => setTrackingId(null)}
+              className="px-3 py-1.5 bg-white text-gray-600 rounded-lg border border-gray-200 text-xs font-medium hover:bg-gray-50"
             >
-              Open in Google Maps →
-            </a>
+              Stop
+            </button>
           </div>
-          <button
-            onClick={() => setTrackingId(null)}
-            className="px-3 py-1.5 bg-white text-gray-600 rounded-lg border border-gray-200 text-xs font-medium hover:bg-gray-50"
-          >
-            Stop
-          </button>
+          
+          <div className="w-full h-64 bg-white rounded-lg border border-gray-200 overflow-hidden relative shadow-inner">
+            {liveLocation && !isNaN(liveLocation.lat) && !isNaN(liveLocation.lng) ? (
+              <iframe 
+                key={`${liveLocation.lat}-${liveLocation.lng}`}
+                width="100%" 
+                height="100%" 
+                frameBorder="0" 
+                style={{border:0}}
+                loading="lazy"
+                src={`https://www.openstreetmap.org/export/embed.html?bbox=${liveLocation.lng - 0.005}%2C${liveLocation.lat - 0.005}%2C${liveLocation.lng + 0.005}%2C${liveLocation.lat + 0.005}&layer=mapnik&marker=${liveLocation.lat}%2C${liveLocation.lng}`} 
+                allowFullScreen
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-50 text-gray-400">
+                <div className="text-center">
+                  <Navigation size={24} className="mx-auto mb-2 opacity-50 animate-pulse" />
+                  <p className="text-sm font-medium">Waiting for GPS signal...</p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

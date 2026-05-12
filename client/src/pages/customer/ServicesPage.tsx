@@ -11,6 +11,22 @@ import { formatINR } from '../../utils/formatters';
 const FILTERS = ['all', 'hatchback', 'medium_hatchback', 'sedan', 'premium_sedan', 'suv'] as const;
 type Filter = typeof FILTERS[number];
 
+// ─── Service Priority Sorting ─────────────────
+// Hot services appear first: washes, PPF, coating, polish, ceramic, then the rest
+const HOT_KEYWORDS = ['wash', 'premium wash', 'basic wash', 'ppf', 'coating', 'ceramic', 'polish', 'wax', 'paint protection', 'interior clean', 'detailing'];
+
+function getServicePriority(name: string): number {
+  const lower = name.toLowerCase();
+  for (let i = 0; i < HOT_KEYWORDS.length; i++) {
+    if (lower.includes(HOT_KEYWORDS[i])) return i;
+  }
+  return HOT_KEYWORDS.length + 1;
+}
+
+function sortServicesByPriority(services: any[]): any[] {
+  return [...services].sort((a, b) => getServicePriority(a.name) - getServicePriority(b.name));
+}
+
 export default function CustomerServicesPage() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('all');
@@ -18,7 +34,7 @@ export default function CustomerServicesPage() {
   const { data: pkgData, isLoading: pkgLoading } = usePackages({ published_only: true });
   const { data: loyalty } = useLoyalty('mine');
 
-  const services = svcData?.data || [];
+  const services = sortServicesByPriority(svcData?.data || []);
   const packages = pkgData?.data || [];
   const isLoading = svcLoading || pkgLoading;
 
@@ -118,7 +134,7 @@ export default function CustomerServicesPage() {
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e]">Services</p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                {services.map((svc: any, idx: number) => (
+                {sortServicesByPriority(services).map((svc: any, idx: number) => (
                   <div
                     key={svc.id}
                     className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 card-premium group opacity-0 animate-fade-in-up"

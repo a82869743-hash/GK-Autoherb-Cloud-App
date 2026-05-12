@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Droplets, Clock, CheckCircle2, Truck, Plus, RefreshCw, Hash, Search, Car, X, ChevronDown } from 'lucide-react';
+import { Droplets, Clock, CheckCircle2, Truck, Plus, RefreshCw, Hash, Search, Car, X, ChevronDown, Download } from 'lucide-react';
 import { useQuickWashes, useQuickWashStats, useCreateQuickWash, useUpdateWashStatus } from '../../api/hooks/useQuickWash';
 import { useCustomerSearch } from '../../api/hooks/useSearch';
 import { useBrands, useModels } from '../../api/hooks/useVehicles';
@@ -158,16 +158,39 @@ export default function QuickWashPage() {
                 )}
 
                 {/* Action */}
-                {config.next && (
+                <div className="flex gap-2 mt-3">
                   <button
-                    onClick={() => handleStatusAdvance(wash.id, config.next!)}
-                    disabled={updateStatus.isPending}
-                    className="w-full py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-sm text-gray-700 rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 font-medium"
+                    onClick={async () => {
+                      try {
+                        const { default: api } = await import('../../api/axiosInstance');
+                        const res = await api.get(`/quick-wash/${wash.id}/invoice`, { responseType: 'blob' });
+                        const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.setAttribute('download', `QuickWash-Invoice-${wash.id}.pdf`);
+                        document.body.appendChild(link);
+                        link.click();
+                        link.remove();
+                      } catch {
+                        addToast('error', 'Failed to download invoice');
+                      }
+                    }}
+                    className="flex-1 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-sm text-gray-700 rounded-lg transition-all flex items-center justify-center gap-2 font-medium"
                   >
-                    <StatusIcon size={14} />
-                    Move to {STATUS_CONFIG[config.next].label}
+                    <Download size={14} />
+                    Invoice
                   </button>
-                )}
+                  {config.next && (
+                    <button
+                      onClick={() => handleStatusAdvance(wash.id, config.next!)}
+                      disabled={updateStatus.isPending}
+                      className="flex-1 py-2 bg-[#D32F2F]/10 hover:bg-[#D32F2F]/20 text-[#D32F2F] border border-[#D32F2F]/20 text-sm rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 font-medium"
+                    >
+                      <StatusIcon size={14} />
+                      {STATUS_CONFIG[config.next].label}
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}

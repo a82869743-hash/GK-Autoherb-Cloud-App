@@ -204,7 +204,7 @@ export default function CustomerDashboardPage() {
             </div>
             {activePackage && (
               <button
-                onClick={() => navigate('/customer/bookings/new')}
+                onClick={() => navigate('/customer/bookings/new?from_package=1')}
                 className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg hover:bg-purple-700 transition-colors"
               >
                 Book from Package

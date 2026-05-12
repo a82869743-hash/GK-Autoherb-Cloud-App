@@ -1,32 +1,52 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { useDelivery } from '../../api/hooks/useDeliveries';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useDelivery, useDeliveryLocation } from '../../api/hooks/useDeliveries';
 import { useAuthStore } from '../../store/authStore';
 import io from 'socket.io-client';
+import { ArrowLeft, Phone, MapPin, Clock, CheckCircle2, Truck } from 'lucide-react';
 
 export default function TrackingPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { token } = useAuthStore();
-  const { data: delivery, isLoading } = useDelivery(Number(id));
-  const [socket, setSocket] = useState<any>(null);
+  const { data: delivery, isLoading, error } = useDelivery(Number(id));
+  const { data: locationData } = useDeliveryLocation(Number(id));
   const [staffLocation, setStaffLocation] = useState<{lat: number, lng: number} | null>(null);
 
+  // Use polled location as fallback, socket for real-time
+  useEffect(() => {
+    if (locationData?.last_lat && locationData?.last_lng) {
+      setStaffLocation({ lat: parseFloat(locationData.last_lat), lng: parseFloat(locationData.last_lng) });
+    }
+  }, [locationData]);
+
+  // Socket.io for real-time location updates
   useEffect(() => {
     if (!id || !token) return;
 
-    const newSocket = io(import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:5000', {
-      auth: { token }
-    });
+    const socketUrl = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:5000';
+    const newSocket = io(socketUrl, { auth: { token }, transports: ['websocket', 'polling'] });
 
     newSocket.on('connect', () => {
       newSocket.emit('join_delivery', { deliveryId: Number(id) });
     });
 
-    newSocket.on('location', (loc) => {
-      setStaffLocation({ lat: loc.lat, lng: loc.lng });
+    newSocket.on('location_update', (loc) => {
+      if (loc && loc.lat && loc.lng) {
+        setStaffLocation({ lat: parseFloat(loc.lat), lng: parseFloat(loc.lng) });
+      }
     });
 
-    setSocket(newSocket);
+    newSocket.on('location', (loc) => {
+      if (loc && loc.lat && loc.lng) {
+        setStaffLocation({ lat: parseFloat(loc.lat), lng: parseFloat(loc.lng) });
+      }
+    });
+
+    newSocket.on('delivery_completed', () => {
+      // Trigger refetch
+      window.location.reload();
+    });
 
     return () => {
       newSocket.disconnect();
@@ -39,67 +59,133 @@ export default function TrackingPage() {
       Loading delivery details...
     </div>
   );
-  if (!delivery) return <div className="p-8 text-center text-red-500 font-medium">Delivery not found or unauthorized.</div>;
+
+  if (error || !delivery) return (
+    <div className="p-8 text-center">
+      <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <Truck size={28} className="text-red-400" />
+      </div>
+      <p className="text-red-500 font-bold text-lg mb-2">Delivery Not Found</p>
+      <p className="text-gray-500 text-sm mb-4">This delivery may not exist or you don't have access.</p>
+      <button
+        onClick={() => navigate('/customer')}
+        className="px-4 py-2 bg-[#D32F2F] text-white rounded-lg text-sm font-semibold hover:bg-[#b71c1c] transition-colors"
+      >
+        Back to Dashboard
+      </button>
+    </div>
+  );
+
+  const isDelivered = delivery.status === 'delivered';
+  const isInTransit = delivery.status === 'in_transit';
 
   return (
     <div className="max-w-3xl mx-auto p-4 md:p-8">
+      {/* Back button */}
+      <button
+        onClick={() => navigate('/customer')}
+        className="flex items-center gap-2 text-gray-500 hover:text-gray-900 mb-4 text-sm font-medium transition-colors"
+      >
+        <ArrowLeft size={14} /> Back to Dashboard
+      </button>
+
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden card-premium">
         {/* Hero header */}
         <div className="hero-bg text-white p-6 text-center relative overflow-hidden pattern-overlay">
           <div className="relative z-10">
             <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center mx-auto mb-3 animate-float">
-              <svg className="w-6 h-6 text-[#D32F2F]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
+              {isDelivered ? (
+                <CheckCircle2 size={24} className="text-green-400" />
+              ) : (
+                <Truck size={24} className="text-[#D32F2F]" />
+              )}
             </div>
-            <h1 className="text-2xl font-black mb-1 tracking-tight">Live Vehicle Delivery</h1>
+            <h1 className="text-2xl font-black mb-1 tracking-tight">
+              {isDelivered ? 'Vehicle Delivered ✅' : 'Live Vehicle Delivery'}
+            </h1>
             <p className="text-white/60 text-sm font-medium">Tracking {delivery.registration_no}</p>
           </div>
           <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#D32F2F] via-[#D32F2F]/40 to-transparent" />
         </div>
 
         <div className="p-6">
+          {/* Status + Executive info */}
           <div className="flex justify-between items-center mb-6">
             <div>
               <p className="text-[9px] uppercase font-bold tracking-widest text-[#5f5e5e] mb-1.5">Status</p>
               <span className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider border ${
-                delivery.status === 'delivered' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-blue-50 text-blue-700 border-blue-200 animate-pulse-dot'
+                isDelivered
+                  ? 'bg-green-50 text-green-700 border-green-200'
+                  : 'bg-blue-50 text-blue-700 border-blue-200 animate-pulse'
               }`}>
-                {delivery.status.replace('_', ' ')}
+                {isDelivered ? '✅ Delivered' : '🚗 In Transit'}
               </span>
             </div>
             <div className="text-right">
               <p className="text-[9px] uppercase font-bold tracking-widest text-[#5f5e5e] mb-1.5">Assigned Executive</p>
               <p className="font-bold text-[#1c1b1b]">{delivery.staff_name}</p>
-              <a href={`tel:${delivery.staff_mobile}`} className="text-[#D32F2F] text-sm font-medium hover:underline">{delivery.staff_mobile}</a>
+              {delivery.staff_mobile && (
+                <a
+                  href={`tel:${delivery.staff_mobile}`}
+                  className="inline-flex items-center gap-1 text-[#D32F2F] text-sm font-medium hover:underline"
+                >
+                  <Phone size={12} /> {delivery.staff_mobile}
+                </a>
+              )}
             </div>
           </div>
 
+          {/* Vehicle Info */}
+          <div className="bg-[#faf7f5] rounded-xl p-4 mb-4 border border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
+                <MapPin size={18} className="text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-[#1c1b1b]">{delivery.brand} {delivery.model}</p>
+                <p className="text-xs text-gray-500">{delivery.registration_no}</p>
+              </div>
+              {isInTransit && staffLocation && (
+                <span className="ml-auto flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded-lg border border-green-200">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" /> Live
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Map / Status Area */}
           <div className="bg-[#faf7f5] rounded-xl h-64 md:h-96 w-full flex items-center justify-center relative overflow-hidden border border-gray-100">
-            {delivery.status === 'delivered' ? (
+            {isDelivered ? (
               <div className="text-center p-6 animate-scale-in">
                 <div className="w-16 h-16 bg-green-100 text-green-600 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-sm">
-                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                  <CheckCircle2 size={32} />
                 </div>
                 <h3 className="font-black text-xl text-[#1c1b1b] mb-1">Vehicle Delivered</h3>
                 <p className="text-[#5f5e5e] text-sm">Your vehicle was successfully delivered.</p>
+                {delivery.delivered_at && (
+                  <p className="text-xs text-gray-400 mt-2">
+                    <Clock size={12} className="inline mr-1" />
+                    {new Date(delivery.delivered_at).toLocaleString('en-IN')}
+                  </p>
+                )}
               </div>
-            ) : staffLocation ? (
+            ) : staffLocation && !isNaN(staffLocation.lat) && !isNaN(staffLocation.lng) ? (
               <div className="absolute inset-0">
                 <iframe 
                   width="100%" 
                   height="100%" 
                   frameBorder="0" 
                   style={{border:0}}
+                  loading="lazy"
                   src={`https://maps.google.com/maps?q=${staffLocation.lat},${staffLocation.lng}&z=15&output=embed`} 
                   allowFullScreen
-                ></iframe>
+                />
               </div>
             ) : (
               <div className="text-center p-6 bg-white/80 backdrop-blur-sm rounded-xl shadow-sm z-10 m-4 border border-gray-100">
-                <div className="animate-spin w-8 h-8 rounded-full border-4 border-gray-200 border-t-[#D32F2F] mx-auto mb-3"></div>
+                <div className="animate-spin w-8 h-8 rounded-full border-4 border-gray-200 border-t-[#D32F2F] mx-auto mb-3" />
                 <p className="text-sm font-medium text-[#5f5e5e]">Waiting for GPS signal from the executive...</p>
+                <p className="text-xs text-gray-400 mt-1">Location updates every 5 seconds</p>
               </div>
             )}
           </div>

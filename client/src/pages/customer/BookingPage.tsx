@@ -12,6 +12,22 @@ import api from '../../api/axiosInstance';
 
 const STEPS = ['Service', 'Vehicle', 'Date', 'Time', 'Confirm'];
 
+// ─── Service Priority Sorting ─────────────────
+// Hot services appear first: washes, PPF, coating, polish, ceramic, then the rest
+const HOT_KEYWORDS = ['wash', 'premium wash', 'basic wash', 'ppf', 'coating', 'ceramic', 'polish', 'wax', 'paint protection', 'interior clean', 'detailing'];
+
+function getServicePriority(name: string): number {
+  const lower = name.toLowerCase();
+  for (let i = 0; i < HOT_KEYWORDS.length; i++) {
+    if (lower.includes(HOT_KEYWORDS[i])) return i;
+  }
+  return HOT_KEYWORDS.length + 1; // Non-hot services go last
+}
+
+function sortServicesByPriority(services: any[]): any[] {
+  return [...services].sort((a, b) => getServicePriority(a.name) - getServicePriority(b.name));
+}
+
 export default function BookingPage() {
   const toast = useUIStore((s) => s.toast);
   const navigate = useNavigate();
@@ -20,6 +36,9 @@ export default function BookingPage() {
 
   const [step, setStep] = useState(0);
   const [filter, setFilter] = useState('all');
+
+  // Detect if this is a package-booking flow
+  const isPackageBooking = searchParams.get('from_package') === '1';
 
   // Step 1: Service/Package
   const [services, setServices] = useState<any[]>([]);
@@ -88,12 +107,18 @@ export default function BookingPage() {
     })();
   }, []);
 
+  // Handle URL params: service_id, package_id, from_package
   useEffect(() => {
     const sid = searchParams.get('service_id');
     const pid = searchParams.get('package_id');
-    if (sid) setSelectedServices([parseInt(sid)]);
+    if (sid && !isPackageBooking) setSelectedServices([parseInt(sid)]);
     if (pid) setSelectedPackage(parseInt(pid));
-  }, [searchParams]);
+    // If coming from "Book from Package" flow, auto-select active package
+    if (isPackageBooking && activePackages.length > 0) {
+      setSelectedPackage(activePackages[0].package_id);
+      setSelectedServices([]);
+    }
+  }, [searchParams, activePackages, isPackageBooking]);
 
   const canNext = useMemo(() => {
     switch (step) {
@@ -139,6 +164,7 @@ export default function BookingPage() {
         vehicle_model: model,
         vehicle_reg_no: regNo || undefined,
         vehicle_category: filter !== 'all' ? filter : undefined,
+        use_package: isPackageBooking ? true : undefined,
       });
       setBookingResult(res);
     } catch (err: any) {
@@ -218,126 +244,218 @@ export default function BookingPage() {
         ))}
       </div>
 
-      <h3 className="text-lg font-extrabold text-[#1c1b1b] uppercase tracking-wide mb-6">{STEPS[step]}</h3>
+      <h3 className="text-lg font-extrabold text-[#1c1b1b] uppercase tracking-wide mb-6">{isPackageBooking ? 'Package Services' : STEPS[step]}</h3>
 
       {/* ═══ Step 0: Select Service ═══ */}
       {step === 0 && (
         <div>
-          {/* Filter */}
-          <div className="flex flex-wrap gap-2 mb-4">
-            {['all', 'hatchback', 'medium_hatchback', 'sedan', 'premium_sedan', 'suv'].map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${
-                  filter === f ? 'bg-[#1c1b1b] text-white' : 'bg-[#f6f3f2] text-[#5f5e5e] hover:bg-[#e5e2e1]'
-                }`}
-              >
-                {f === 'all' ? 'All' : f === 'medium_hatchback' ? 'Med Hatch' : f === 'premium_sedan' ? 'Prem Sedan' : f.charAt(0).toUpperCase() + f.slice(1)}
-              </button>
-            ))}
-          </div>
-
-          {servicesLoading ? (
-            <div className="flex justify-center py-12"><Loader2 className="animate-spin text-[#D32F2F]" /></div>
-          ) : (
-            <div className="space-y-6">
-              {services.length > 0 && (
+          {isPackageBooking ? (
+            /* ── PACKAGE BOOKING FLOW ── */
+            <div>
+              {activePackages.length > 0 ? (
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-3">Services</p>
+                  {/* Package info header */}
+                  <div className="bg-gradient-to-r from-purple-50 to-purple-100 border border-purple-200 rounded-xl p-4 mb-5">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-10 h-10 rounded-xl bg-purple-200 flex items-center justify-center">
+                        <Sparkles size={20} className="text-purple-700" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-purple-500">Booking from Package</p>
+                        <p className="text-base font-extrabold text-purple-800">{activePackages[0].package_name}</p>
+                      </div>
+                      <span className="ml-auto text-[10px] font-bold px-2.5 py-1 bg-green-100 text-green-700 rounded-lg uppercase tracking-wider border border-green-200">Active</span>
+                    </div>
+                    <p className="text-xs text-purple-600 ml-[52px]">Select a service from your package credits below. Usage will be deducted upon admin approval.</p>
+                  </div>
+
+                  {/* Package services with remaining counts */}
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-3">Available Package Services</p>
                   <div className="grid gap-3">
-                    {services.filter(s => s.is_active).map((svc) => {
-                      const isSelected = selectedServices.includes(svc.id);
-                      return (
-                        <button
-                          key={svc.id}
-                          onClick={() => {
-                            setSelectedServices(prev => prev.includes(svc.id) ? prev.filter(id => id !== svc.id) : [...prev, svc.id]);
-                            setSelectedPackage(null);
-                          }}
-                          className={`text-left p-4 rounded-lg border-2 transition-all ${
-                            isSelected ? 'border-[#D32F2F] bg-red-50/30' : 'border-gray-100 bg-white hover:border-gray-200'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <p className="font-bold text-[#1c1b1b]">{svc.name}</p>
-                            <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-[#D32F2F] border-[#D32F2F]' : 'border-gray-300'}`}>
-                              {isSelected && <Check size={12} className="text-white" />}
-                            </div>
+                    {(() => {
+                      const packageUsage = activePackages[0]?.usage || [];
+                      const availableServices = packageUsage.filter((u: any) => u.remaining > 0);
+
+                      if (availableServices.length === 0) {
+                        return (
+                          <div className="text-center py-8 bg-white rounded-lg border border-gray-100">
+                            <Sparkles size={32} className="text-gray-300 mx-auto mb-2" />
+                            <p className="text-[#5f5e5e] font-medium">All package credits have been used</p>
+                            <p className="text-xs text-gray-400 mt-1">Please purchase a new package or book a regular service</p>
                           </div>
-                        {svc.description && <p className="text-xs text-[#5f5e5e] mt-1 line-clamp-2">{svc.description}</p>}
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-[#5f5e5e]">
-                          {filter === 'all' ? (
-                            <>
-                              <span>Hatch: ₹{svc.price_hatchback}</span>
-                              <span>Med Hatch: ₹{svc.price_medium_hatchback}</span>
-                              <span>Sedan: ₹{svc.price_sedan}</span>
-                              <span>Prem Sedan: ₹{svc.price_premium_sedan}</span>
-                              <span>SUV: ₹{svc.price_suv}</span>
-                            </>
-                          ) : (
-                            <span className="font-bold text-[#D32F2F]">₹{svc[`price_${filter}`]}</span>
-                          )}
-                        </div>
-                      </button>
-                    )})}
+                        );
+                      }
+
+                      return availableServices.map((usage: any) => {
+                        // Find matching service from services list by name
+                        const matchedService = services.find((s) => s.name.toLowerCase() === usage.service_name.toLowerCase());
+                        const serviceId = matchedService?.id;
+                        const isSelected = serviceId ? selectedServices.includes(serviceId) : false;
+
+                        return (
+                          <button
+                            key={usage.service_name}
+                            onClick={() => {
+                              if (!serviceId) return;
+                              setSelectedServices(prev =>
+                                prev.includes(serviceId) ? prev.filter(id => id !== serviceId) : [...prev, serviceId]
+                              );
+                              setSelectedPackage(activePackages[0].package_id);
+                            }}
+                            disabled={!serviceId}
+                            className={`text-left p-4 rounded-lg border-2 transition-all ${
+                              isSelected ? 'border-purple-500 bg-purple-50/50' :
+                              !serviceId ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed' :
+                              'border-gray-100 bg-white hover:border-purple-200'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Sparkles size={14} className="text-purple-500" />
+                                <p className="font-bold text-[#1c1b1b]">{usage.service_name}</p>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${
+                                  usage.remaining > 1 ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-amber-50 text-amber-600 border border-amber-200'
+                                }`}>
+                                  {usage.remaining} / {usage.total_count} left
+                                </span>
+                                <div className={`w-5 h-5 rounded border flex items-center justify-center ${
+                                  isSelected ? 'bg-purple-500 border-purple-500' : 'border-gray-300'
+                                }`}>
+                                  {isSelected && <Check size={12} className="text-white" />}
+                                </div>
+                              </div>
+                            </div>
+                            {matchedService?.description && (
+                              <p className="text-xs text-[#5f5e5e] mt-1 ml-[22px] line-clamp-2">{matchedService.description}</p>
+                            )}
+                            {!serviceId && (
+                              <p className="text-[10px] text-amber-600 mt-1 ml-[22px]">⚠ This service is not currently available in the system</p>
+                            )}
+                          </button>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+              ) : servicesLoading ? (
+                <div className="flex justify-center py-12"><Loader2 className="animate-spin text-[#D32F2F]" /></div>
+              ) : (
+                /* No active package */
+                <div className="text-center py-12 bg-white rounded-xl border border-gray-100">
+                  <Sparkles size={48} className="text-gray-300 mx-auto mb-3" />
+                  <h3 className="text-lg font-bold text-[#1c1b1b] mb-2">No Active Package</h3>
+                  <p className="text-sm text-[#5f5e5e] mb-4">You need to purchase a package first before booking from it.</p>
+                  <div className="flex justify-center gap-3">
+                    <button
+                      onClick={() => navigate('/customer/packages')}
+                      className="px-5 py-2.5 bg-[#D32F2F] text-white text-sm font-bold rounded-lg hover:bg-[#af101a] transition-colors uppercase tracking-wider"
+                    >
+                      View Packages
+                    </button>
+                    <button
+                      onClick={() => navigate('/customer/bookings/new')}
+                      className="px-5 py-2.5 bg-gray-100 text-[#1c1b1b] text-sm font-bold rounded-lg hover:bg-gray-200 transition-colors uppercase tracking-wider"
+                    >
+                      Book Normal Service
+                    </button>
                   </div>
                 </div>
               )}
+            </div>
+          ) : (
+            /* ── NORMAL BOOKING FLOW ── */
+            <div>
+              {/* Vehicle category filter */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                {['all', 'hatchback', 'medium_hatchback', 'sedan', 'premium_sedan', 'suv'].map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setFilter(f)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${
+                      filter === f ? 'bg-[#1c1b1b] text-white' : 'bg-[#f6f3f2] text-[#5f5e5e] hover:bg-[#e5e2e1]'
+                    }`}
+                  >
+                    {f === 'all' ? 'All' : f === 'medium_hatchback' ? 'Med Hatch' : f === 'premium_sedan' ? 'Prem Sedan' : f.charAt(0).toUpperCase() + f.slice(1)}
+                  </button>
+                ))}
+              </div>
 
-              {activePackages.length > 0 && (
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-3">Your Active Packages</p>
-                  <div className="grid gap-3">
-                    {activePackages.map((pkg) => (
-                      <button
-                        key={pkg.id}
-                        onClick={() => { setSelectedPackage(pkg.package_id); setSelectedServices([]); }}
-                        className={`text-left p-4 rounded-lg border-2 transition-all ${
-                          selectedPackage === pkg.package_id ? 'border-[#D32F2F] bg-red-50/30' : 'border-gray-100 bg-white hover:border-gray-200'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Sparkles size={14} className="text-[#D32F2F]" />
-                          <p className="font-bold text-[#1c1b1b]">{pkg.package_name}</p>
-                          <span className="ml-auto text-[10px] font-bold px-2 py-0.5 bg-green-100 text-green-700 rounded uppercase">Active</span>
+              {servicesLoading ? (
+                <div className="flex justify-center py-12"><Loader2 className="animate-spin text-[#D32F2F]" /></div>
+              ) : (
+                <div className="space-y-6">
+                  {services.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-3">Services</p>
+                      <div className="grid gap-3">
+                        {sortServicesByPriority(services.filter(s => s.is_active)).map((svc) => {
+                          const isSelected = selectedServices.includes(svc.id);
+                          return (
+                            <button
+                              key={svc.id}
+                              onClick={() => {
+                                setSelectedServices(prev => prev.includes(svc.id) ? prev.filter(id => id !== svc.id) : [...prev, svc.id]);
+                                setSelectedPackage(null);
+                              }}
+                              className={`text-left p-4 rounded-lg border-2 transition-all ${
+                                isSelected ? 'border-[#D32F2F] bg-red-50/30' : 'border-gray-100 bg-white hover:border-gray-200'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <p className="font-bold text-[#1c1b1b]">{svc.name}</p>
+                                <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-[#D32F2F] border-[#D32F2F]' : 'border-gray-300'}`}>
+                                  {isSelected && <Check size={12} className="text-white" />}
+                                </div>
+                              </div>
+                            {svc.description && <p className="text-xs text-[#5f5e5e] mt-1 line-clamp-2">{svc.description}</p>}
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-[#5f5e5e]">
+                              {filter === 'all' ? (
+                                <>
+                                  <span>Hatch: ₹{svc.price_hatchback}</span>
+                                  <span>Med Hatch: ₹{svc.price_medium_hatchback}</span>
+                                  <span>Sedan: ₹{svc.price_sedan}</span>
+                                  <span>Prem Sedan: ₹{svc.price_premium_sedan}</span>
+                                  <span>SUV: ₹{svc.price_suv}</span>
+                                </>
+                              ) : (
+                                <span className="font-bold text-[#D32F2F]">₹{svc[`price_${filter}`]}</span>
+                              )}
+                            </div>
+                          </button>
+                        );})}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Info-only: Show active package reminder if user has one */}
+                  {activePackages.length > 0 && (
+                    <div className="bg-gradient-to-r from-purple-50 to-purple-100 border border-purple-200 rounded-xl p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-purple-200 flex items-center justify-center">
+                          <Sparkles size={16} className="text-purple-700" />
                         </div>
-                        <div className="flex flex-col gap-1 mt-2 text-xs text-[#5f5e5e]">
-                          {pkg.usage && pkg.usage.map((u: any) => (
-                            <span key={u.service_name}>{u.remaining} {u.service_name} left</span>
-                          ))}
+                        <div className="flex-1">
+                          <p className="text-xs font-bold text-purple-800">You have an active <strong>{activePackages[0].package_name}</strong> package!</p>
+                          <p className="text-[10px] text-purple-600 mt-0.5">
+                            {(activePackages[0].usage || []).filter((u: any) => u.remaining > 0).map((u: any) => `${u.remaining} ${u.service_name}`).join(', ')} remaining
+                          </p>
                         </div>
-                      </button>
-                    ))}
-                  </div>
+                        <button
+                          onClick={() => navigate('/customer/bookings/new?from_package=1')}
+                          className="px-3 py-1.5 bg-purple-600 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg hover:bg-purple-700 transition-colors flex-shrink-0"
+                        >
+                          Use Package
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {!services.length && (
+                    <p className="text-center py-8 text-[#5f5e5e]">No services available yet. Please check back later.</p>
+                  )}
                 </div>
-              )}
-
-              {packages.length > 0 && (
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-3">Buy a Package</p>
-                  <div className="grid gap-3">
-                    {packages.filter(p => p.is_active || p.is_published).map((pkg) => (
-                      <button
-                        key={pkg.id}
-                        onClick={() => { setSelectedPackage(pkg.id); setSelectedServices([]); }}
-                        className={`text-left p-4 rounded-lg border-2 transition-all ${
-                          selectedPackage === pkg.id ? 'border-[#D32F2F] bg-red-50/30' : 'border-gray-100 bg-white hover:border-gray-200'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Sparkles size={14} className="text-[#D32F2F]" />
-                          <p className="font-bold text-[#1c1b1b]">{pkg.name}</p>
-                        </div>
-                        {pkg.description && <p className="text-xs text-[#5f5e5e] mt-1 line-clamp-2">{pkg.description}</p>}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {!services.length && !packages.length && (
-                <p className="text-center py-8 text-[#5f5e5e]">No services available yet. Please check back later.</p>
               )}
             </div>
           )}
@@ -539,6 +657,13 @@ export default function BookingPage() {
               <span className="text-[#5f5e5e]">Time</span>
               <span className="ml-auto font-bold text-[#1c1b1b]">{formatTime(selectedSlot?.start_time)} – {formatTime(selectedSlot?.end_time)}</span>
             </div>
+            {isPackageBooking && (
+              <div className="flex items-center gap-3 py-2 bg-purple-50 rounded-lg px-3 mt-2">
+                <Sparkles size={16} className="text-purple-600 shrink-0" />
+                <span className="text-purple-700 font-bold text-xs">Package Credit</span>
+                <span className="ml-auto text-xs font-bold text-purple-800">{activePackages[0]?.package_name}</span>
+              </div>
+            )}
           </div>
 
           <Button className="w-full" onClick={handleBook} loading={createMut.isPending}>

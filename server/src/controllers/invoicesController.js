@@ -151,6 +151,35 @@ exports.listAll = async (req, res) => {
       results.push(...rows);
     }
 
+    // ── 6. Quick Washes ──────────────────────────────────────────────
+    if (type === 'all' || type === 'quick_wash') {
+      let where = "b.job_type = 'quick_wash' AND b.status = 'completed'";
+      const params = [];
+      if (from_date) { where += ' AND DATE(b.completed_at) >= ?'; params.push(from_date); }
+      if (to_date)   { where += ' AND DATE(b.completed_at) <= ?'; params.push(to_date); }
+      if (search)    { where += ' AND (u.name LIKE ? OR b.vehicle_reg_no LIKE ?)'; const s = `%${search}%`; params.push(s,s); }
+
+      const [rows] = await pool.query(`
+        SELECT
+          b.id,
+          'quick_wash' AS type,
+          CONCAT('QW-', b.id) AS reference,
+          u.name AS party_name,
+          u.mobile AS party_mobile,
+          COALESCE(b.completed_at, b.created_at) AS date,
+          s.price AS amount,
+          b.vehicle_reg_no AS registration_no,
+          NULL AS discount_type,
+          NULL AS discount_value
+        FROM bookings b
+        JOIN users u ON b.customer_id = u.id
+        LEFT JOIN services s ON b.service_id = s.id
+        WHERE ${where}
+        ORDER BY date DESC
+      `, params);
+      results.push(...rows);
+    }
+
     // ── Sort all results newest first ─────────────────────────────────────
     results.sort((a, b) => new Date(b.date) - new Date(a.date));
 

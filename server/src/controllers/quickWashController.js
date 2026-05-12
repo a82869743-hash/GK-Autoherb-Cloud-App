@@ -242,3 +242,19 @@ exports.queueStats = async (req, res) => {
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };
+
+// ─── GET INVOICE ────────────────────────────
+exports.getInvoice = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { generateQuickWashInvoicePDF } = require('../services/invoiceService');
+    const { pdfBuffer, invoiceNumber } = await generateQuickWashInvoicePDF(id);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', \`attachment; filename="\${invoiceNumber}.pdf"\`);
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error('Generate Quick Wash Invoice error:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to generate invoice' });
+  }
+};
