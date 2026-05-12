@@ -251,7 +251,7 @@ exports.getInvoice = async (req, res) => {
     const { pdfBuffer, invoiceNumber } = await generateQuickWashInvoicePDF(id);
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', \`attachment; filename="\${invoiceNumber}.pdf"\`);
+    res.setHeader('Content-Disposition', `attachment; filename="${invoiceNumber}.pdf"`);
     res.send(pdfBuffer);
   } catch (err) {
     console.error('Generate Quick Wash Invoice error:', err);
