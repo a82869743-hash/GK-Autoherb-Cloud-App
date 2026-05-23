@@ -1,15 +1,32 @@
 -- ═══════════════════════════════════════════════════════════
--- MIGRATION 050: Package System V2 — Annual Car Care
+-- MIGRATION 052: Package System V2 — Annual Car Care
+-- MySQL 8.0 Compatible (no IF NOT EXISTS for columns)
 -- ═══════════════════════════════════════════════════════════
 
--- 1. Add pricing_type to packages (basic/premium differentiation)
-ALTER TABLE packages
-  ADD COLUMN IF NOT EXISTS pricing_type ENUM('basic','premium') NOT NULL DEFAULT 'basic' AFTER is_published,
-  ADD COLUMN IF NOT EXISTS paid_wash_count INT UNSIGNED NOT NULL DEFAULT 0 AFTER wax_count,
-  ADD COLUMN IF NOT EXISTS is_active TINYINT(1) NOT NULL DEFAULT 1 AFTER is_published,
-  ADD COLUMN IF NOT EXISTS sort_order INT NOT NULL DEFAULT 0 AFTER visible_to_customer;
+-- 1. Add new columns to packages (skip is_active & visible_to_customer — they exist)
+-- Use a stored procedure to safely add columns only if missing
+DELIMITER //
+CREATE PROCEDURE _add_col_if_missing(
+  IN tbl VARCHAR(64), IN col VARCHAR(64), IN col_def VARCHAR(255)
+)
+BEGIN
+  SET @q = CONCAT('ALTER TABLE `', tbl, '` ADD COLUMN `', col, '` ', col_def);
+  IF NOT EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = tbl AND COLUMN_NAME = col
+  ) THEN
+    PREPARE stmt FROM @q;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
+  END IF;
+END //
+DELIMITER ;
 
--- 2. Create package_pricing table for car-type × pricing-type matrix
+-- packages table — add missing columns
+CALL _add_col_if_missing('packages', 'paid_wash_count', 'INT UNSIGNED NOT NULL DEFAULT 0 AFTER wax_count');
+CALL _add_col_if_missing('packages', 'sort_order', 'INT NOT NULL DEFAULT 0 AFTER visible_to_customer');
+
+-- 2. Create package_pricing table
 CREATE TABLE IF NOT EXISTS package_pricing (
   id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   package_id   INT UNSIGNED NOT NULL,
@@ -22,13 +39,13 @@ CREATE TABLE IF NOT EXISTS package_pricing (
   INDEX idx_package_id (package_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 3. Add pricing_type to package_requests so we know which tier was requested
-ALTER TABLE package_requests
-  ADD COLUMN IF NOT EXISTS pricing_type ENUM('basic','premium') NOT NULL DEFAULT 'basic' AFTER price,
-  ADD COLUMN IF NOT EXISTS car_type VARCHAR(50) NULL AFTER pricing_type,
-  ADD COLUMN IF NOT EXISTS rejection_reason TEXT NULL;
+-- 3. Add pricing_type + car_type to package_requests
+CALL _add_col_if_missing('package_requests', 'pricing_type', "ENUM('basic','premium') NOT NULL DEFAULT 'basic' AFTER price");
+CALL _add_col_if_missing('package_requests', 'car_type', 'VARCHAR(50) NULL AFTER pricing_type');
 
--- 4. Add pricing_type to user_packages for tracking
-ALTER TABLE user_packages
-  ADD COLUMN IF NOT EXISTS pricing_type ENUM('basic','premium') NULL DEFAULT 'basic' AFTER vehicle_segment,
-  ADD COLUMN IF NOT EXISTS car_type VARCHAR(50) NULL AFTER pricing_type;
+-- 4. Add pricing_type + car_type to user_packages
+CALL _add_col_if_missing('user_packages', 'pricing_type', "ENUM('basic','premium') NULL DEFAULT 'basic'");
+CALL _add_col_if_missing('user_packages', 'car_type', 'VARCHAR(50) NULL');
+
+-- Cleanup
+DROP PROCEDURE IF EXISTS _add_col_if_missing;
