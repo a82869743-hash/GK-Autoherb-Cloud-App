@@ -227,14 +227,17 @@ export default function PackagesPage() {
       if (svc) count = svc.total_count || 0;
     }
 
-    // Hardcoded fallback for specific services based on package tier if not found in db
-    if (count === 0 && serviceName.toLowerCase() === 'car foam wash') {
+    // Hardcoded fallback for specific services based on package tier
+    if (serviceName.toLowerCase() === 'car foam wash') {
       const pkgName = pkg.name.toLowerCase();
-      if (pkgName.includes('bronze')) return 1;
-      if (pkgName.includes('silver')) return 2;
-      if (pkgName.includes('gold')) return 4;
-      if (pkgName.includes('diamond')) return 6;
-      if (pkgName.includes('platinum')) return 8;
+      let overrideCount = 0;
+      if (pkgName.includes('bronze')) overrideCount = 1;
+      if (pkgName.includes('silver')) overrideCount = 2;
+      if (pkgName.includes('gold')) overrideCount = 4;
+      if (pkgName.includes('diamond')) overrideCount = 6;
+      if (pkgName.includes('platinum')) overrideCount = 8;
+      
+      return Math.max(count, overrideCount);
     }
 
     return count;
