@@ -261,10 +261,13 @@ exports.checkServiceAvailability = async (conn, userId, serviceName) => {
 
   // Get total_count for this service
   const serviceBreakdown = await getServiceBreakdown(conn, packageId, packageName);
-  const serviceEntry = serviceBreakdown.find(s => s.service_name === serviceName);
+  const serviceEntry = serviceBreakdown.find(s => s.service_name.toLowerCase().trim() === serviceName?.toLowerCase().trim());
 
   if (!serviceEntry) {
-    return { has_package: true, can_use: false, remaining: 0, reason: 'Service not included in your package' };
+    console.log('--- checkServiceAvailability FAILED ---');
+    console.log('serviceName requested:', serviceName);
+    console.log('serviceBreakdown:', serviceBreakdown);
+    return { has_package: true, can_use: false, remaining: 0, reason: `Service not included in your package: ${serviceName}` };
   }
 
   const totalCount = serviceEntry.total_count;
@@ -317,7 +320,7 @@ exports.checkAndUseService = async (conn, userId, serviceName) => {
 
   // Get total_count for this service
   const serviceBreakdown = await getServiceBreakdown(conn, packageId, packageName);
-  const serviceEntry = serviceBreakdown.find(s => s.service_name === serviceName);
+  const serviceEntry = serviceBreakdown.find(s => s.service_name.toLowerCase().trim() === serviceName.toLowerCase().trim());
 
   if (!serviceEntry) {
     return { has_package: true, can_use: false, remaining: 0, reason: 'Service not in package' };
