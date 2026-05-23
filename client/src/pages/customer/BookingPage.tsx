@@ -44,7 +44,7 @@ export default function BookingPage() {
   const [services, setServices] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
   const [selectedServices, setSelectedServices] = useState<number[]>([]);
-  const [selectedPackageServiceName, setSelectedPackageServiceName] = useState<string | null>(null);
+  const [selectedPackageServiceNames, setSelectedPackageServiceNames] = useState<string[]>([]);
   const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
   const [servicesLoading, setServicesLoading] = useState(true);
   const [activePackages, setActivePackages] = useState<any[]>([]);
@@ -118,19 +118,19 @@ export default function BookingPage() {
     if (isPackageBooking && activePackages.length > 0) {
       setSelectedPackage(activePackages[0].package_id);
       setSelectedServices([]);
-      setSelectedPackageServiceName(null);
+      setSelectedPackageServiceNames([]);
     }
   }, [searchParams, activePackages, isPackageBooking]);
 
   const canNext = useMemo(() => {
     switch (step) {
-      case 0: return isPackageBooking ? selectedPackageServiceName !== null : selectedServices.length > 0;
+      case 0: return isPackageBooking ? selectedPackageServiceNames.length > 0 : selectedServices.length > 0;
       case 1: return brand.trim().length > 0 && model.trim().length > 0;
       case 2: return selectedDate.length > 0;
       case 3: return selectedSlot !== null;
       default: return true;
     }
-  }, [step, selectedServices, selectedPackage, selectedPackageServiceName, isPackageBooking, brand, model, selectedDate, selectedSlot]);
+  }, [step, selectedServices, selectedPackage, selectedPackageServiceNames, isPackageBooking, brand, model, selectedDate, selectedSlot]);
 
   const selectedServicesObjs = services.filter((s) => selectedServices.includes(s.id));
   const selectedPackageObj = activePackages.find((p) => p.package_id === selectedPackage) || packages.find((p) => p.id === selectedPackage);
@@ -160,7 +160,7 @@ export default function BookingPage() {
       const res = await createMut.mutateAsync({
         slot_id: selectedSlot.id,
         service_ids: !isPackageBooking && selectedServices.length > 0 ? selectedServices : undefined,
-        package_service_name: isPackageBooking && selectedPackageServiceName ? selectedPackageServiceName : undefined,
+        package_service_name: isPackageBooking && selectedPackageServiceNames.length > 0 ? selectedPackageServiceNames : undefined,
         package_id: selectedPackage || undefined,
         vehicle_id: selectedVehicleId || undefined,
         vehicle_brand: brand,
@@ -193,7 +193,7 @@ export default function BookingPage() {
           <div className="flex justify-between text-sm">
             <span className="text-[#5f5e5e]">Service(s)</span>
             <span className="font-bold text-right ml-4">
-              {isPackageBooking ? selectedPackageServiceName : selectedServicesObjs.length > 0 ? selectedServicesObjs.map(s => s.name).join(', ') : (selectedPackageObj?.package_name || selectedPackageObj?.name)}
+              {isPackageBooking ? selectedPackageServiceNames.join(', ') : selectedServicesObjs.length > 0 ? selectedServicesObjs.map(s => s.name).join(', ') : (selectedPackageObj?.package_name || selectedPackageObj?.name)}
             </span>
           </div>
           <div className="flex justify-between text-sm">
@@ -213,7 +213,7 @@ export default function BookingPage() {
           <Button variant="ghost" onClick={() => navigate('/customer/bookings')}>
             View Bookings
           </Button>
-          <Button onClick={() => { setBookingResult(null); setStep(0); setSelectedServices([]); setSelectedPackageServiceName(null); setSelectedPackage(null); setSelectedSlot(null); setSelectedDate(''); }}>
+          <Button onClick={() => { setBookingResult(null); setStep(0); setSelectedServices([]); setSelectedPackageServiceNames([]); setSelectedPackage(null); setSelectedSlot(null); setSelectedDate(''); }}>
             Book Another
           </Button>
         </div>
@@ -303,14 +303,16 @@ export default function BookingPage() {
                           if (uName === 'deep cleaning' && sName.includes('interior cleaning')) return true;
                           return false;
                         });
-                        const isSelected = selectedPackageServiceName === usage.service_name;
+                        const isSelected = selectedPackageServiceNames.includes(usage.service_name);
 
                         return (
                           <button
                             key={usage.service_name}
                             onClick={() => {
-                              setSelectedPackageServiceName(
-                                isSelected ? null : usage.service_name
+                              setSelectedPackageServiceNames(prev => 
+                                prev.includes(usage.service_name)
+                                  ? prev.filter(n => n !== usage.service_name)
+                                  : [...prev, usage.service_name]
                               );
                               setSelectedPackage(activePackages[0].package_id);
                             }}
@@ -399,7 +401,7 @@ export default function BookingPage() {
                               onClick={() => {
                                 setSelectedServices(prev => prev.includes(svc.id) ? prev.filter(id => id !== svc.id) : [...prev, svc.id]);
                                 setSelectedPackage(null);
-                                setSelectedPackageServiceName(null);
+                                setSelectedPackageServiceNames([]);
                               }}
                               className={`text-left p-4 rounded-lg border-2 transition-all ${
                                 isSelected ? 'border-[#D32F2F] bg-red-50/30' : 'border-gray-100 bg-white hover:border-gray-200'
@@ -641,7 +643,7 @@ export default function BookingPage() {
               <Sparkles size={16} className="text-[#D32F2F] shrink-0" />
               <span className="text-[#5f5e5e]">Service(s)</span>
               <span className="ml-auto font-bold text-[#1c1b1b] text-right ml-4">
-                {isPackageBooking ? selectedPackageServiceName : selectedServicesObjs.length > 0 ? selectedServicesObjs.map(s => s.name).join(', ') : (selectedPackageObj?.package_name || selectedPackageObj?.name)}
+                {isPackageBooking ? selectedPackageServiceNames.join(', ') : selectedServicesObjs.length > 0 ? selectedServicesObjs.map(s => s.name).join(', ') : (selectedPackageObj?.package_name || selectedPackageObj?.name)}
               </span>
             </div>
             <div className="flex items-center gap-3 py-2 border-b border-gray-50">

@@ -275,36 +275,56 @@ exports.create = async (req, res) => {
     const primaryServiceId = service_id || (allServiceIds.length > 0 ? allServiceIds[0] : null);
 
     if (use_package && !is_free_wash) {
-      let serviceName = package_service_name;
+      let serviceNames = [];
+      if (Array.isArray(package_service_name)) {
+        serviceNames = package_service_name;
+      } else if (typeof package_service_name === 'string') {
+        serviceNames = package_service_name.split(',').map(s => s.trim()).filter(s => s);
+      }
       
       // Fallback to fetching name by ID if only service_id was provided
-      if (!serviceName && primaryServiceId) {
+      if (serviceNames.length === 0 && primaryServiceId) {
         const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [primaryServiceId]);
         if (svcRows.length) {
-          serviceName = svcRows[0].name;
+          serviceNames = [svcRows[0].name];
         }
       }
 
-      console.log('[BOOKING] Package booking — service name resolved:', serviceName);
+      console.log('[BOOKING] Package booking — service names resolved:', serviceNames);
 
-      if (serviceName) {
+      if (serviceNames.length > 0) {
         const userPkgCtrl = require('./userPackagesController');
-        // Only CHECK availability — do NOT deduct. Deduction happens on admin approval.
-        const result = await userPkgCtrl.checkServiceAvailability(conn, customerId, serviceName);
-        console.log('[BOOKING] Package availability result:', JSON.stringify(result));
+        let allAvailable = true;
+        let finalPackageName = '';
+        let canonicalNames = [];
+        let reasons = [];
 
-        if (result.can_use) {
+        for (const sName of serviceNames) {
+          // Only CHECK availability — do NOT deduct. Deduction happens on admin approval.
+          const result = await userPkgCtrl.checkServiceAvailability(conn, customerId, sName);
+          console.log(`[BOOKING] Package availability result for ${sName}:`, JSON.stringify(result));
+
+          if (result.can_use) {
+            finalPackageName = result.package_name;
+            resolvedUserPackageId = result.user_package_id;
+            canonicalNames.push(result.canonical_service_name || sName);
+          } else {
+            allAvailable = false;
+            reasons.push(result.reason || `No credits for ${sName}`);
+          }
+        }
+
+        if (allAvailable) {
           packageUsed = true;
-          resolvedUserPackageId = result.user_package_id;
-          package_service_name = result.canonical_service_name || serviceName;
+          package_service_name = canonicalNames.join(', ');
           packageInfo = {
-            package_name: result.package_name,
+            package_name: finalPackageName,
             service_name: package_service_name,
-            remaining: result.remaining,
+            remaining: 'Multiple',
           };
         } else {
           await conn.rollback();
-          return res.status(422).json({ success: false, error: result.reason || 'No package credits available for this service' });
+          return res.status(422).json({ success: false, error: reasons.join(' | ') });
         }
       } else {
         await conn.rollback();
@@ -416,25 +436,30 @@ exports.approve = async (req, res) => {
 
     // ─── DEFERRED DEDUCTION: Deduct package credit NOW (on approval) ───
     if (booking.booking_type === 'package' && booking.user_package_id) {
-      let serviceName = booking.package_service_name;
-      
-      // Fallback if package_service_name wasn't saved (older bookings)
-      if (!serviceName && booking.service_id) {
-        const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [booking.service_id]);
-        if (svcRows.length) serviceName = svcRows[0].name;
+      let serviceNames = [];
+      if (booking.package_service_name) {
+        serviceNames = booking.package_service_name.split(',').map(s => s.trim()).filter(s => s);
       }
       
-      if (serviceName) {
+      // Fallback if package_service_name wasn't saved (older bookings)
+      if (serviceNames.length === 0 && booking.service_id) {
+        const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [booking.service_id]);
+        if (svcRows.length) serviceNames = [svcRows[0].name];
+      }
+      
+      if (serviceNames.length > 0) {
         const userPkgCtrl = require('./userPackagesController');
-        const result = await userPkgCtrl.checkAndUseService(conn, booking.customer_id, serviceName);
-        if (!result.can_use) {
-          await conn.rollback();
-          return res.status(422).json({
-            success: false,
-            error: `Cannot approve: No package credits remaining for ${serviceName}. ${result.reason || ''}`,
-          });
+        for (const sName of serviceNames) {
+          const result = await userPkgCtrl.checkAndUseService(conn, booking.customer_id, sName);
+          if (!result.can_use) {
+            await conn.rollback();
+            return res.status(422).json({
+              success: false,
+              error: `Cannot approve: No package credits remaining for ${sName}. ${result.reason || ''}`,
+            });
+          }
+          console.log(`[BOOKING] Package credit deducted for booking #${id} — service: ${sName}, remaining: ${result.remaining}`);
         }
-        console.log(`[BOOKING] Package credit deducted for booking #${id} — service: ${serviceName}, remaining: ${result.remaining}`);
       }
     }
 

@@ -319,7 +319,9 @@ export default function PackagesPage() {
                             </div>
                           )}
                           <span className={`text-[11px] leading-tight ${included ? 'text-gray-800 font-medium' : 'text-gray-400 line-through'}`}>
-                            {included && count > 1 ? `${count} ` : ''}{svcName}
+                            {svcName === 'Car Foam Wash'
+                              ? (included ? `+${count} Complimentary Foam Wash${count > 1 ? 'es' : ''}` : 'Complimentary Foam Wash')
+                              : (included && count > 1 ? `${count} ` : '') + svcName}
                           </span>
                         </div>
                       );
