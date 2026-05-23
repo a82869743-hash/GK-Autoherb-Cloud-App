@@ -413,54 +413,84 @@ export default function BuyPackagesPage() {
       )}
 
       {/* ─── My Package Requests ─────────────────────── */}
-      {myRequests.length > 0 && (
-        <div className="mt-12 max-w-4xl mx-auto">
-          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <Clock className="w-5 h-5 text-gray-500" />
-            My Package Requests
-          </h2>
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-50">
-            {myRequests.map((req: any) => {
-              const statusConfig: Record<string, { bg: string; text: string; icon: any; label: string }> = {
-                pending:  { bg: 'bg-amber-50 border-amber-200', text: 'text-amber-700', icon: Clock, label: 'Pending Approval' },
-                approved: { bg: 'bg-green-50 border-green-200', text: 'text-green-700', icon: CheckCircle, label: 'Approved' },
-                rejected: { bg: 'bg-red-50 border-red-200', text: 'text-red-700', icon: XCircle, label: 'Rejected' },
-              };
-              const cfg = statusConfig[req.status] || statusConfig.pending;
-              const StatusIcon = cfg.icon;
-              return (
-                <div key={req.id} className="px-5 py-4 flex items-start gap-4">
-                  <div className={`p-2 rounded-xl ${cfg.bg} border flex-shrink-0 mt-0.5`}>
-                    <StatusIcon size={18} className={cfg.text} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <h4 className="font-bold text-sm text-gray-900">{req.package_name}</h4>
-                      <span className={`px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full border ${cfg.bg} ${cfg.text}`}>
-                        {cfg.label}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500">
-                      {req.brand} {req.model} ({req.registration_no}) • ₹{req.price}
-                    </p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">
-                      Requested: {new Date(req.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    </p>
-                    {req.status === 'rejected' && req.rejection_reason && (
-                      <div className="mt-2 flex items-start gap-2 bg-red-50 rounded-lg p-2.5 border border-red-100">
-                        <AlertCircle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />
-                        <p className="text-xs text-red-700">
-                          <span className="font-bold">Reason: </span>{req.rejection_reason}
-                        </p>
-                      </div>
-                    )}
-                  </div>
+      {myRequests.length > 0 && (() => {
+        // Find the most recent approved request (active package)
+        const approvedRequests = myRequests
+          .filter((r: any) => r.status === 'approved')
+          .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        
+        const activeRequest = approvedRequests.length > 0 ? approvedRequests[0] : null;
+        const pastRequests = myRequests.filter((r: any) => r.id !== activeRequest?.id);
+
+        const renderRequestCard = (req: any, isActive: boolean) => {
+          const statusConfig: Record<string, { bg: string; text: string; icon: any; label: string }> = {
+            pending:  { bg: 'bg-amber-50 border-amber-200', text: 'text-amber-700', icon: Clock, label: 'Pending Approval' },
+            approved: { bg: 'bg-green-50 border-green-200', text: 'text-green-700', icon: CheckCircle, label: 'Approved' },
+            rejected: { bg: 'bg-red-50 border-red-200', text: 'text-red-700', icon: XCircle, label: 'Rejected' },
+          };
+          const cfg = statusConfig[req.status] || statusConfig.pending;
+          const StatusIcon = cfg.icon;
+          return (
+            <div key={req.id} className={`px-5 py-4 flex items-start gap-4 ${isActive ? '' : 'opacity-60'}`}>
+              <div className={`p-2 rounded-xl ${isActive ? 'bg-emerald-50 border-emerald-300' : cfg.bg} border flex-shrink-0 mt-0.5`}>
+                <StatusIcon size={18} className={isActive ? 'text-emerald-600' : cfg.text} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-1">
+                  <h4 className={`font-bold text-sm ${isActive ? 'text-gray-900' : 'text-gray-500'}`}>{req.package_name}</h4>
+                  <span className={`px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full border ${isActive ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : req.status === 'approved' ? 'bg-gray-100 border-gray-200 text-gray-500' : `${cfg.bg} ${cfg.text}`}`}>
+                    {isActive ? '✦ Active' : req.status === 'approved' ? 'Past' : cfg.label}
+                  </span>
                 </div>
-              );
-            })}
+                <p className={`text-xs ${isActive ? 'text-gray-500' : 'text-gray-400'}`}>
+                  {req.brand} {req.model} ({req.registration_no}) • ₹{req.price}
+                </p>
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  Requested: {new Date(req.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </p>
+                {req.status === 'rejected' && req.rejection_reason && (
+                  <div className="mt-2 flex items-start gap-2 bg-red-50 rounded-lg p-2.5 border border-red-100">
+                    <AlertCircle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-red-700">
+                      <span className="font-bold">Reason: </span>{req.rejection_reason}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        };
+
+        return (
+          <div className="mt-12 max-w-4xl mx-auto space-y-6">
+            {/* Active Package */}
+            {activeRequest && (
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-emerald-500" />
+                  Active Package
+                </h2>
+                <div className="bg-white rounded-2xl shadow-sm border-2 border-emerald-200 overflow-hidden ring-1 ring-emerald-100">
+                  {renderRequestCard(activeRequest, true)}
+                </div>
+              </div>
+            )}
+
+            {/* Past Packages */}
+            {pastRequests.length > 0 && (
+              <div>
+                <h2 className="text-lg font-bold text-gray-500 mb-3 flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-gray-400" />
+                  Past Packages
+                </h2>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-50">
+                  {pastRequests.map((req: any) => renderRequestCard(req, false))}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ─── Confirmation Modal ─────────────────────── */}
       {confirmPkg && selectedVehicle && (
