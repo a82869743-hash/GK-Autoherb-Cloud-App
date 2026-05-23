@@ -59,6 +59,44 @@ const TIER_COLORS: Record<string, { gradient: string; border: string; badge: str
   platinum: { gradient: 'from-purple-700 to-purple-950', border: 'border-purple-400', badge: 'bg-purple-100 text-purple-800',  text: 'text-purple-300' },
 };
 
+const HARDCODED_PRICES: Record<string, Record<string, { basic: number, premium: number }>> = {
+  'SMALL_HATCHBACK': {
+    bronze: { basic: 1200, premium: 1650 },
+    silver: { basic: 2000, premium: 2750 },
+    gold: { basic: 3200, premium: 4400 },
+    diamond: { basic: 4000, premium: 5500 },
+    platinum: { basic: 4800, premium: 6600 },
+  },
+  'MEDIUM_HATCHBACK': {
+    bronze: { basic: 1350, premium: 1800 },
+    silver: { basic: 2250, premium: 3000 },
+    gold: { basic: 3600, premium: 4800 },
+    diamond: { basic: 4500, premium: 6000 },
+    platinum: { basic: 5400, premium: 7200 },
+  },
+  'SEDAN_SUV': {
+    bronze: { basic: 1500, premium: 2000 },
+    silver: { basic: 2500, premium: 3300 },
+    gold: { basic: 4000, premium: 5200 },
+    diamond: { basic: 5000, premium: 6500 },
+    platinum: { basic: 6000, premium: 7800 },
+  },
+  'PREMIUM_SEDAN': {
+    bronze: { basic: 1650, premium: 2200 },
+    silver: { basic: 2750, premium: 3600 },
+    gold: { basic: 4400, premium: 5700 },
+    diamond: { basic: 5500, premium: 7150 },
+    platinum: { basic: 6600, premium: 8580 },
+  },
+  'LARGE_CAR': {
+    bronze: { basic: 1800, premium: 2400 },
+    silver: { basic: 3000, premium: 3900 },
+    gold: { basic: 4800, premium: 6240 },
+    diamond: { basic: 6000, premium: 7800 },
+    platinum: { basic: 7200, premium: 9360 },
+  }
+};
+
 const DEFAULT_TIER_COLOR = { gradient: 'from-gray-700 to-gray-900', border: 'border-red-500', badge: 'bg-red-100 text-red-800', text: 'text-red-400' };
 
 function getTierKey(name: string): string {
@@ -87,6 +125,7 @@ export default function BuyPackagesPage() {
   const [packages, setPackages] = useState<Pkg[]>([]);
   const [loading, setLoading] = useState(true);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
+  const [filterCarType, setFilterCarType] = useState<string>('SMALL_HATCHBACK');
   const [pricingType, setPricingType] = useState<'basic' | 'premium'>('basic');
   // Confirmation modal state
   const [confirmPkg, setConfirmPkg] = useState<Pkg | null>(null);
@@ -121,22 +160,19 @@ export default function BuyPackagesPage() {
     }).catch(() => {});
   }, []);
 
-  const getPrice = (pkg: Pkg, cat: string, pt: 'basic' | 'premium' = pricingType) => {
-    // Try v2 pricing matrix first
-    if (pkg.pricing && pkg.pricing.length > 0) {
-      const carType = CAR_TYPE_MAP[cat] || 'SEDAN_SUV';
-      const match = pkg.pricing.find(p => p.car_type === carType && p.pricing_type === pt);
-      if (match) return Number(match.price);
+  useEffect(() => {
+    if (selectedVehicle) {
+      const type = CAR_TYPE_MAP[selectedVehicle.category] || 'SEDAN_SUV';
+      setFilterCarType(type);
     }
-    // Fallback to old flat pricing
-    switch (cat) {
-      case 'hatchback': return Number(pkg.price_hatchback);
-      case 'medium_hatchback': return Number(pkg.price_medium_hatchback);
-      case 'sedan': return Number(pkg.price_sedan);
-      case 'premium_sedan': return Number(pkg.price_premium_sedan);
-      case 'suv': return Number(pkg.price_suv);
-      default: return Number(pkg.price_sedan);
+  }, [selectedVehicle]);
+
+  const getPrice = (pkg: Pkg) => {
+    const tierKey = getTierKey(pkg.name);
+    if (HARDCODED_PRICES[filterCarType] && HARDCODED_PRICES[filterCarType][tierKey]) {
+      return HARDCODED_PRICES[filterCarType][tierKey][pricingType];
     }
+    return 0;
   };
 
   // Get service count from package's services array
@@ -189,14 +225,13 @@ export default function BuyPackagesPage() {
     if (!confirmPkg || !selectedVehicle) return;
     setSubmittingId(confirmPkg.id);
     try {
-      const price = getPrice(confirmPkg, selectedVehicle.category, pricingType);
-      const carType = CAR_TYPE_MAP[selectedVehicle.category] || 'SEDAN_SUV';
+      const price = getPrice(confirmPkg);
       const res = await api.post('/packages/requests', {
         vehicle_id: selectedVehicle.id,
         package_id: confirmPkg.id,
         price,
         pricing_type: pricingType,
-        car_type: carType
+        car_type: filterCarType
       });
       if (res.data.success) {
         addToast('success', 'Package request submitted! Admin will review and approve it shortly.');
@@ -240,32 +275,49 @@ export default function BuyPackagesPage() {
           <p className="text-gray-500 mt-2">You need to add a vehicle to your profile before purchasing packages.</p>
         </div>
       ) : (
-        <div className="mb-10 max-w-xl mx-auto">
-          <label className="block text-sm font-bold text-gray-700 mb-2">Select Vehicle</label>
-          <select
-            className="w-full bg-white border-2 border-red-100 focus:border-red-500 focus:ring-0 rounded-xl py-3 px-4 shadow-sm text-gray-900 font-medium transition-colors"
-            value={selectedVehicle?.id || ''}
-            onChange={(e) => setSelectedVehicle(vehicles.find(v => v.id === Number(e.target.value)) || null)}
-          >
-            {vehicles.map(v => (
-              <option key={v.id} value={v.id}>
-                {v.brand} {v.model} ({v.registration_no || 'No Reg'}) - {v.category ? v.category.replace('_', ' ').toUpperCase() : 'UNKNOWN'}
-              </option>
-            ))}
-          </select>
-
-          {/* Basic / Premium Toggle */}
-          <div className="flex items-center justify-center gap-3 mt-4">
-            <span className={`text-xs font-bold uppercase tracking-wider ${pricingType === 'basic' ? 'text-red-600' : 'text-gray-400'}`}>Basic</span>
-            <button
-              onClick={() => setPricingType(pricingType === 'basic' ? 'premium' : 'basic')}
-              className={`relative w-14 h-7 rounded-full transition-colors ${pricingType === 'premium' ? 'bg-purple-600' : 'bg-gray-300'}`}
+        <div className="mb-10 max-w-xl mx-auto space-y-4">
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-2">Select Vehicle</label>
+            <select
+              className="w-full bg-white border-2 border-red-100 focus:border-red-500 focus:ring-0 rounded-xl py-3 px-4 shadow-sm text-gray-900 font-medium transition-colors"
+              value={selectedVehicle?.id || ''}
+              onChange={(e) => setSelectedVehicle(vehicles.find(v => v.id === Number(e.target.value)) || null)}
             >
-              <div className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform ${pricingType === 'premium' ? 'translate-x-7' : ''}`} />
-            </button>
-            <span className={`text-xs font-bold uppercase tracking-wider ${pricingType === 'premium' ? 'text-purple-600' : 'text-gray-400'}`}>Premium</span>
+              {vehicles.map(v => (
+                <option key={v.id} value={v.id}>
+                  {v.brand} {v.model} ({v.registration_no || 'No Reg'}) - {v.category ? v.category.replace('_', ' ').toUpperCase() : 'UNKNOWN'}
+                </option>
+              ))}
+            </select>
           </div>
-          <p className="text-center text-[10px] text-gray-400 mt-1">Premium includes additional interior care & product upgrades</p>
+
+          <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+            <label className="block text-sm font-bold text-gray-700 mb-2">Vehicle Type Filter</label>
+            <select
+              className="w-full bg-gray-50 border border-gray-200 focus:border-purple-500 focus:ring-0 rounded-lg py-2 px-3 text-gray-900 font-medium transition-colors"
+              value={filterCarType}
+              onChange={(e) => setFilterCarType(e.target.value)}
+            >
+              <option value="SMALL_HATCHBACK">Small Hatchback</option>
+              <option value="MEDIUM_HATCHBACK">Medium Hatchback</option>
+              <option value="SEDAN_SUV">Sedan / SUV</option>
+              <option value="PREMIUM_SEDAN">Premium Sedan</option>
+              <option value="LARGE_CAR">Large Car</option>
+            </select>
+
+            {/* Basic / Premium Toggle */}
+            <div className="flex items-center justify-center gap-3 mt-4 pt-3 border-t border-gray-100">
+              <span className={`text-xs font-bold uppercase tracking-wider ${pricingType === 'basic' ? 'text-red-600' : 'text-gray-400'}`}>Basic</span>
+              <button
+                onClick={() => setPricingType(pricingType === 'basic' ? 'premium' : 'basic')}
+                className={`relative w-14 h-7 rounded-full transition-colors ${pricingType === 'premium' ? 'bg-purple-600' : 'bg-gray-300'}`}
+              >
+                <div className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform ${pricingType === 'premium' ? 'translate-x-7' : ''}`} />
+              </button>
+              <span className={`text-xs font-bold uppercase tracking-wider ${pricingType === 'premium' ? 'text-purple-600' : 'text-gray-400'}`}>Premium</span>
+            </div>
+            <p className="text-center text-[10px] text-gray-400 mt-1">Premium includes additional interior care & product upgrades</p>
+          </div>
         </div>
       )}
 
@@ -273,7 +325,7 @@ export default function BuyPackagesPage() {
       {selectedVehicle && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
           {packages.map(pkg => {
-            const price = getPrice(pkg, selectedVehicle.category);
+            const price = getPrice(pkg);
             const isSubmitting = submittingId === pkg.id;
             const tierKey = getTierKey(pkg.name);
             const colors = TIER_COLORS[tierKey] || DEFAULT_TIER_COLOR;
@@ -472,7 +524,7 @@ export default function BuyPackagesPage() {
                 <div className="border-t border-gray-200 pt-3 flex justify-between">
                   <span className="text-gray-500 text-sm">Price</span>
                   <span className="text-xl font-extrabold text-red-600">
-                    ₹{getPrice(confirmPkg, selectedVehicle.category).toLocaleString('en-IN')}
+                    ₹{getPrice(confirmPkg).toLocaleString('en-IN')}
                   </span>
                 </div>
               </div>
