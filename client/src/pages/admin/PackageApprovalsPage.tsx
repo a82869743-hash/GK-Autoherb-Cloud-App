@@ -52,10 +52,6 @@ export default function PackageApprovalsPage() {
 
   const handleReject = async () => {
     if (!rejectModalId) return;
-    if (!rejectionReason.trim()) {
-      alert('Please provide a reason for rejection.');
-      return;
-    }
     setRejectingId(rejectModalId);
     try {
       const res = await api.put(`/packages/requests/${rejectModalId}/reject`, {
@@ -309,7 +305,7 @@ export default function PackageApprovalsPage() {
             </div>
             <div className="p-6">
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Rejection Reason <span className="text-red-500">*</span>
+                Rejection Reason <span className="text-gray-400 font-normal ml-1">(Optional)</span>
               </label>
               <textarea
                 value={rejectionReason}
