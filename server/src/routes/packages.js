@@ -12,9 +12,14 @@ router.get('/',              optionalAuth, ctrl.list);
 
 // ─── Package Purchase Requests ────────────────────────────────
 router.post('/requests',            auth, role(['customer']), ctrl.createRequest);
+router.get('/requests/my',          auth, role(['customer']), ctrl.getMyRequests);
 router.get('/requests',             auth, role(['admin']), ctrl.listRequests);
 router.put('/requests/:id/approve', auth, role(['admin']), ctrl.approveRequest);
+router.put('/requests/:id/reject',  auth, role(['admin']), ctrl.rejectRequest);
 router.get('/requests/:id/invoice', optionalAuth, ctrl.downloadInvoice);
+
+// ─── Package Services (for filtered booking flow) ────────────
+router.get('/:id/services',  auth, ctrl.getPackageServices);
 
 router.get('/:id',           ctrl.getOne);
 

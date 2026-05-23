@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../../api/axiosInstance';
 import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
-import { PackageOpen, Car, CheckCircle, Loader2, ArrowRight, ShieldCheck, X } from 'lucide-react';
+import { PackageOpen, Car, CheckCircle, Loader2, ArrowRight, ShieldCheck, X, AlertCircle, Clock, XCircle } from 'lucide-react';
 
 interface Vehicle {
   id: number;
@@ -34,6 +34,7 @@ export default function BuyPackagesPage() {
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   // Confirmation modal state
   const [confirmPkg, setConfirmPkg] = useState<Pkg | null>(null);
+  const [myRequests, setMyRequests] = useState<any[]>([]);
 
   useEffect(() => {
     async function loadData() {
@@ -58,6 +59,10 @@ export default function BuyPackagesPage() {
       }
     }
     loadData();
+    // Fetch customer's own package requests
+    api.get('/packages/requests/my').then(res => {
+      if (res.data.success) setMyRequests(res.data.data || []);
+    }).catch(() => {});
   }, []);
 
   const getPrice = (pkg: Pkg, cat: string) => {
@@ -199,6 +204,56 @@ export default function BuyPackagesPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ─── My Package Requests ─────────────────────── */}
+      {myRequests.length > 0 && (
+        <div className="mt-12 max-w-4xl mx-auto">
+          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <Clock className="w-5 h-5 text-gray-500" />
+            My Package Requests
+          </h2>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-50">
+            {myRequests.map((req: any) => {
+              const statusConfig: Record<string, { bg: string; text: string; icon: any; label: string }> = {
+                pending:  { bg: 'bg-amber-50 border-amber-200', text: 'text-amber-700', icon: Clock, label: 'Pending Approval' },
+                approved: { bg: 'bg-green-50 border-green-200', text: 'text-green-700', icon: CheckCircle, label: 'Approved' },
+                rejected: { bg: 'bg-red-50 border-red-200', text: 'text-red-700', icon: XCircle, label: 'Rejected' },
+              };
+              const cfg = statusConfig[req.status] || statusConfig.pending;
+              const StatusIcon = cfg.icon;
+              return (
+                <div key={req.id} className="px-5 py-4 flex items-start gap-4">
+                  <div className={`p-2 rounded-xl ${cfg.bg} border flex-shrink-0 mt-0.5`}>
+                    <StatusIcon size={18} className={cfg.text} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <h4 className="font-bold text-sm text-gray-900">{req.package_name}</h4>
+                      <span className={`px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full border ${cfg.bg} ${cfg.text}`}>
+                        {cfg.label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      {req.brand} {req.model} ({req.registration_no}) • ₹{req.price}
+                    </p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">
+                      Requested: {new Date(req.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </p>
+                    {req.status === 'rejected' && req.rejection_reason && (
+                      <div className="mt-2 flex items-start gap-2 bg-red-50 rounded-lg p-2.5 border border-red-100">
+                        <AlertCircle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-red-700">
+                          <span className="font-bold">Reason: </span>{req.rejection_reason}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

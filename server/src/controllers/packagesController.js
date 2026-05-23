@@ -279,6 +279,27 @@ exports.createRequest = async (req, res) => {
   }
 };
 
+// ─── CUSTOMER: LIST OWN PACKAGE REQUESTS ────
+exports.getMyRequests = async (req, res) => {
+  try {
+    const customerId = req.user.id;
+    const [rows] = await pool.query(`
+      SELECT pr.id, pr.status, pr.price, pr.rejection_reason, pr.created_at,
+             p.name as package_name, p.wash_count,
+             v.registration_no, v.brand, v.model
+      FROM package_requests pr
+      JOIN packages p ON pr.package_id = p.id
+      JOIN vehicles v ON pr.vehicle_id = v.id
+      WHERE pr.customer_id = ?
+      ORDER BY pr.created_at DESC
+    `, [customerId]);
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('My package requests error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
 // ─── ADMIN: LIST PACKAGE REQUESTS ───────────
 exports.listRequests = async (req, res) => {
   try {
@@ -334,6 +355,43 @@ exports.approveRequest = async (req, res) => {
   }
 };
 
+// ─── ADMIN: REJECT PACKAGE REQUEST ──────────
+exports.rejectRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rejection_reason } = req.body;
+
+    // 1. Get request details
+    const [rows] = await pool.query("SELECT * FROM package_requests WHERE id = ? AND status = 'pending'", [id]);
+    if (!rows.length) {
+      return res.status(404).json({ success: false, error: 'Pending request not found' });
+    }
+    const reqData = rows[0];
+
+    // 2. Mark rejected with reason
+    await pool.query(
+      "UPDATE package_requests SET status = 'rejected', rejection_reason = ? WHERE id = ?",
+      [rejection_reason || 'Rejected by admin', id]
+    );
+
+    // 3. Fire-and-forget rejection SMS
+    try {
+      const messagingService = require('../services/messagingService');
+      const [custRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [reqData.customer_id]);
+      if (custRows.length && custRows[0].mobile) {
+        const msg = `GK AutoHerb: Hi ${custRows[0].name}, your package request has been rejected. Reason: ${rejection_reason || 'Not specified'}. Contact us for details.`;
+        messagingService.sendSMS(custRows[0].mobile, null, null, { content: msg }).catch(() => {});
+      }
+    } catch { /* non-blocking */ }
+
+    console.log(`[PACKAGE] Request #${id} rejected by admin ${req.user.id} — reason: ${rejection_reason || 'N/A'}`);
+    res.json({ success: true, message: 'Package request rejected' });
+  } catch (err) {
+    console.error('Package reject error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
 // ─── DOWNLOAD INVOICE ───────────────────────
 exports.downloadInvoice = async (req, res) => {
   try {
@@ -350,6 +408,28 @@ exports.downloadInvoice = async (req, res) => {
   } catch (err) {
     console.error('Download package invoice error:', err);
     res.status(500).json({ success: false, error: err.message || 'Error generating invoice' });
+  }
+};
+
+// ─── GET SERVICES IN A PACKAGE ──────────────
+// Returns only services included in a specific package (for filtered booking)
+exports.getPackageServices = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [rows] = await pool.query(
+      `SELECT ps.id AS ps_id, ps.total_count, s.id, s.name, s.description,
+              s.price_hatchback, s.price_medium_hatchback, s.price_sedan, s.price_premium_sedan, s.price_suv,
+              s.duration_minutes, s.is_active
+       FROM package_services ps
+       JOIN services s ON ps.service_id = s.id
+       WHERE ps.package_id = ?
+       ORDER BY s.name ASC`,
+      [id]
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('Package services list error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 };
 

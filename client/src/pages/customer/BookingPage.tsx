@@ -182,6 +182,9 @@ export default function BookingPage() {
         </div>
         <h2 className="text-2xl font-extrabold text-[#1c1b1b] mb-2">Booking Requested!</h2>
         <p className="text-sm text-[#5f5e5e] mb-1">Your appointment request has been submitted for approval.</p>
+        {isPackageBooking && (
+          <p className="text-xs text-purple-600 font-semibold mb-1">📦 Package credit will be deducted once admin approves your booking.</p>
+        )}
         <p className="text-xs text-[#5f5e5e] mb-6">Reference: <span className="font-bold">#{bookingResult.data?.id}</span></p>
         <div className="bg-white rounded-lg p-6 shadow-sm max-w-sm w-full text-left space-y-2">
           <div className="flex justify-between text-sm">
@@ -658,10 +661,13 @@ export default function BookingPage() {
               <span className="ml-auto font-bold text-[#1c1b1b]">{formatTime(selectedSlot?.start_time)} – {formatTime(selectedSlot?.end_time)}</span>
             </div>
             {isPackageBooking && (
-              <div className="flex items-center gap-3 py-2 bg-purple-50 rounded-lg px-3 mt-2">
-                <Sparkles size={16} className="text-purple-600 shrink-0" />
-                <span className="text-purple-700 font-bold text-xs">Package Credit</span>
-                <span className="ml-auto text-xs font-bold text-purple-800">{activePackages[0]?.package_name}</span>
+              <div className="py-2 bg-purple-50 rounded-lg px-3 mt-2 space-y-1">
+                <div className="flex items-center gap-3">
+                  <Sparkles size={16} className="text-purple-600 shrink-0" />
+                  <span className="text-purple-700 font-bold text-xs">Package Credit</span>
+                  <span className="ml-auto text-xs font-bold text-purple-800">{activePackages[0]?.package_name}</span>
+                </div>
+                <p className="text-[10px] text-purple-600 ml-[28px]">Credit will be deducted only after admin approves this booking. If rejected or cancelled, your balance is restored.</p>
               </div>
             )}
           </div>

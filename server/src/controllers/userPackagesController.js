@@ -236,6 +236,62 @@ exports.renewPackage = async (req, res) => {
 };
 
 // ═══════════════════════════════════════════════════════════
+// CHECK SERVICE AVAILABILITY (read-only — for deferred deduction)
+// Does NOT reserve or deduct. Just checks if customer can use a service.
+// ═══════════════════════════════════════════════════════════
+exports.checkServiceAvailability = async (conn, userId, serviceName) => {
+  // Find active package
+  const [activePackages] = await conn.query(
+    `SELECT up.id, up.package_id, p.name AS package_name
+     FROM user_packages up
+     JOIN packages p ON p.id = up.package_id
+     WHERE up.user_id = ? AND up.package_status = 'active'
+       AND (up.end_date IS NULL OR up.end_date > NOW())
+     ORDER BY up.start_date DESC LIMIT 1`,
+    [userId]
+  );
+
+  if (!activePackages.length) {
+    return { has_package: false, can_use: false, remaining: 0, reason: 'No active package found' };
+  }
+
+  const userPackageId = activePackages[0].id;
+  const packageId = activePackages[0].package_id;
+  const packageName = activePackages[0].package_name;
+
+  // Get total_count for this service
+  const serviceBreakdown = await getServiceBreakdown(conn, packageId, packageName);
+  const serviceEntry = serviceBreakdown.find(s => s.service_name === serviceName);
+
+  if (!serviceEntry) {
+    return { has_package: true, can_use: false, remaining: 0, reason: 'Service not included in your package' };
+  }
+
+  const totalCount = serviceEntry.total_count;
+
+  // Get used_count (read-only — no FOR UPDATE)
+  const [usage] = await conn.query(
+    'SELECT used_count FROM package_usage WHERE user_package_id = ? AND service_name = ?',
+    [userPackageId, serviceName]
+  );
+
+  const usedCount = usage.length ? usage[0].used_count : 0;
+  const remaining = totalCount - usedCount;
+
+  if (remaining <= 0) {
+    return { has_package: true, can_use: false, remaining: 0, reason: 'No remaining credits for this service' };
+  }
+
+  return {
+    has_package: true,
+    can_use: true,
+    remaining: remaining,
+    package_name: packageName,
+    user_package_id: userPackageId,
+  };
+};
+
+// ═══════════════════════════════════════════════════════════
 // CHECK & RESERVE SERVICE (booking-time)
 // Does NOT consume — only reserves. Consumed after job completion.
 // ═══════════════════════════════════════════════════════════

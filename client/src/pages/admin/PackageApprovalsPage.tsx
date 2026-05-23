@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axiosInstance';
-import { CheckCircle, Loader2, PackageOpen, User, Car, Clock } from 'lucide-react';
+import { CheckCircle, XCircle, Loader2, PackageOpen, User, Car, Clock, AlertTriangle } from 'lucide-react';
 
 export default function PackageApprovalsPage() {
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [approvingId, setApprovingId] = useState<number | null>(null);
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
+  const [rejectModalId, setRejectModalId] = useState<number | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
 
   const fetchRequests = async () => {
     try {
@@ -31,7 +35,7 @@ export default function PackageApprovalsPage() {
       const res = await api.put(`/packages/requests/${id}/approve`);
       if (res.data.success) {
         alert('Package approved successfully!');
-        fetchRequests(); // refresh list
+        fetchRequests();
       }
     } catch (err) {
       console.error(err);
@@ -41,8 +45,39 @@ export default function PackageApprovalsPage() {
     }
   };
 
+  const openRejectModal = (id: number) => {
+    setRejectModalId(id);
+    setRejectionReason('');
+  };
+
+  const handleReject = async () => {
+    if (!rejectModalId) return;
+    if (!rejectionReason.trim()) {
+      alert('Please provide a reason for rejection.');
+      return;
+    }
+    setRejectingId(rejectModalId);
+    try {
+      const res = await api.put(`/packages/requests/${rejectModalId}/reject`, {
+        rejection_reason: rejectionReason.trim(),
+      });
+      if (res.data.success) {
+        alert('Package request rejected. Customer will be notified via SMS.');
+        setRejectModalId(null);
+        setRejectionReason('');
+        fetchRequests();
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to reject package request');
+    } finally {
+      setRejectingId(null);
+    }
+  };
+
   const pendingRequests = requests.filter(r => r.status === 'pending');
   const approvedRequests = requests.filter(r => r.status === 'approved');
+  const rejectedRequests = requests.filter(r => r.status === 'rejected');
 
   if (loading) {
     return (
@@ -59,107 +94,250 @@ export default function PackageApprovalsPage() {
           <PackageOpen className="text-[#D32F2F] w-7 h-7" />
           Package Approvals
         </h1>
-        <p className="text-sm text-[#5f5e5e] mt-1">Review and approve customer package purchases to activate them.</p>
+        <p className="text-sm text-[#5f5e5e] mt-1">Review, approve, or reject customer package purchases.</p>
       </div>
 
-      <div className="mb-8">
-        <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-          <Clock className="w-5 h-5 text-orange-500" /> Pending Requests
-        </h2>
-        {pendingRequests.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
-            <PackageOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 font-medium">No pending package requests.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {pendingRequests.map(req => (
-              <div key={req.id} className="bg-white rounded-xl shadow-sm border border-orange-200 overflow-hidden flex flex-col">
-                <div className="bg-orange-50 p-4 border-b border-orange-100 flex justify-between items-start">
-                  <div>
-                    <h3 className="font-bold text-gray-900 text-lg">{req.package_name}</h3>
-                    <div className="text-sm font-bold text-orange-600 mt-1">₹{req.price}</div>
-                  </div>
-                  <span className="bg-orange-200 text-orange-800 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">Pending</span>
-                </div>
-                <div className="p-4 space-y-3 flex-1">
-                  <div className="flex items-start gap-2">
-                    <User className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
-                    <div className="text-sm">
-                      <div className="font-medium text-gray-900">{req.customer_name}</div>
-                      <div className="text-gray-500">{req.customer_mobile}</div>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Car className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
-                    <div className="text-sm">
-                      <div className="font-medium text-gray-900">{req.brand} {req.model}</div>
-                      <div className="text-gray-500">{req.registration_no || 'No Reg'}</div>
-                    </div>
-                  </div>
-                  <div className="text-xs text-gray-400 pt-2 border-t border-gray-100">
-                    Requested on: {new Date(req.created_at).toLocaleString('en-IN')}
-                  </div>
-                </div>
-                <div className="p-4 bg-gray-50 border-t border-gray-100">
-                  <button
-                    onClick={() => handleApprove(req.id)}
-                    disabled={approvingId === req.id}
-                    className="w-full flex justify-center items-center gap-2 px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-                  >
-                    {approvingId === req.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                    Approve Package
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* ─── Tab Bar ─── */}
+      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6 max-w-md">
+        <button
+          onClick={() => setActiveTab('pending')}
+          className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold transition-all ${
+            activeTab === 'pending'
+              ? 'bg-white shadow-sm text-orange-700'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Clock className="w-4 h-4" />
+          Pending
+          {pendingRequests.length > 0 && (
+            <span className="bg-orange-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+              {pendingRequests.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('approved')}
+          className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold transition-all ${
+            activeTab === 'approved'
+              ? 'bg-white shadow-sm text-green-700'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <CheckCircle className="w-4 h-4" />
+          Approved
+        </button>
+        <button
+          onClick={() => setActiveTab('rejected')}
+          className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold transition-all ${
+            activeTab === 'rejected'
+              ? 'bg-white shadow-sm text-red-700'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <XCircle className="w-4 h-4" />
+          Rejected
+        </button>
       </div>
 
-      <div>
-        <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-          <CheckCircle className="w-5 h-5 text-green-500" /> Recently Approved
-        </h2>
-        {approvedRequests.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
-            <p className="text-gray-500 font-medium">No approved packages yet.</p>
-          </div>
-        ) : (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider text-[11px]">
-                  <th className="p-4">Package</th>
-                  <th className="p-4">Customer</th>
-                  <th className="p-4">Vehicle</th>
-                  <th className="p-4">Amount</th>
-                  <th className="p-4">Approved At</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {approvedRequests.map(req => (
-                  <tr key={req.id} className="hover:bg-gray-50">
-                    <td className="p-4 font-medium text-gray-900">{req.package_name}</td>
-                    <td className="p-4">
-                      <div>{req.customer_name}</div>
-                      <div className="text-gray-500 text-xs">{req.customer_mobile}</div>
-                    </td>
-                    <td className="p-4">
-                      <div>{req.brand} {req.model}</div>
-                      <div className="text-gray-500 text-xs">{req.registration_no || 'No Reg'}</div>
-                    </td>
-                    <td className="p-4 font-bold text-gray-900">₹{req.price}</td>
-                    <td className="p-4 text-gray-500">
-                      {new Date(req.approved_at || req.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })}
-                    </td>
+      {/* ─── PENDING TAB ─── */}
+      {activeTab === 'pending' && (
+        <div>
+          {pendingRequests.length === 0 ? (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+              <PackageOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-500 font-medium">No pending package requests.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {pendingRequests.map(req => (
+                <div key={req.id} className="bg-white rounded-xl shadow-sm border border-orange-200 overflow-hidden flex flex-col">
+                  <div className="bg-orange-50 p-4 border-b border-orange-100 flex justify-between items-start">
+                    <div>
+                      <h3 className="font-bold text-gray-900 text-lg">{req.package_name}</h3>
+                      <div className="text-sm font-bold text-orange-600 mt-1">₹{req.price}</div>
+                    </div>
+                    <span className="bg-orange-200 text-orange-800 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">Pending</span>
+                  </div>
+                  <div className="p-4 space-y-3 flex-1">
+                    <div className="flex items-start gap-2">
+                      <User className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+                      <div className="text-sm">
+                        <div className="font-medium text-gray-900">{req.customer_name}</div>
+                        <div className="text-gray-500">{req.customer_mobile}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <Car className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+                      <div className="text-sm">
+                        <div className="font-medium text-gray-900">{req.brand} {req.model}</div>
+                        <div className="text-gray-500">{req.registration_no || 'No Reg'}</div>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-400 pt-2 border-t border-gray-100">
+                      Requested on: {new Date(req.created_at).toLocaleString('en-IN')}
+                    </div>
+                  </div>
+                  <div className="p-4 bg-gray-50 border-t border-gray-100 flex gap-2">
+                    <button
+                      onClick={() => handleApprove(req.id)}
+                      disabled={approvingId === req.id}
+                      className="flex-1 flex justify-center items-center gap-2 px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                    >
+                      {approvingId === req.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => openRejectModal(req.id)}
+                      className="flex-1 flex justify-center items-center gap-2 px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── APPROVED TAB ─── */}
+      {activeTab === 'approved' && (
+        <div>
+          {approvedRequests.length === 0 ? (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+              <p className="text-gray-500 font-medium">No approved packages yet.</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider text-[11px]">
+                    <th className="p-4">Package</th>
+                    <th className="p-4">Customer</th>
+                    <th className="p-4">Vehicle</th>
+                    <th className="p-4">Amount</th>
+                    <th className="p-4">Approved At</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {approvedRequests.map(req => (
+                    <tr key={req.id} className="hover:bg-gray-50">
+                      <td className="p-4 font-medium text-gray-900">{req.package_name}</td>
+                      <td className="p-4">
+                        <div>{req.customer_name}</div>
+                        <div className="text-gray-500 text-xs">{req.customer_mobile}</div>
+                      </td>
+                      <td className="p-4">
+                        <div>{req.brand} {req.model}</div>
+                        <div className="text-gray-500 text-xs">{req.registration_no || 'No Reg'}</div>
+                      </td>
+                      <td className="p-4 font-bold text-gray-900">₹{req.price}</td>
+                      <td className="p-4 text-gray-500">
+                        {new Date(req.approved_at || req.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── REJECTED TAB ─── */}
+      {activeTab === 'rejected' && (
+        <div>
+          {rejectedRequests.length === 0 ? (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+              <p className="text-gray-500 font-medium">No rejected requests.</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider text-[11px]">
+                    <th className="p-4">Package</th>
+                    <th className="p-4">Customer</th>
+                    <th className="p-4">Vehicle</th>
+                    <th className="p-4">Amount</th>
+                    <th className="p-4">Rejection Reason</th>
+                    <th className="p-4">Rejected At</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {rejectedRequests.map(req => (
+                    <tr key={req.id} className="hover:bg-red-50/30">
+                      <td className="p-4 font-medium text-gray-900">{req.package_name}</td>
+                      <td className="p-4">
+                        <div>{req.customer_name}</div>
+                        <div className="text-gray-500 text-xs">{req.customer_mobile}</div>
+                      </td>
+                      <td className="p-4">
+                        <div>{req.brand} {req.model}</div>
+                        <div className="text-gray-500 text-xs">{req.registration_no || 'No Reg'}</div>
+                      </td>
+                      <td className="p-4 font-bold text-gray-900">₹{req.price}</td>
+                      <td className="p-4">
+                        <div className="flex items-start gap-1.5">
+                          <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
+                          <span className="text-red-600 text-xs">{req.rejection_reason || 'No reason provided'}</span>
+                        </div>
+                      </td>
+                      <td className="p-4 text-gray-500 text-xs">
+                        {new Date(req.updated_at || req.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── REJECTION REASON MODAL ─── */}
+      {rejectModalId && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="bg-red-50 px-6 py-4 border-b border-red-100">
+              <h3 className="text-lg font-bold text-red-800 flex items-center gap-2">
+                <XCircle className="w-5 h-5" />
+                Reject Package Request
+              </h3>
+              <p className="text-sm text-red-600 mt-1">The customer will be notified via SMS.</p>
+            </div>
+            <div className="p-6">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Rejection Reason <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                placeholder="e.g., Payment not received, Duplicate request..."
+                rows={3}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-200 focus:border-red-400 outline-none resize-none"
+              />
+            </div>
+            <div className="flex gap-3 px-6 pb-6">
+              <button
+                onClick={() => { setRejectModalId(null); setRejectionReason(''); }}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReject}
+                disabled={rejectingId !== null}
+                className="flex-1 flex justify-center items-center gap-2 px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {rejectingId ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                Confirm Reject
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

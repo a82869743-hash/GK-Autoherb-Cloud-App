@@ -24,6 +24,7 @@ export default function DashboardPage() {
   const [bookingsLoading, setBookingsLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showNotifications, setShowNotifications] = useState(false);
+  const [pendingPkgCount, setPendingPkgCount] = useState(0);
 
   // Live clock
   useEffect(() => {
@@ -44,6 +45,12 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchBookings();
+    
+    // Fetch pending package request count
+    api.get('/packages/requests').then(res => {
+      const pending = (res.data.data || []).filter((r: any) => r.status === 'pending');
+      setPendingPkgCount(pending.length);
+    }).catch(() => {});
     
     if (!token) return;
     const socket = io(import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:5000', {
@@ -260,6 +267,26 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Pending Package Requests ─────────── */}
+      {pendingPkgCount > 0 && (
+        <Link to="/admin/package-approvals" className="block mb-6 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all group">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-purple-100 rounded-xl flex-shrink-0 group-hover:scale-110 transition-transform">
+              <Package size={20} className="text-purple-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-bold text-purple-800 text-sm mb-0.5">
+                📦 {pendingPkgCount} Package Request{pendingPkgCount > 1 ? 's' : ''} Awaiting Approval
+              </h3>
+              <p className="text-xs text-purple-600">
+                Review and approve/reject pending customer package purchases.
+              </p>
+            </div>
+            <ChevronRight size={18} className="text-purple-300 group-hover:text-purple-600 transition-colors" />
+          </div>
+        </Link>
       )}
 
       {/* ── Main Content Grid ────────────────────── */}

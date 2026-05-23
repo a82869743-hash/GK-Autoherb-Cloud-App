@@ -265,9 +265,10 @@ exports.create = async (req, res) => {
       );
     }
 
-    // 5. Package Usage Deduction
+    // 5. Package Usage — DEFERRED DEDUCTION (only check eligibility, don't deduct yet)
     let packageUsed = false;
     let packageInfo = null;
+    let resolvedUserPackageId = null;
     const primaryServiceId = service_id || (allServiceIds.length > 0 ? allServiceIds[0] : null);
 
     if (use_package && primaryServiceId && !is_free_wash) {
@@ -275,18 +276,26 @@ exports.create = async (req, res) => {
       if (svcRows.length) {
         const serviceName = svcRows[0].name;
         const userPkgCtrl = require('./userPackagesController');
-        const result = await userPkgCtrl.checkAndUseService(conn, customerId, serviceName);
+        // Only CHECK availability — do NOT deduct. Deduction happens on admin approval.
+        const result = await userPkgCtrl.checkServiceAvailability(conn, customerId, serviceName);
 
         if (result.can_use) {
           packageUsed = true;
+          resolvedUserPackageId = result.user_package_id;
           packageInfo = {
             package_name: result.package_name,
             service_name: serviceName,
             remaining: result.remaining,
           };
+        } else {
+          await conn.rollback();
+          return res.status(422).json({ success: false, error: result.reason || 'No package credits available for this service' });
         }
       }
     }
+
+    // Determine booking type
+    const bookingType = (use_package && packageUsed) ? 'package' : 'direct';
 
     // 6. Increment booked_count
     await conn.query('UPDATE slots SET booked_count = booked_count + 1 WHERE id = ?', [slot_id]);
@@ -296,13 +305,14 @@ exports.create = async (req, res) => {
       `INSERT INTO bookings 
        (customer_id, vehicle_id, slot_id, service_id, package_id, 
         vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category, total_duration,
-        status, is_free_wash, notes, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_approval', ?, ?, DATE_ADD(NOW(), INTERVAL 5 MINUTE))`,
+        status, is_free_wash, notes, booking_type, user_package_id, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_approval', ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 5 MINUTE))`,
       [
         customerId, resolvedVehicleId, slot_id,
         primaryServiceId || null, package_id || null,
         resolvedBrand, resolvedModel, resolvedRegNo, vehicle_category || null, totalDuration,
-        is_free_wash ? 1 : 0, notes || null
+        is_free_wash ? 1 : 0, notes || null,
+        bookingType, resolvedUserPackageId
       ]
     );
 
@@ -382,6 +392,24 @@ exports.approve = async (req, res) => {
       return res.status(422).json({ success: false, error: `Cannot approve a ${booking.status} booking` });
     }
 
+    // ─── DEFERRED DEDUCTION: Deduct package credit NOW (on approval) ───
+    if (booking.booking_type === 'package' && booking.user_package_id && booking.service_id) {
+      const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [booking.service_id]);
+      if (svcRows.length) {
+        const serviceName = svcRows[0].name;
+        const userPkgCtrl = require('./userPackagesController');
+        const result = await userPkgCtrl.checkAndUseService(conn, booking.customer_id, serviceName);
+        if (!result.can_use) {
+          await conn.rollback();
+          return res.status(422).json({
+            success: false,
+            error: `Cannot approve: No package credits remaining for ${serviceName}. ${result.reason || ''}`,
+          });
+        }
+        console.log(`[BOOKING] Package credit deducted for booking #${id} — service: ${serviceName}, remaining: ${result.remaining}`);
+      }
+    }
+
     await conn.query(
       `UPDATE bookings SET status = 'confirmed', booking_notes = ?, approved_by = ?, approved_at = NOW(), expires_at = NULL WHERE id = ?`,
       [booking_notes || null, req.user.id, id]
@@ -391,14 +419,14 @@ exports.approve = async (req, res) => {
 
     // Fire-and-forget confirmation SMS
     try {
-      const sendSms = require('../utils/sendSms');
+      const messagingService = require('../services/messagingService');
       const [custRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [booking.customer_id]);
       const [slotRows] = await pool.query('SELECT slot_date, start_time FROM slots WHERE id = ?', [booking.slot_id]);
       if (custRows.length && custRows[0].mobile && slotRows.length) {
         const date = new Date(slotRows[0].slot_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
         const time = slotRows[0].start_time ? slotRows[0].start_time.substring(0, 5) : '';
         const msg = `GK AutoHerb: Hi ${custRows[0].name}, your booking #${id} for ${date} at ${time} is CONFIRMED! See you soon.`;
-        sendSms(custRows[0].mobile, msg).catch(() => {});
+        messagingService.sendSMS(custRows[0].mobile, null, null, { content: msg }).catch(() => {});
       }
     } catch { /* non-blocking */ }
 
@@ -447,22 +475,31 @@ exports.reject = async (req, res) => {
       );
     }
 
-    // Restore package usage if booking used a package service
-    if (booking.package_id && booking.service_id) {
+    // Restore package usage if booking was a confirmed package booking (credit already deducted)
+    let packageRestored = false;
+    if (booking.booking_type === 'package' && booking.status === 'confirmed' && booking.service_id) {
       try {
         const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [booking.service_id]);
         if (svcRows.length) {
           const serviceName = svcRows[0].name;
-          // Find the user's active user_package for this package
-          const [userPkgs] = await conn.query(
-            `SELECT id FROM user_packages 
-             WHERE user_id = ? AND package_id = ? AND package_status = 'active'
-             ORDER BY start_date DESC LIMIT 1`,
-            [booking.customer_id, booking.package_id]
-          );
-          if (userPkgs.length) {
-            await cancelReservation(conn, userPkgs[0].id, serviceName);
-            console.log(`[BOOKING] Package credit restored for booking #${id} — service: ${serviceName}`);
+          const userPackageId = booking.user_package_id;
+          if (userPackageId) {
+            await cancelReservation(conn, userPackageId, serviceName);
+            packageRestored = true;
+            console.log(`[BOOKING] Package credit restored for rejected booking #${id} — service: ${serviceName}`);
+          } else {
+            // Fallback: find active user_package
+            const [userPkgs] = await conn.query(
+              `SELECT id FROM user_packages 
+               WHERE user_id = ? AND package_id = ? AND package_status = 'active'
+               ORDER BY start_date DESC LIMIT 1`,
+              [booking.customer_id, booking.package_id]
+            );
+            if (userPkgs.length) {
+              await cancelReservation(conn, userPkgs[0].id, serviceName);
+              packageRestored = true;
+              console.log(`[BOOKING] Package credit restored (fallback) for rejected booking #${id} — service: ${serviceName}`);
+            }
           }
         }
       } catch (pkgErr) {
@@ -472,8 +509,21 @@ exports.reject = async (req, res) => {
     }
 
     await conn.commit();
+
+    // Fire-and-forget rejection SMS
+    try {
+      const messagingService = require('../services/messagingService');
+      const [custRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [booking.customer_id]);
+      if (custRows.length && custRows[0].mobile) {
+        const msg = packageRestored
+          ? `GK AutoHerb: Hi ${custRows[0].name}, your booking #${id} has been rejected and your package balance has been restored. Contact us for details.`
+          : `GK AutoHerb: Hi ${custRows[0].name}, your booking #${id} has been rejected. ${booking_notes ? 'Reason: ' + booking_notes : 'Contact us for details.'}`;
+        messagingService.sendSMS(custRows[0].mobile, null, null, { content: msg }).catch(() => {});
+      }
+    } catch { /* non-blocking */ }
+
     console.log(`[BOOKING] #${id} rejected by admin ${req.user.id}`);
-    res.json({ success: true, message: 'Booking rejected' });
+    res.json({ success: true, message: packageRestored ? 'Booking rejected — package balance restored' : 'Booking rejected' });
   } catch (err) {
     await conn.rollback();
     console.error('Booking reject error:', err);
@@ -519,22 +569,28 @@ exports.cancel = async (req, res) => {
       );
     }
 
-    // 4. Restore package usage if booking used a package service
-    if (booking.package_id && booking.service_id) {
+    // 4. Restore package usage — ONLY if booking was confirmed (credit was deducted on approval)
+    if (booking.booking_type === 'package' && booking.status === 'confirmed' && booking.service_id) {
       try {
         const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [booking.service_id]);
         if (svcRows.length) {
           const serviceName = svcRows[0].name;
-          // Find the user's active user_package for this package
-          const [userPkgs] = await conn.query(
-            `SELECT id FROM user_packages 
-             WHERE user_id = ? AND package_id = ? AND package_status = 'active'
-             ORDER BY start_date DESC LIMIT 1`,
-            [booking.customer_id, booking.package_id]
-          );
-          if (userPkgs.length) {
-            await cancelReservation(conn, userPkgs[0].id, serviceName);
+          const userPackageId = booking.user_package_id;
+          if (userPackageId) {
+            await cancelReservation(conn, userPackageId, serviceName);
             console.log(`[BOOKING] Package credit restored for cancelled booking #${id} — service: ${serviceName}`);
+          } else {
+            // Fallback
+            const [userPkgs] = await conn.query(
+              `SELECT id FROM user_packages 
+               WHERE user_id = ? AND package_id = ? AND package_status = 'active'
+               ORDER BY start_date DESC LIMIT 1`,
+              [booking.customer_id, booking.package_id]
+            );
+            if (userPkgs.length) {
+              await cancelReservation(conn, userPkgs[0].id, serviceName);
+              console.log(`[BOOKING] Package credit restored (fallback) for cancelled booking #${id} — service: ${serviceName}`);
+            }
           }
         }
       } catch (pkgErr) {
@@ -542,6 +598,7 @@ exports.cancel = async (req, res) => {
         // Non-fatal — don't block the cancellation
       }
     }
+    // Note: pending_approval package bookings don't need restore since credits weren't deducted
 
     await conn.commit();
     res.json({ success: true, message: 'Booking cancelled' });
