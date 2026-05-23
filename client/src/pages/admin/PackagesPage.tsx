@@ -210,7 +210,19 @@ export default function PackagesPage() {
   // Helper to get service count by name from pkg.services
   const getServiceCount = (pkg: any, serviceName: string): number => {
     if (!pkg.services || pkg.services.length === 0) return 0;
-    const svc = pkg.services.find((s: any) => s.name?.toLowerCase() === serviceName.toLowerCase());
+    const svc = pkg.services.find((s: any) => {
+      const dbName = s.name?.toLowerCase() || '';
+      const uiName = serviceName.toLowerCase();
+      
+      if (uiName === 'car foam wash' && dbName.includes('foam wash')) return true;
+      if (uiName === 'body wax coat' && dbName.includes('wax coat') && !dbName.includes('two wheeler') && !dbName.includes('ceramic')) return true;
+      if (uiName === 'two wheeler wash' && dbName.includes('two wheeler wash')) return true;
+      if (uiName === 'two wheeler wax coat' && dbName.includes('two wheeler wax')) return true;
+      if (uiName === 'body hybrid ceramic wax coat' && dbName.includes('ceramic')) return true;
+      if (uiName === 'deep cleaning' && dbName.includes('deep clean')) return true;
+
+      return dbName === uiName;
+    });
     return svc ? (svc.total_count || 0) : 0;
   };
 
