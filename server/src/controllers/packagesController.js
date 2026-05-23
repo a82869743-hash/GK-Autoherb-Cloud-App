@@ -345,6 +345,17 @@ exports.approveRequest = async (req, res) => {
     );
 
     await conn.commit();
+
+    // 4. Fire-and-forget approval SMS
+    try {
+      const messagingService = require('../services/messagingService');
+      const [custRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [reqData.customer_id]);
+      if (custRows.length && custRows[0].mobile) {
+        const msg = `GK AutoHerb: Hi ${custRows[0].name}, your package request has been approved. You can now use your package services.`;
+        messagingService.sendSMS(custRows[0].mobile, null, null, { content: msg }).catch(() => {});
+      }
+    } catch { /* non-blocking */ }
+
     res.json({ success: true, message: 'Package request approved successfully' });
   } catch (err) {
     await conn.rollback();

@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, CreditCard, Droplets, ArrowRight, Shield, Star } from 'lucide-react';
+import { Sparkles, CreditCard, Droplets, ArrowRight, Shield } from 'lucide-react';
 import { useServices } from '../../api/hooks/useServices';
-import { usePackages } from '../../api/hooks/usePackages';
 import { useLoyalty } from '../../api/hooks/useLoyalty';
 import Button from '../../components/ui/Button';
 import { SkeletonCard } from '../../components/ui/SkeletonLoader';
@@ -31,12 +30,10 @@ export default function CustomerServicesPage() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('all');
   const { data: svcData, isLoading: svcLoading } = useServices({ active_only: true });
-  const { data: pkgData, isLoading: pkgLoading } = usePackages({ published_only: true });
   const { data: loyalty } = useLoyalty('mine');
 
   const services = sortServicesByPriority(svcData?.data || []);
-  const packages = pkgData?.data || [];
-  const isLoading = svcLoading || pkgLoading;
+  const isLoading = svcLoading;
 
   const getPriceKey = (f: Filter) => f === 'all' ? null : `price_${f}`;
 
@@ -50,7 +47,7 @@ export default function CustomerServicesPage() {
             <span className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]">Premium Detail Studio</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight leading-tight mb-3">
-            Services & Packages
+            Our Services
           </h1>
           <p className="text-gray-400 text-sm sm:text-base max-w-lg font-medium leading-relaxed">
             Elevate your vehicle with our premium detailing services. Aerospace-grade materials, artisan techniques.
@@ -189,84 +186,7 @@ export default function CustomerServicesPage() {
             </div>
           )}
 
-          {/* ── Packages ─────────────────────────────────── */}
-          {packages.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <Star size={14} className="text-[#D32F2F]" />
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e]">Packages</p>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {packages.map((pkg: any, idx: number) => (
-                  <div
-                    key={pkg.id}
-                    className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 card-premium group relative overflow-hidden opacity-0 animate-fade-in-up"
-                    style={{ animationDelay: `${idx * 0.05}s`, animationFillMode: 'forwards' }}
-                  >
-                    {/* Red accent top bar */}
-                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#af101a] to-[#D32F2F]" />
-                    
-                    <div className="flex items-center gap-2 mb-1 mt-1">
-                      <Sparkles size={14} className="text-[#D32F2F]" />
-                      <h3 className="font-bold text-[#1c1b1b] text-base group-hover:text-[#D32F2F] transition-colors">{pkg.name}</h3>
-                    </div>
-                    {pkg.description && <p className="text-xs text-[#5f5e5e] mt-1 line-clamp-2 leading-relaxed">{pkg.description}</p>}
-
-                    {/* Included services */}
-                    {pkg.services?.length > 0 && (
-                      <div className="mt-3">
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-1.5">Includes</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {pkg.services.map((s: any) => (
-                            <span key={s.id} className="px-2.5 py-1 bg-[#f6f3f2] rounded-md text-[10px] font-bold text-[#5f5e5e] border border-gray-100">{s.name}</span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Benefits badges */}
-                    <div className="flex gap-2 mt-3">
-                      {pkg.wash_count > 0 && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 rounded-lg text-[10px] font-bold text-blue-600 border border-blue-100">
-                          <Droplets size={10} /> {pkg.wash_count} Washes
-                        </span>
-                      )}
-                      {pkg.wax_count > 0 && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-50 rounded-lg text-[10px] font-bold text-purple-600 border border-purple-100">
-                          <Sparkles size={10} /> {pkg.wax_count} Wax
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="mt-4 pt-4 border-t border-gray-100">
-                      {filter === 'all' ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1.5 text-center">
-                          <div className="bg-[#faf7f5] rounded-lg py-2"><p className="text-[8px] font-bold uppercase text-[#5f5e5e]">Hatch</p><p className="text-xs font-extrabold">{formatINR(pkg.price_hatchback)}</p></div>
-                          <div className="bg-[#faf7f5] rounded-lg py-2"><p className="text-[8px] font-bold uppercase text-[#5f5e5e]">Med Hatch</p><p className="text-xs font-extrabold">{formatINR(pkg.price_medium_hatchback)}</p></div>
-                          <div className="bg-[#faf7f5] rounded-lg py-2"><p className="text-[8px] font-bold uppercase text-[#5f5e5e]">Sedan</p><p className="text-xs font-extrabold">{formatINR(pkg.price_sedan)}</p></div>
-                          <div className="bg-[#faf7f5] rounded-lg py-2"><p className="text-[8px] font-bold uppercase text-[#5f5e5e]">Prem Sedan</p><p className="text-xs font-extrabold">{formatINR(pkg.price_premium_sedan)}</p></div>
-                          <div className="bg-[#faf7f5] rounded-lg py-2"><p className="text-[8px] font-bold uppercase text-[#5f5e5e]">SUV</p><p className="text-xs font-extrabold">{formatINR(pkg.price_suv)}</p></div>
-                        </div>
-                      ) : (
-                        <p className="text-lg font-black text-[#D32F2F]">{formatINR(pkg[getPriceKey(filter)!])}</p>
-                      )}
-                    </div>
-
-                    <Button
-                      size="sm"
-                      className="w-full mt-4"
-                      onClick={() => navigate(`/customer/bookings/new?package_id=${pkg.id}`)}
-                      icon={<ArrowRight size={14} />}
-                    >
-                      Book Now
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {!services.length && !packages.length && (
+          {!services.length && (
             <div className="text-center py-12 text-[#5f5e5e]">No services available yet. Check back soon!</div>
           )}
         </div>
