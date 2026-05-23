@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../../api/axiosInstance';
 import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
-import { PackageOpen, Car, CheckCircle, Loader2, ArrowRight, ShieldCheck, X, AlertCircle, Clock, XCircle } from 'lucide-react';
+import { PackageOpen, Car, CheckCircle, Loader2, ArrowRight, ShieldCheck, X, AlertCircle, Clock, XCircle, Check, Minus } from 'lucide-react';
 
 interface Vehicle {
   id: number;
@@ -10,6 +10,13 @@ interface Vehicle {
   brand: string;
   model: string;
   category: 'hatchback' | 'medium_hatchback' | 'sedan' | 'premium_sedan' | 'suv';
+}
+
+interface PkgService {
+  id: number;
+  ps_id?: number;
+  name: string;
+  total_count: number;
 }
 
 interface Pkg {
@@ -22,7 +29,37 @@ interface Pkg {
   price_sedan: number;
   price_premium_sedan: number;
   price_suv: number;
+  services?: PkgService[];
 }
+
+// Package tier colors
+const TIER_COLORS: Record<string, { gradient: string; border: string; badge: string; text: string }> = {
+  bronze:   { gradient: 'from-amber-800 to-amber-950',  border: 'border-amber-400',  badge: 'bg-amber-100 text-amber-800',    text: 'text-amber-400' },
+  silver:   { gradient: 'from-slate-500 to-slate-800',   border: 'border-slate-400',  badge: 'bg-slate-100 text-slate-700',    text: 'text-slate-300' },
+  gold:     { gradient: 'from-yellow-600 to-yellow-900', border: 'border-yellow-500', badge: 'bg-yellow-100 text-yellow-800',  text: 'text-yellow-400' },
+  diamond:  { gradient: 'from-sky-600 to-sky-900',       border: 'border-sky-400',    badge: 'bg-sky-100 text-sky-800',        text: 'text-sky-300' },
+  platinum: { gradient: 'from-purple-700 to-purple-950', border: 'border-purple-400', badge: 'bg-purple-100 text-purple-800',  text: 'text-purple-300' },
+};
+
+const DEFAULT_TIER_COLOR = { gradient: 'from-gray-700 to-gray-900', border: 'border-red-500', badge: 'bg-red-100 text-red-800', text: 'text-red-400' };
+
+function getTierKey(name: string): string {
+  const lower = name.toLowerCase();
+  for (const key of Object.keys(TIER_COLORS)) {
+    if (lower.includes(key)) return key;
+  }
+  return '';
+}
+
+// All 6 service types from the flyer
+const ALL_SERVICES = [
+  'Car Foam Wash',
+  'Body Wax Coat',
+  'Two Wheeler Wash',
+  'Two Wheeler Wax Coat',
+  'Body Hybrid Ceramic Wax Coat',
+  'Deep Cleaning',
+];
 
 export default function BuyPackagesPage() {
   const { user } = useAuthStore();
@@ -76,6 +113,13 @@ export default function BuyPackagesPage() {
     }
   };
 
+  // Get service count from package's services array
+  const getServiceCount = (pkg: Pkg, serviceName: string): number => {
+    if (!pkg.services || pkg.services.length === 0) return 0;
+    const svc = pkg.services.find(s => s.name?.toLowerCase() === serviceName.toLowerCase());
+    return svc ? (svc.total_count || 0) : 0;
+  };
+
   // Step 1: User clicks "Request to Buy" → show confirmation modal
   const handleBuyClick = (pkg: Pkg) => {
     if (!selectedVehicle) {
@@ -117,10 +161,14 @@ export default function BuyPackagesPage() {
 
   return (
     <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 font-sans">
+      {/* Header */}
       <div className="mb-8 text-center">
-        <h1 className="text-3xl font-extrabold text-gray-900 flex items-center justify-center gap-3">
-          <PackageOpen className="text-red-600 w-8 h-8" />
-          Buy Premium Packages
+        <div className="inline-flex items-center gap-2 bg-red-50 text-red-700 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider mb-3">
+          <PackageOpen className="w-4 h-4" />
+          Almost 45% Discount
+        </div>
+        <h1 className="text-3xl font-extrabold text-gray-900">
+          Annual Car Care Packages
         </h1>
         <p className="mt-2 text-gray-600 text-sm">
           Select your vehicle to see personalized pricing for our exclusive car care packages.
@@ -150,47 +198,79 @@ export default function BuyPackagesPage() {
         </div>
       )}
 
+      {/* ─── Package Cards Grid ─────────────────────── */}
       {selectedVehicle && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
           {packages.map(pkg => {
             const price = getPrice(pkg, selectedVehicle.category);
             const isSubmitting = submittingId === pkg.id;
+            const tierKey = getTierKey(pkg.name);
+            const colors = TIER_COLORS[tierKey] || DEFAULT_TIER_COLOR;
 
-            const [tierName, washType] = pkg.name.includes(' - ') ? pkg.name.split(' - ') : [pkg.name, ''];
+            // Extract paid foam wash count from description or use wash_count
+            const paidWashText = pkg.description?.match(/Pay\s+(?:For\s+)?(\d+)\s+Car\s+Foam\s+Wash/i);
+            const paidWashCount = paidWashText ? parseInt(paidWashText[1]) : (pkg.wash_count || 0);
 
             return (
-              <div key={pkg.id} className="bg-white rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] overflow-hidden flex flex-col transition-transform hover:-translate-y-1 duration-300">
-                <div className="bg-gradient-to-br from-gray-900 to-black p-6 text-white text-center relative overflow-hidden">
-                  {/* Decorative Background Icon */}
-                  <PackageOpen className="absolute -right-6 -bottom-6 w-32 h-32 text-white/5" />
-                  
-                  <h3 className="text-xl font-bold mb-1 relative z-10">{tierName}</h3>
-                  {washType && (
-                    <div className="text-red-400 text-sm font-semibold uppercase tracking-wide relative z-10 mb-2">
-                      {washType}
-                    </div>
-                  )}
-                  {pkg.wash_count > 0 && (
-                    <div className="inline-block bg-white/10 border border-white/20 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider backdrop-blur-sm relative z-10 mt-1">
-                      {pkg.wash_count} Washes Included
+              <div
+                key={pkg.id}
+                className={`bg-white rounded-2xl shadow-[0_4px_24px_-4px_rgba(0,0,0,0.12)] overflow-hidden flex flex-col transition-all hover:-translate-y-1 hover:shadow-[0_8px_30px_-4px_rgba(0,0,0,0.18)] duration-300 border-t-4 ${colors.border}`}
+              >
+                {/* ─── Package Header ─── */}
+                <div className={`bg-gradient-to-br ${colors.gradient} p-5 text-white text-center relative overflow-hidden`}>
+                  <PackageOpen className="absolute -right-4 -bottom-4 w-24 h-24 text-white/5" />
+                  <h3 className="text-lg font-extrabold uppercase tracking-wide relative z-10">
+                    {pkg.name.replace(/ Package$/i, '')}
+                  </h3>
+                  <p className="text-[11px] font-bold uppercase tracking-wider opacity-80 relative z-10">Package</p>
+                  {paidWashCount > 0 && (
+                    <div className="mt-3 text-xs font-semibold opacity-90 relative z-10 bg-white/10 inline-block px-3 py-1 rounded-full">
+                      Pay For {paidWashCount} Car Foam Wash
                     </div>
                   )}
                 </div>
-                
-                <div className="p-6 flex-1 flex flex-col">
-                  <div className="text-center mb-6">
-                    <span className="text-4xl font-extrabold text-gray-900">₹{price}</span>
-                    <span className="text-gray-500 ml-1">/ pkg</span>
-                  </div>
 
-                  <p className="text-gray-600 text-sm mb-6 flex-1 text-center">
-                    {pkg.description || 'Premium auto care services tailored for your vehicle.'}
+                {/* ─── Complementary Services ─── */}
+                <div className="p-4 flex-1 flex flex-col">
+                  <p className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-gray-400 mb-3 text-center">
+                    Complementary
                   </p>
 
+                  <div className="space-y-2 flex-1">
+                    {ALL_SERVICES.map(svcName => {
+                      const count = getServiceCount(pkg, svcName);
+                      const included = count > 0;
+                      return (
+                        <div key={svcName} className="flex items-center gap-2">
+                          {included ? (
+                            <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                              <Check className="w-3 h-3 text-green-600" strokeWidth={3} />
+                            </div>
+                          ) : (
+                            <div className="w-5 h-5 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
+                              <X className="w-3 h-3 text-red-400" strokeWidth={3} />
+                            </div>
+                          )}
+                          <span className={`text-xs ${included ? 'text-gray-800 font-semibold' : 'text-gray-400 line-through'}`}>
+                            {included && count > 1 ? `${count} ` : included ? '' : ''}{svcName}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* ─── Price ─── */}
+                  {price > 0 && (
+                    <div className="text-center mt-4 pt-3 border-t border-gray-100">
+                      <span className="text-2xl font-extrabold text-gray-900">₹{price.toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+
+                  {/* ─── Buy Button ─── */}
                   <button
                     onClick={() => handleBuyClick(pkg)}
                     disabled={isSubmitting}
-                    className="w-full py-3.5 px-4 rounded-xl font-bold text-sm text-white bg-red-600 hover:bg-red-700 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                    className="w-full mt-4 py-3 px-4 rounded-xl font-bold text-sm text-white bg-red-600 hover:bg-red-700 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                   >
                     {isSubmitting ? (
                       <Loader2 className="w-5 h-5 animate-spin" />
@@ -286,6 +366,22 @@ export default function BuyPackagesPage() {
                   <span className="text-gray-500">Package</span>
                   <span className="font-bold text-gray-900">{confirmPkg.name}</span>
                 </div>
+
+                {/* Show services included */}
+                {confirmPkg.services && confirmPkg.services.length > 0 && (
+                  <div className="border-t border-gray-200 pt-3">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Complementary Services</p>
+                    <div className="space-y-1.5">
+                      {confirmPkg.services.map(svc => (
+                        <div key={svc.id || svc.ps_id} className="flex items-center gap-2 text-xs">
+                          <Check className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+                          <span className="text-gray-700">{svc.total_count > 1 ? `${svc.total_count} ` : ''}{svc.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Vehicle</span>
                   <span className="font-semibold text-gray-900">
@@ -299,7 +395,7 @@ export default function BuyPackagesPage() {
                 <div className="border-t border-gray-200 pt-3 flex justify-between">
                   <span className="text-gray-500 text-sm">Price</span>
                   <span className="text-xl font-extrabold text-red-600">
-                    ₹{getPrice(confirmPkg, selectedVehicle.category)}
+                    ₹{getPrice(confirmPkg, selectedVehicle.category).toLocaleString('en-IN')}
                   </span>
                 </div>
               </div>

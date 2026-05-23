@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Package as PackageIcon, Edit2, Trash2, ToggleLeft, ToggleRight, Loader2, Eye, EyeOff, Minus } from 'lucide-react';
+import { Plus, Package as PackageIcon, Edit2, Trash2, ToggleLeft, ToggleRight, Loader2, Eye, EyeOff, Minus, Check, X as XIcon } from 'lucide-react';
 import { usePackages, useCreatePackage, useUpdatePackage, useTogglePackage, useTogglePackageVisibility, useDeletePackage } from '../../api/hooks/usePackages';
 import { useServices } from '../../api/hooks/useServices';
 import { useInventory } from '../../api/hooks/useInventory';
@@ -32,6 +32,33 @@ interface ServiceRow {
   total_count: number;
 }
 
+// Tier colors for visual distinction
+const TIER_COLORS: Record<string, { border: string; headerBg: string; badge: string }> = {
+  bronze:   { border: 'border-l-amber-600',   headerBg: 'bg-amber-50',   badge: 'bg-amber-100 text-amber-800' },
+  silver:   { border: 'border-l-slate-500',   headerBg: 'bg-slate-50',   badge: 'bg-slate-100 text-slate-700' },
+  gold:     { border: 'border-l-yellow-500',  headerBg: 'bg-yellow-50',  badge: 'bg-yellow-100 text-yellow-800' },
+  diamond:  { border: 'border-l-sky-500',     headerBg: 'bg-sky-50',     badge: 'bg-sky-100 text-sky-700' },
+  platinum: { border: 'border-l-purple-600',  headerBg: 'bg-purple-50',  badge: 'bg-purple-100 text-purple-700' },
+};
+
+// All 6 service names from the flyer
+const ALL_SERVICES = [
+  'Car Foam Wash',
+  'Body Wax Coat',
+  'Two Wheeler Wash',
+  'Two Wheeler Wax Coat',
+  'Body Hybrid Ceramic Wax Coat',
+  'Deep Cleaning',
+];
+
+function getTierKey(name: string): string {
+  const lower = name.toLowerCase();
+  for (const key of Object.keys(TIER_COLORS)) {
+    if (lower.includes(key)) return key;
+  }
+  return '';
+}
+
 export default function PackagesPage() {
   const toast = useUIStore((s) => s.toast);
   const { data: pkgs, isLoading } = usePackages();
@@ -58,7 +85,7 @@ export default function PackagesPage() {
   // Dynamic services list for custom package builder
   const [serviceRows, setServiceRows] = useState<ServiceRow[]>([]);
   
-  // Legacy: selected services (checkboxes, no count)
+  // Legacy: selected products (checkboxes, no count)
   const [selectedProducts, setSelectedProducts] = useState<any[]>([]);
 
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -180,6 +207,13 @@ export default function PackagesPage() {
     setDeleteOpen(false); setDeleteId(null);
   };
 
+  // Helper to get service count by name from pkg.services
+  const getServiceCount = (pkg: any, serviceName: string): number => {
+    if (!pkg.services || pkg.services.length === 0) return 0;
+    const svc = pkg.services.find((s: any) => s.name?.toLowerCase() === serviceName.toLowerCase());
+    return svc ? (svc.total_count || 0) : 0;
+  };
+
   return (
     <>
       <AdminTopBar
@@ -193,72 +227,91 @@ export default function PackagesPage() {
       ) : !packages.length ? (
         <EmptyState icon={PackageIcon} title="No Packages" description="Create your first package bundle" actionLabel="+ Create Package" onAction={openAdd} />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {packages.map((pkg: any) => (
-            <div key={pkg.id} className={`bg-white rounded-lg p-5 shadow-sm border-l-4 transition-all ${pkg.is_published ? 'border-[#D32F2F]' : 'border-gray-300 opacity-60'}`}>
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="font-bold text-[#1c1b1b] text-sm">{pkg.name}</h3>
-                  {pkg.description && <p className="text-xs text-[#5f5e5e] mt-1 line-clamp-2">{pkg.description}</p>}
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  {/* Customer Visibility Toggle */}
-                  <button
-                    onClick={() => handleVisibilityToggle(pkg.id)}
-                    className={`p-1.5 rounded transition-colors ${pkg.visible_to_customer ? 'hover:bg-blue-50' : 'hover:bg-gray-100'}`}
-                    title={pkg.visible_to_customer ? 'Visible to customers — click to hide' : 'Hidden from customers — click to show'}
-                  >
-                    {pkg.visible_to_customer ? (
-                      <Eye size={16} className="text-blue-500" />
-                    ) : (
-                      <EyeOff size={16} className="text-gray-400" />
-                    )}
-                  </button>
-                  {/* Publish Toggle */}
-                  <button onClick={() => handleToggle(pkg.id)} className="p-1.5 rounded hover:bg-gray-100 transition-colors" title={pkg.is_published ? 'Unpublish' : 'Publish'}>
-                    {pkg.is_published ? <ToggleRight size={18} className="text-green-600" /> : <ToggleLeft size={18} className="text-gray-400" />}
-                  </button>
-                  <button onClick={() => openEdit(pkg)} className="p-1.5 rounded hover:bg-gray-100 transition-colors"><Edit2 size={14} className="text-gray-400" /></button>
-                  <button onClick={() => { setDeleteId(pkg.id); setDeleteOpen(true); }} className="p-1.5 rounded hover:bg-red-50 transition-colors"><Trash2 size={14} className="text-gray-400" /></button>
-                </div>
-              </div>
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          {packages.map((pkg: any) => {
+            const tierKey = getTierKey(pkg.name);
+            const colors = TIER_COLORS[tierKey] || { border: 'border-l-red-500', headerBg: 'bg-gray-50', badge: 'bg-gray-100 text-gray-700' };
 
-              {/* Visibility Badge */}
-              {!pkg.visible_to_customer && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-50 text-orange-600 border border-orange-200 text-[9px] font-bold uppercase tracking-wider rounded-md mb-2">
-                  <EyeOff size={10} /> Hidden from Customers
-                </span>
-              )}
-              
-              {/* Service counts (from custom builder) */}
-              {pkg.services?.length > 0 && (
-                <div className="mb-3">
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-1.5">Included Services</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {pkg.services.map((s: any) => (
-                      <span key={s.id || s.ps_id} className="px-2 py-0.5 bg-[#f6f3f2] rounded text-[10px] font-bold text-[#5f5e5e] border border-gray-100">
-                        {s.name} × {s.total_count || 1}
-                      </span>
+            // Extract "Pay For X" from description
+            const paidMatch = pkg.description?.match(/Pay\s+(?:For\s+)?(\d+)\s+Car\s+Foam\s+Wash/i);
+            const paidWashCount = paidMatch ? parseInt(paidMatch[1]) : (pkg.wash_count || 0);
+
+            return (
+              <div key={pkg.id} className={`bg-white rounded-xl shadow-sm border-l-4 ${colors.border} overflow-hidden transition-all hover:shadow-md ${!pkg.is_published ? 'opacity-60' : ''}`}>
+                {/* ─── Card Header ─── */}
+                <div className={`${colors.headerBg} px-4 py-3 flex items-start justify-between`}>
+                  <div>
+                    <h3 className="font-extrabold text-gray-900 text-sm uppercase tracking-wide">
+                      {pkg.name.replace(/ Package$/i, '')}
+                    </h3>
+                    {paidWashCount > 0 && (
+                      <p className="text-[10px] font-semibold text-gray-500 mt-0.5">
+                        Pay For {paidWashCount} Car Foam Wash
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    <button onClick={() => handleVisibilityToggle(pkg.id)} className="p-1 rounded transition-colors hover:bg-white/60" title={pkg.visible_to_customer ? 'Visible' : 'Hidden'}>
+                      {pkg.visible_to_customer ? <Eye size={14} className="text-blue-500" /> : <EyeOff size={14} className="text-gray-400" />}
+                    </button>
+                    <button onClick={() => handleToggle(pkg.id)} className="p-1 rounded hover:bg-white/60" title={pkg.is_published ? 'Active' : 'Draft'}>
+                      {pkg.is_published ? <ToggleRight size={16} className="text-green-600" /> : <ToggleLeft size={16} className="text-gray-400" />}
+                    </button>
+                    <button onClick={() => openEdit(pkg)} className="p-1 rounded hover:bg-white/60"><Edit2 size={13} className="text-gray-400" /></button>
+                    <button onClick={() => { setDeleteId(pkg.id); setDeleteOpen(true); }} className="p-1 rounded hover:bg-red-50"><Trash2 size={13} className="text-gray-400" /></button>
+                  </div>
+                </div>
+
+                {/* ─── Visibility Badge ─── */}
+                {!pkg.visible_to_customer && (
+                  <div className="px-4 pt-2">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-50 text-orange-600 border border-orange-200 text-[8px] font-bold uppercase tracking-wider rounded-md">
+                      <EyeOff size={9} /> Hidden
+                    </span>
+                  </div>
+                )}
+
+                {/* ─── Complementary Services ─── */}
+                <div className="px-4 py-3">
+                  <p className="text-[8px] font-extrabold uppercase tracking-[0.15em] text-gray-400 mb-2">Complementary Services</p>
+                  <div className="space-y-1.5">
+                    {ALL_SERVICES.map(svcName => {
+                      const count = getServiceCount(pkg, svcName);
+                      const included = count > 0;
+                      return (
+                        <div key={svcName} className="flex items-center gap-1.5">
+                          {included ? (
+                            <div className="w-4 h-4 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                              <Check className="w-2.5 h-2.5 text-green-600" strokeWidth={3} />
+                            </div>
+                          ) : (
+                            <div className="w-4 h-4 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
+                              <XIcon className="w-2.5 h-2.5 text-red-400" strokeWidth={3} />
+                            </div>
+                          )}
+                          <span className={`text-[11px] leading-tight ${included ? 'text-gray-800 font-medium' : 'text-gray-400 line-through'}`}>
+                            {included && count > 1 ? `${count} ` : ''}{svcName}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* ─── Pricing Grid ─── */}
+                <div className="px-4 pb-3 pt-2 border-t border-gray-100">
+                  <div className="grid grid-cols-5 gap-1">
+                    {CATEGORY_LABELS.map(cat => (
+                      <div key={cat.key} className="text-center">
+                        <p className="text-[7px] font-bold uppercase tracking-widest text-gray-400 leading-tight">{cat.short}</p>
+                        <p className="text-[11px] font-extrabold text-gray-900 mt-0.5">{formatINR(pkg[cat.key])}</p>
+                      </div>
                     ))}
                   </div>
                 </div>
-              )}
-
-              <div className="flex gap-4 mb-3 text-[11px] font-medium text-gray-500">
-                <span>Free Washes: {pkg.wash_count || 0}</span>
-                <span>Free Waxes: {pkg.wax_count || 0}</span>
               </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 pt-3 border-t border-gray-50">
-                {CATEGORY_LABELS.map(cat => (
-                  <div key={cat.key} className="text-center">
-                    <p className="text-[8px] font-bold uppercase tracking-widest text-[#5f5e5e] leading-tight">{cat.short}</p>
-                    <p className="text-xs font-extrabold text-[#1c1b1b] mt-0.5">{formatINR(pkg[cat.key])}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -270,8 +323,8 @@ export default function PackagesPage() {
           {/* Left Column — Basic Info */}
           <div className="space-y-4">
             <h4 className="font-semibold text-gray-700">Basic Info</h4>
-            <Input label="Package Name" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Silver Plus" />
-            <Textarea label="Description" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Brief description" />
+            <Input label="Package Name" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Silver Package" />
+            <Textarea label="Description" value={desc} onChange={e => setDesc(e.target.value)} placeholder="e.g. Pay For 5 Car Foam Wash" />
             
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2">Pricing by Vehicle Category</p>
