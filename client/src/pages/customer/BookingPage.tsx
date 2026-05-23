@@ -130,7 +130,7 @@ export default function BookingPage() {
       case 3: return selectedSlot !== null;
       default: return true;
     }
-  }, [step, selectedServices, selectedPackage, brand, model, selectedDate, selectedSlot]);
+  }, [step, selectedServices, selectedPackage, selectedPackageServiceName, isPackageBooking, brand, model, selectedDate, selectedSlot]);
 
   const selectedServicesObjs = services.filter((s) => selectedServices.includes(s.id));
   const selectedPackageObj = activePackages.find((p) => p.package_id === selectedPackage) || packages.find((p) => p.id === selectedPackage);
