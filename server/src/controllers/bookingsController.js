@@ -199,10 +199,11 @@ exports.create = async (req, res) => {
     await conn.beginTransaction();
 
     const {
-      slot_id, service_id, service_ids, package_id, package_service_name,
+      slot_id, service_id, service_ids, package_id,
       vehicle_id, vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category,
       is_free_wash = false, use_package = false, notes
     } = req.body;
+    let package_service_name = req.body.package_service_name;
 
     const customerId = req.user.role === 'admin' ? (req.body.customer_id || req.user.id) : req.user.id;
 
@@ -290,9 +291,10 @@ exports.create = async (req, res) => {
         if (result.can_use) {
           packageUsed = true;
           resolvedUserPackageId = result.user_package_id;
+          package_service_name = result.canonical_service_name || serviceName;
           packageInfo = {
             package_name: result.package_name,
-            service_name: serviceName,
+            service_name: package_service_name,
             remaining: result.remaining,
           };
         } else {

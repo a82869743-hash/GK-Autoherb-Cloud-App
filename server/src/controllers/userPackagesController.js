@@ -261,7 +261,16 @@ exports.checkServiceAvailability = async (conn, userId, serviceName) => {
 
   // Get total_count for this service
   const serviceBreakdown = await getServiceBreakdown(conn, packageId, packageName);
-  const serviceEntry = serviceBreakdown.find(s => s.service_name.toLowerCase().trim() === serviceName?.toLowerCase().trim());
+  let serviceEntry = serviceBreakdown.find(s => s.service_name.toLowerCase().trim() === serviceName?.toLowerCase().trim());
+
+  if (!serviceEntry) {
+    serviceEntry = serviceBreakdown.find(s => {
+      const dbName = s.service_name.toLowerCase();
+      const reqName = serviceName?.toLowerCase() || '';
+      return dbName.includes(reqName) || reqName.includes(dbName) || 
+             (reqName.includes("wash") && dbName.includes("wash"));
+    });
+  }
 
   if (!serviceEntry) {
     console.log('--- checkServiceAvailability FAILED ---');
@@ -270,12 +279,14 @@ exports.checkServiceAvailability = async (conn, userId, serviceName) => {
     return { has_package: true, can_use: false, remaining: 0, reason: `Service not included in your package: ${serviceName}` };
   }
 
+  const canonicalServiceName = serviceEntry.service_name;
+
   const totalCount = serviceEntry.total_count;
 
   // Get used_count (read-only — no FOR UPDATE)
   const [usage] = await conn.query(
     'SELECT used_count FROM package_usage WHERE user_package_id = ? AND service_name = ?',
-    [userPackageId, serviceName]
+    [userPackageId, canonicalServiceName]
   );
 
   const usedCount = usage.length ? usage[0].used_count : 0;
@@ -291,6 +302,7 @@ exports.checkServiceAvailability = async (conn, userId, serviceName) => {
     remaining: remaining,
     package_name: packageName,
     user_package_id: userPackageId,
+    canonical_service_name: canonicalServiceName,
   };
 };
 
@@ -320,18 +332,29 @@ exports.checkAndUseService = async (conn, userId, serviceName) => {
 
   // Get total_count for this service
   const serviceBreakdown = await getServiceBreakdown(conn, packageId, packageName);
-  const serviceEntry = serviceBreakdown.find(s => s.service_name.toLowerCase().trim() === serviceName.toLowerCase().trim());
+  let serviceEntry = serviceBreakdown.find(s => s.service_name.toLowerCase().trim() === serviceName?.toLowerCase().trim());
+
+  if (!serviceEntry) {
+    serviceEntry = serviceBreakdown.find(s => {
+      const dbName = s.service_name.toLowerCase();
+      const reqName = serviceName?.toLowerCase() || '';
+      return dbName.includes(reqName) || reqName.includes(dbName) || 
+             (reqName.includes("wash") && dbName.includes("wash"));
+    });
+  }
 
   if (!serviceEntry) {
     return { has_package: true, can_use: false, remaining: 0, reason: 'Service not in package' };
   }
+
+  const canonicalServiceName = serviceEntry.service_name;
 
   const totalCount = serviceEntry.total_count;
 
   // Get used_count (lock row)
   const [usage] = await conn.query(
     'SELECT id, used_count FROM package_usage WHERE user_package_id = ? AND service_name = ? FOR UPDATE',
-    [userPackageId, serviceName]
+    [userPackageId, canonicalServiceName]
   );
 
   const usedCount = usage.length ? usage[0].used_count : 0;
@@ -341,7 +364,6 @@ exports.checkAndUseService = async (conn, userId, serviceName) => {
     return { has_package: true, can_use: false, remaining: 0, reason: 'No remaining credits' };
   }
 
-  // Reserve (increment used_count) — consumption confirmed later
   if (usage.length) {
     await conn.query(
       'UPDATE package_usage SET used_count = used_count + 1 WHERE id = ?',
@@ -350,7 +372,7 @@ exports.checkAndUseService = async (conn, userId, serviceName) => {
   } else {
     await conn.query(
       'INSERT INTO package_usage (user_package_id, service_name, used_count) VALUES (?, ?, 1)',
-      [userPackageId, serviceName]
+      [userPackageId, canonicalServiceName]
     );
   }
 
@@ -360,6 +382,7 @@ exports.checkAndUseService = async (conn, userId, serviceName) => {
     remaining: remaining - 1,
     package_name: packageName,
     user_package_id: userPackageId,
+    canonical_service_name: canonicalServiceName,
   };
 };
 
