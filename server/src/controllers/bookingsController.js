@@ -199,7 +199,7 @@ exports.create = async (req, res) => {
     await conn.beginTransaction();
 
     const {
-      slot_id, service_id, service_ids, package_id,
+      slot_id, service_id, service_ids, package_id, package_service_name,
       vehicle_id, vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category,
       is_free_wash = false, use_package = false, notes
     } = req.body;
@@ -271,10 +271,18 @@ exports.create = async (req, res) => {
     let resolvedUserPackageId = null;
     const primaryServiceId = service_id || (allServiceIds.length > 0 ? allServiceIds[0] : null);
 
-    if (use_package && primaryServiceId && !is_free_wash) {
-      const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [primaryServiceId]);
-      if (svcRows.length) {
-        const serviceName = svcRows[0].name;
+    if (use_package && !is_free_wash) {
+      let serviceName = package_service_name;
+      
+      // Fallback to fetching name by ID if only service_id was provided
+      if (!serviceName && primaryServiceId) {
+        const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [primaryServiceId]);
+        if (svcRows.length) {
+          serviceName = svcRows[0].name;
+        }
+      }
+
+      if (serviceName) {
         const userPkgCtrl = require('./userPackagesController');
         // Only CHECK availability — do NOT deduct. Deduction happens on admin approval.
         const result = await userPkgCtrl.checkServiceAvailability(conn, customerId, serviceName);
@@ -291,6 +299,9 @@ exports.create = async (req, res) => {
           await conn.rollback();
           return res.status(422).json({ success: false, error: result.reason || 'No package credits available for this service' });
         }
+      } else {
+        await conn.rollback();
+        return res.status(400).json({ success: false, error: 'Package service name or service ID required to use package' });
       }
     }
 
@@ -305,14 +316,14 @@ exports.create = async (req, res) => {
       `INSERT INTO bookings 
        (customer_id, vehicle_id, slot_id, service_id, package_id, 
         vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category, total_duration,
-        status, is_free_wash, notes, booking_type, user_package_id, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_approval', ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 5 MINUTE))`,
+        status, is_free_wash, notes, booking_type, user_package_id, package_service_name, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_approval', ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 5 MINUTE))`,
       [
         customerId, resolvedVehicleId, slot_id,
         primaryServiceId || null, package_id || null,
         resolvedBrand, resolvedModel, resolvedRegNo, vehicle_category || null, totalDuration,
         is_free_wash ? 1 : 0, notes || null,
-        bookingType, resolvedUserPackageId
+        bookingType, resolvedUserPackageId, package_service_name || null
       ]
     );
 
@@ -393,10 +404,16 @@ exports.approve = async (req, res) => {
     }
 
     // ─── DEFERRED DEDUCTION: Deduct package credit NOW (on approval) ───
-    if (booking.booking_type === 'package' && booking.user_package_id && booking.service_id) {
-      const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [booking.service_id]);
-      if (svcRows.length) {
-        const serviceName = svcRows[0].name;
+    if (booking.booking_type === 'package' && booking.user_package_id) {
+      let serviceName = booking.package_service_name;
+      
+      // Fallback if package_service_name wasn't saved (older bookings)
+      if (!serviceName && booking.service_id) {
+        const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [booking.service_id]);
+        if (svcRows.length) serviceName = svcRows[0].name;
+      }
+      
+      if (serviceName) {
         const userPkgCtrl = require('./userPackagesController');
         const result = await userPkgCtrl.checkAndUseService(conn, booking.customer_id, serviceName);
         if (!result.can_use) {
@@ -477,11 +494,15 @@ exports.reject = async (req, res) => {
 
     // Restore package usage if booking was a confirmed package booking (credit already deducted)
     let packageRestored = false;
-    if (booking.booking_type === 'package' && booking.status === 'confirmed' && booking.service_id) {
+    if (booking.booking_type === 'package' && booking.status === 'confirmed') {
       try {
-        const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [booking.service_id]);
-        if (svcRows.length) {
-          const serviceName = svcRows[0].name;
+        let serviceName = booking.package_service_name;
+        if (!serviceName && booking.service_id) {
+          const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [booking.service_id]);
+          if (svcRows.length) serviceName = svcRows[0].name;
+        }
+
+        if (serviceName) {
           const userPackageId = booking.user_package_id;
           if (userPackageId) {
             await cancelReservation(conn, userPackageId, serviceName);
@@ -570,11 +591,15 @@ exports.cancel = async (req, res) => {
     }
 
     // 4. Restore package usage — ONLY if booking was confirmed (credit was deducted on approval)
-    if (booking.booking_type === 'package' && booking.status === 'confirmed' && booking.service_id) {
+    if (booking.booking_type === 'package' && booking.status === 'confirmed') {
       try {
-        const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [booking.service_id]);
-        if (svcRows.length) {
-          const serviceName = svcRows[0].name;
+        let serviceName = booking.package_service_name;
+        if (!serviceName && booking.service_id) {
+          const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [booking.service_id]);
+          if (svcRows.length) serviceName = svcRows[0].name;
+        }
+
+        if (serviceName) {
           const userPackageId = booking.user_package_id;
           if (userPackageId) {
             await cancelReservation(conn, userPackageId, serviceName);

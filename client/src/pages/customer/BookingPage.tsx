@@ -44,6 +44,7 @@ export default function BookingPage() {
   const [services, setServices] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
   const [selectedServices, setSelectedServices] = useState<number[]>([]);
+  const [selectedPackageServiceName, setSelectedPackageServiceName] = useState<string | null>(null);
   const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
   const [servicesLoading, setServicesLoading] = useState(true);
   const [activePackages, setActivePackages] = useState<any[]>([]);
@@ -117,12 +118,13 @@ export default function BookingPage() {
     if (isPackageBooking && activePackages.length > 0) {
       setSelectedPackage(activePackages[0].package_id);
       setSelectedServices([]);
+      setSelectedPackageServiceName(null);
     }
   }, [searchParams, activePackages, isPackageBooking]);
 
   const canNext = useMemo(() => {
     switch (step) {
-      case 0: return selectedServices.length > 0 || selectedPackage !== null;
+      case 0: return isPackageBooking ? selectedPackageServiceName !== null : selectedServices.length > 0;
       case 1: return brand.trim().length > 0 && model.trim().length > 0;
       case 2: return selectedDate.length > 0;
       case 3: return selectedSlot !== null;
@@ -157,7 +159,8 @@ export default function BookingPage() {
     try {
       const res = await createMut.mutateAsync({
         slot_id: selectedSlot.id,
-        service_ids: selectedServices.length > 0 ? selectedServices : undefined,
+        service_ids: !isPackageBooking && selectedServices.length > 0 ? selectedServices : undefined,
+        package_service_name: isPackageBooking && selectedPackageServiceName ? selectedPackageServiceName : undefined,
         package_id: selectedPackage || undefined,
         vehicle_id: selectedVehicleId || undefined,
         vehicle_brand: brand,
@@ -190,7 +193,7 @@ export default function BookingPage() {
           <div className="flex justify-between text-sm">
             <span className="text-[#5f5e5e]">Service(s)</span>
             <span className="font-bold text-right ml-4">
-              {selectedServicesObjs.length > 0 ? selectedServicesObjs.map(s => s.name).join(', ') : (selectedPackageObj?.package_name || selectedPackageObj?.name)}
+              {isPackageBooking ? selectedPackageServiceName : selectedServicesObjs.length > 0 ? selectedServicesObjs.map(s => s.name).join(', ') : (selectedPackageObj?.package_name || selectedPackageObj?.name)}
             </span>
           </div>
           <div className="flex justify-between text-sm">
@@ -210,7 +213,7 @@ export default function BookingPage() {
           <Button variant="ghost" onClick={() => navigate('/customer/bookings')}>
             View Bookings
           </Button>
-          <Button onClick={() => { setBookingResult(null); setStep(0); setSelectedServices([]); setSelectedPackage(null); setSelectedSlot(null); setSelectedDate(''); }}>
+          <Button onClick={() => { setBookingResult(null); setStep(0); setSelectedServices([]); setSelectedPackageServiceName(null); setSelectedPackage(null); setSelectedSlot(null); setSelectedDate(''); }}>
             Book Another
           </Button>
         </div>
@@ -300,23 +303,19 @@ export default function BookingPage() {
                           if (uName === 'deep cleaning' && sName.includes('interior cleaning')) return true;
                           return false;
                         });
-                        const serviceId = matchedService?.id;
-                        const isSelected = serviceId ? selectedServices.includes(serviceId) : false;
+                        const isSelected = selectedPackageServiceName === usage.service_name;
 
                         return (
                           <button
                             key={usage.service_name}
                             onClick={() => {
-                              if (!serviceId) return;
-                              setSelectedServices(prev =>
-                                prev.includes(serviceId) ? prev.filter(id => id !== serviceId) : [...prev, serviceId]
+                              setSelectedPackageServiceName(
+                                isSelected ? null : usage.service_name
                               );
                               setSelectedPackage(activePackages[0].package_id);
                             }}
-                            disabled={!serviceId}
                             className={`text-left p-4 rounded-lg border-2 transition-all ${
                               isSelected ? 'border-purple-500 bg-purple-50/50' :
-                              !serviceId ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed' :
                               'border-gray-100 bg-white hover:border-purple-200'
                             }`}
                           >
@@ -341,9 +340,6 @@ export default function BookingPage() {
                             {matchedService?.description && (
                               <p className="text-xs text-[#5f5e5e] mt-1 ml-[22px] line-clamp-2">{matchedService.description}</p>
                             )}
-                            {!serviceId && (
-                              <p className="text-[10px] text-amber-600 mt-1 ml-[22px]">⚠ This service is not currently available in the system</p>
-                            )}
                           </button>
                         );
                       });
@@ -357,17 +353,11 @@ export default function BookingPage() {
                 <div className="text-center py-12 bg-white rounded-xl border border-gray-100">
                   <Sparkles size={48} className="text-gray-300 mx-auto mb-3" />
                   <h3 className="text-lg font-bold text-[#1c1b1b] mb-2">No Active Package</h3>
-                  <p className="text-sm text-[#5f5e5e] mb-4">You need to purchase a package first before booking from it.</p>
+                  <p className="text-sm text-[#5f5e5e] mb-4">You do not have any active packages to book from.</p>
                   <div className="flex justify-center gap-3">
                     <button
-                      onClick={() => navigate('/customer/packages')}
-                      className="px-5 py-2.5 bg-[#D32F2F] text-white text-sm font-bold rounded-lg hover:bg-[#af101a] transition-colors uppercase tracking-wider"
-                    >
-                      View Packages
-                    </button>
-                    <button
                       onClick={() => navigate('/customer/bookings/new')}
-                      className="px-5 py-2.5 bg-gray-100 text-[#1c1b1b] text-sm font-bold rounded-lg hover:bg-gray-200 transition-colors uppercase tracking-wider"
+                      className="px-5 py-2.5 bg-[#D32F2F] text-white text-sm font-bold rounded-lg hover:bg-[#af101a] transition-colors uppercase tracking-wider"
                     >
                       Book Normal Service
                     </button>
@@ -409,6 +399,7 @@ export default function BookingPage() {
                               onClick={() => {
                                 setSelectedServices(prev => prev.includes(svc.id) ? prev.filter(id => id !== svc.id) : [...prev, svc.id]);
                                 setSelectedPackage(null);
+                                setSelectedPackageServiceName(null);
                               }}
                               className={`text-left p-4 rounded-lg border-2 transition-all ${
                                 isSelected ? 'border-[#D32F2F] bg-red-50/30' : 'border-gray-100 bg-white hover:border-gray-200'
@@ -650,7 +641,7 @@ export default function BookingPage() {
               <Sparkles size={16} className="text-[#D32F2F] shrink-0" />
               <span className="text-[#5f5e5e]">Service(s)</span>
               <span className="ml-auto font-bold text-[#1c1b1b] text-right ml-4">
-                {selectedServicesObjs.length > 0 ? selectedServicesObjs.map(s => s.name).join(', ') : (selectedPackageObj?.package_name || selectedPackageObj?.name)}
+                {isPackageBooking ? selectedPackageServiceName : selectedServicesObjs.length > 0 ? selectedServicesObjs.map(s => s.name).join(', ') : (selectedPackageObj?.package_name || selectedPackageObj?.name)}
               </span>
             </div>
             <div className="flex items-center gap-3 py-2 border-b border-gray-50">
