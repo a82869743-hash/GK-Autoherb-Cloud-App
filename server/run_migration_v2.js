@@ -119,19 +119,21 @@ async function run() {
 
   const pkgIds = {};
   for (const pkg of packageDefs) {
-    // Check if already exists (idempotent)
-    const [existing] = await conn.query('SELECT id FROM packages WHERE name = ? AND is_active = 1', [pkg.name]);
-    if (existing.length > 0) {
-      pkgIds[pkg.name] = existing[0].id;
-      console.log(`  ○ Package exists: "${pkg.name}" (id=${pkgIds[pkg.name]})`);
-    } else {
-      const [result] = await conn.query(
-        'INSERT INTO packages (name, description, paid_wash_count, wash_count, wax_count, is_published, is_active, visible_to_customer, sort_order) VALUES (?, ?, ?, 0, 0, 1, 1, 1, ?)',
-        [pkg.name, pkg.description, pkg.paid_wash_count, pkg.sort_order]
-      );
-      pkgIds[pkg.name] = result.insertId;
-      console.log(`  ✓ Created package: "${pkg.name}" (id=${pkgIds[pkg.name]})`);
-    }
+    // Use upsert: if name already exists, re-activate and update it
+    const [result] = await conn.query(
+      `INSERT INTO packages (name, description, paid_wash_count, wash_count, wax_count, is_published, is_active, visible_to_customer, sort_order)
+       VALUES (?, ?, ?, 0, 0, 1, 1, 1, ?)
+       ON DUPLICATE KEY UPDATE
+         description = VALUES(description),
+         paid_wash_count = VALUES(paid_wash_count),
+         is_published = 1, is_active = 1, visible_to_customer = 1,
+         sort_order = VALUES(sort_order)`,
+      [pkg.name, pkg.description, pkg.paid_wash_count, pkg.sort_order]
+    );
+    // Get the ID (insertId is 0 on update, so we need to query)
+    const [rows] = await conn.query('SELECT id FROM packages WHERE name = ?', [pkg.name]);
+    pkgIds[pkg.name] = rows[0].id;
+    console.log(`  ✓ Upserted package: "${pkg.name}" (id=${pkgIds[pkg.name]})`);
   }
 
   // ━━━ PRICING MATRIX ━━━
