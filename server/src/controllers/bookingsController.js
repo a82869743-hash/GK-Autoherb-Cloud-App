@@ -198,6 +198,8 @@ exports.create = async (req, res) => {
   try {
     await conn.beginTransaction();
 
+    console.log('[BOOKING] Request body:', JSON.stringify(req.body));
+
     const {
       slot_id, service_id, service_ids, package_id,
       vehicle_id, vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category,
@@ -283,10 +285,13 @@ exports.create = async (req, res) => {
         }
       }
 
+      console.log('[BOOKING] Package booking — service name resolved:', serviceName);
+
       if (serviceName) {
         const userPkgCtrl = require('./userPackagesController');
         // Only CHECK availability — do NOT deduct. Deduction happens on admin approval.
         const result = await userPkgCtrl.checkServiceAvailability(conn, customerId, serviceName);
+        console.log('[BOOKING] Package availability result:', JSON.stringify(result));
 
         if (result.can_use) {
           packageUsed = true;
@@ -314,6 +319,7 @@ exports.create = async (req, res) => {
     await conn.query('UPDATE slots SET booked_count = booked_count + 1 WHERE id = ?', [slot_id]);
 
     // 7. Insert booking — status = pending_approval, expires in 5 minutes
+    console.log('[BOOKING] Inserting booking — type:', bookingType, 'userPackageId:', resolvedUserPackageId, 'pkgServiceName:', package_service_name);
     const [result] = await conn.query(
       `INSERT INTO bookings 
        (customer_id, vehicle_id, slot_id, service_id, package_id, 
@@ -330,6 +336,7 @@ exports.create = async (req, res) => {
     );
 
     const bookingId = result.insertId;
+    console.log('[BOOKING] Booking created:', bookingId);
 
     // 8. Insert booking_services for multi-service
     if (allServiceIds.length > 0) {
@@ -343,24 +350,22 @@ exports.create = async (req, res) => {
 
     await conn.commit();
 
-    // 9. Fire-and-forget SMS (non-blocking)
+    // 9. Fire-and-forget SMS (non-blocking) — use messagingService for custom text
     try {
-      const sendSms = require('../utils/sendSms');
+      const messagingService = require('../services/messagingService');
       const [custRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [customerId]);
       const [slotRows] = await pool.query('SELECT slot_date, start_time FROM slots WHERE id = ?', [slot_id]);
       if (custRows.length && custRows[0].mobile && slotRows.length) {
         const date = new Date(slotRows[0].slot_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
         const time = slotRows[0].start_time ? slotRows[0].start_time.substring(0, 5) : '';
         const msg = `GK AutoHerb: Hi ${custRows[0].name}, your booking #${bookingId} is pending approval for ${date} at ${time}. We'll confirm shortly!`;
-        sendSms(custRows[0].mobile, msg).catch(err => {
-          console.error('[SMS] Booking notification failed (non-blocking):', err.message);
-        });
+        messagingService.sendSMS(custRows[0].mobile, null, null, { content: msg }).catch(() => {});
       }
     } catch (smsErr) {
       console.error('[SMS] Booking SMS setup failed (non-blocking):', smsErr.message);
     }
 
-    console.log(`[BOOKING] #${bookingId} created — pending_approval, customer=${customerId}, slot=${slot_id}`);
+    console.log(`[BOOKING] #${bookingId} created — pending_approval, customer=${customerId}, slot=${slot_id}, type=${bookingType}`);
 
     const io = req.app.get('io');
     if (io) {
@@ -382,7 +387,11 @@ exports.create = async (req, res) => {
   } catch (err) {
     await conn.rollback();
     console.error('Booking create error:', err);
-    res.status(500).json({ success: false, error: 'Server error' });
+    // Return meaningful error message
+    const errorMsg = err.code === 'ER_BAD_FIELD_ERROR'
+      ? `Database column missing: ${err.message}. Run migration on server.`
+      : (err.sqlMessage || err.message || 'Server error');
+    res.status(500).json({ success: false, error: errorMsg });
   } finally {
     conn.release();
   }

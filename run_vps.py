@@ -15,7 +15,10 @@ def run():
     commands = [
         "cd /root/app && git fetch origin && git reset --hard origin/main",
         "cd /root/app/client && npm install && npm run build",
-        "cd /root/app/server && npm install --legacy-peer-deps && pm2 restart all",
+        "cd /root/app/server && npm install --legacy-peer-deps",
+        # Run DB migration to ensure package booking columns exist
+        "cd /root/app/server && node migrate_booking_columns.js",
+        "cd /root/app/server && pm2 restart all",
         "systemctl restart nginx"
     ]
     
