@@ -150,7 +150,12 @@ export default function PackageApprovalsPage() {
                   <div className="bg-orange-50 p-4 border-b border-orange-100 flex justify-between items-start">
                     <div>
                       <h3 className="font-bold text-gray-900 text-lg">{req.package_name}</h3>
-                      <div className="text-sm font-bold text-orange-600 mt-1">₹{req.price}</div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-sm font-bold text-orange-600">₹{req.price}</span>
+                        {req.pricing_type && (
+                          <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded ${req.pricing_type === 'premium' ? 'bg-purple-100 text-purple-700' : 'bg-gray-200 text-gray-600'}`}>{req.pricing_type}</span>
+                        )}
+                      </div>
                     </div>
                     <span className="bg-orange-200 text-orange-800 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">Pending</span>
                   </div>
@@ -210,6 +215,7 @@ export default function PackageApprovalsPage() {
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider text-[11px]">
                     <th className="p-4">Package</th>
+                    <th className="p-4">Tier</th>
                     <th className="p-4">Customer</th>
                     <th className="p-4">Vehicle</th>
                     <th className="p-4">Amount</th>
@@ -220,6 +226,9 @@ export default function PackageApprovalsPage() {
                   {approvedRequests.map(req => (
                     <tr key={req.id} className="hover:bg-gray-50">
                       <td className="p-4 font-medium text-gray-900">{req.package_name}</td>
+                      <td className="p-4">
+                        <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded ${req.pricing_type === 'premium' ? 'bg-purple-100 text-purple-700' : 'bg-gray-200 text-gray-600'}`}>{req.pricing_type || 'basic'}</span>
+                      </td>
                       <td className="p-4">
                         <div>{req.customer_name}</div>
                         <div className="text-gray-500 text-xs">{req.customer_mobile}</div>

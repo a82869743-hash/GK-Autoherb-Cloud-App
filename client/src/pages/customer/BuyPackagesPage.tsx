@@ -12,6 +12,22 @@ interface Vehicle {
   category: 'hatchback' | 'medium_hatchback' | 'sedan' | 'premium_sedan' | 'suv';
 }
 
+interface PkgPricing {
+  id: number;
+  car_type: string;
+  pricing_type: string;
+  price: number;
+}
+
+// Map old vehicle categories to new car_type enum values
+const CAR_TYPE_MAP: Record<string, string> = {
+  hatchback: 'SMALL_HATCHBACK',
+  medium_hatchback: 'MEDIUM_HATCHBACK',
+  sedan: 'SEDAN_SUV',
+  premium_sedan: 'PREMIUM_SEDAN',
+  suv: 'SEDAN_SUV',
+};
+
 interface PkgService {
   id: number;
   ps_id?: number;
@@ -24,12 +40,14 @@ interface Pkg {
   name: string;
   description: string;
   wash_count: number;
+  paid_wash_count?: number;
   price_hatchback: number;
   price_medium_hatchback: number;
   price_sedan: number;
   price_premium_sedan: number;
   price_suv: number;
   services?: PkgService[];
+  pricing?: PkgPricing[];
 }
 
 // Package tier colors
@@ -69,6 +87,7 @@ export default function BuyPackagesPage() {
   const [packages, setPackages] = useState<Pkg[]>([]);
   const [loading, setLoading] = useState(true);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
+  const [pricingType, setPricingType] = useState<'basic' | 'premium'>('basic');
   // Confirmation modal state
   const [confirmPkg, setConfirmPkg] = useState<Pkg | null>(null);
   const [myRequests, setMyRequests] = useState<any[]>([]);
@@ -102,14 +121,21 @@ export default function BuyPackagesPage() {
     }).catch(() => {});
   }, []);
 
-  const getPrice = (pkg: Pkg, cat: string) => {
+  const getPrice = (pkg: Pkg, cat: string, pt: 'basic' | 'premium' = pricingType) => {
+    // Try v2 pricing matrix first
+    if (pkg.pricing && pkg.pricing.length > 0) {
+      const carType = CAR_TYPE_MAP[cat] || 'SEDAN_SUV';
+      const match = pkg.pricing.find(p => p.car_type === carType && p.pricing_type === pt);
+      if (match) return Number(match.price);
+    }
+    // Fallback to old flat pricing
     switch (cat) {
-      case 'hatchback': return pkg.price_hatchback;
-      case 'medium_hatchback': return pkg.price_medium_hatchback;
-      case 'sedan': return pkg.price_sedan;
-      case 'premium_sedan': return pkg.price_premium_sedan;
-      case 'suv': return pkg.price_suv;
-      default: return pkg.price_sedan;
+      case 'hatchback': return Number(pkg.price_hatchback);
+      case 'medium_hatchback': return Number(pkg.price_medium_hatchback);
+      case 'sedan': return Number(pkg.price_sedan);
+      case 'premium_sedan': return Number(pkg.price_premium_sedan);
+      case 'suv': return Number(pkg.price_suv);
+      default: return Number(pkg.price_sedan);
     }
   };
 
@@ -134,11 +160,14 @@ export default function BuyPackagesPage() {
     if (!confirmPkg || !selectedVehicle) return;
     setSubmittingId(confirmPkg.id);
     try {
-      const price = getPrice(confirmPkg, selectedVehicle.category);
+      const price = getPrice(confirmPkg, selectedVehicle.category, pricingType);
+      const carType = CAR_TYPE_MAP[selectedVehicle.category] || 'SEDAN_SUV';
       const res = await api.post('/packages/requests', {
         vehicle_id: selectedVehicle.id,
         package_id: confirmPkg.id,
-        price
+        price,
+        pricing_type: pricingType,
+        car_type: carType
       });
       if (res.data.success) {
         addToast('success', 'Package request submitted! Admin will review and approve it shortly.');
@@ -195,6 +224,19 @@ export default function BuyPackagesPage() {
               </option>
             ))}
           </select>
+
+          {/* Basic / Premium Toggle */}
+          <div className="flex items-center justify-center gap-3 mt-4">
+            <span className={`text-xs font-bold uppercase tracking-wider ${pricingType === 'basic' ? 'text-red-600' : 'text-gray-400'}`}>Basic</span>
+            <button
+              onClick={() => setPricingType(pricingType === 'basic' ? 'premium' : 'basic')}
+              className={`relative w-14 h-7 rounded-full transition-colors ${pricingType === 'premium' ? 'bg-purple-600' : 'bg-gray-300'}`}
+            >
+              <div className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform ${pricingType === 'premium' ? 'translate-x-7' : ''}`} />
+            </button>
+            <span className={`text-xs font-bold uppercase tracking-wider ${pricingType === 'premium' ? 'text-purple-600' : 'text-gray-400'}`}>Premium</span>
+          </div>
+          <p className="text-center text-[10px] text-gray-400 mt-1">Premium includes additional interior care & product upgrades</p>
         </div>
       )}
 
@@ -365,6 +407,10 @@ export default function BuyPackagesPage() {
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Package</span>
                   <span className="font-bold text-gray-900">{confirmPkg.name}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Tier</span>
+                  <span className={`px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full ${pricingType === 'premium' ? 'bg-purple-100 text-purple-700' : 'bg-gray-200 text-gray-600'}`}>{pricingType}</span>
                 </div>
 
                 {/* Show services included */}

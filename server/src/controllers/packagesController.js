@@ -1,6 +1,6 @@
 const pool = require('../config/db');
 
-// Helper: fetch related services & products for a package
+// Helper: fetch related services, products & pricing for a package
 async function enrichPackage(pkg) {
   const [services] = await pool.query(
     `SELECT ps.id AS ps_id, ps.total_count, s.id, s.name, s.price_hatchback, s.price_medium_hatchback, s.price_sedan, s.price_premium_sedan, s.price_suv
@@ -12,7 +12,15 @@ async function enrichPackage(pkg) {
      FROM package_products pp JOIN inventory i ON pp.product_id = i.id
      WHERE pp.package_id = ?`, [pkg.id]
   );
-  return { ...pkg, services, products };
+  // Fetch v2 pricing matrix (car_type × pricing_type)
+  let pricing = [];
+  try {
+    const [pricingRows] = await pool.query(
+      `SELECT id, car_type, pricing_type, price FROM package_pricing WHERE package_id = ? ORDER BY car_type, pricing_type`, [pkg.id]
+    );
+    pricing = pricingRows;
+  } catch { /* table may not exist yet */ }
+  return { ...pkg, services, products, pricing };
 }
 
 // ─── LIST ───────────────────────────────────
@@ -31,7 +39,7 @@ exports.list = async (req, res) => {
 
     if (published_only === 'true') where += ' AND is_published = 1';
 
-    const [rows] = await pool.query(`SELECT * FROM packages WHERE ${where} ORDER BY created_at DESC`);
+    const [rows] = await pool.query(`SELECT * FROM packages WHERE ${where} ORDER BY sort_order ASC, created_at DESC`);
     const enriched = await Promise.all(rows.map(enrichPackage));
     res.json({ success: true, data: enriched });
   } catch (err) {
@@ -261,15 +269,15 @@ exports.delete = async (req, res) => {
 exports.createRequest = async (req, res) => {
   try {
     const customerId = req.user.id;
-    const { vehicle_id, package_id, price } = req.body;
+    const { vehicle_id, package_id, price, pricing_type = 'basic', car_type } = req.body;
 
     if (!vehicle_id || !package_id || price === undefined) {
       return res.status(400).json({ success: false, error: 'vehicle_id, package_id, and price are required' });
     }
 
     const [result] = await pool.query(
-      "INSERT INTO package_requests (customer_id, vehicle_id, package_id, price, status) VALUES (?, ?, ?, ?, 'pending')",
-      [customerId, vehicle_id, package_id, price]
+      "INSERT INTO package_requests (customer_id, vehicle_id, package_id, price, pricing_type, car_type, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')",
+      [customerId, vehicle_id, package_id, price, pricing_type, car_type || null]
     );
 
     res.status(201).json({ success: true, message: 'Package request submitted to admin for approval' });
@@ -338,10 +346,10 @@ exports.approveRequest = async (req, res) => {
     // 2. Mark approved
     await conn.query("UPDATE package_requests SET status = 'approved', approved_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
 
-    // 3. Add to user_packages
+    // 3. Add to user_packages with pricing_type and car_type
     await conn.query(
-      "INSERT INTO user_packages (user_id, package_id, end_date) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 1 YEAR))",
-      [reqData.customer_id, reqData.package_id]
+      "INSERT INTO user_packages (user_id, package_id, pricing_type, car_type, end_date) VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 1 YEAR))",
+      [reqData.customer_id, reqData.package_id, reqData.pricing_type || 'basic', reqData.car_type || null]
     );
 
     await conn.commit();

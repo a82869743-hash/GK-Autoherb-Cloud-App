@@ -298,16 +298,36 @@ export default function PackagesPage() {
                   </div>
                 </div>
 
-                {/* ─── Pricing Grid ─── */}
+                {/* ─── V2 Pricing Grid (Basic / Premium) ─── */}
                 <div className="px-4 pb-3 pt-2 border-t border-gray-100">
-                  <div className="grid grid-cols-5 gap-1">
-                    {CATEGORY_LABELS.map(cat => (
-                      <div key={cat.key} className="text-center">
-                        <p className="text-[7px] font-bold uppercase tracking-widest text-gray-400 leading-tight">{cat.short}</p>
-                        <p className="text-[11px] font-extrabold text-gray-900 mt-0.5">{formatINR(pkg[cat.key])}</p>
+                  {pkg.pricing && pkg.pricing.length > 0 ? (
+                    <div>
+                      <div className="grid grid-cols-6 gap-1 mb-1">
+                        <div className="text-[7px] font-bold uppercase tracking-widest text-gray-400"></div>
+                        {['S.Hatch','M.Hatch','Sedan','Prem','Large'].map(l => (
+                          <div key={l} className="text-center text-[7px] font-bold uppercase tracking-widest text-gray-400 leading-tight">{l}</div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                      {['basic','premium'].map(pt => (
+                        <div key={pt} className="grid grid-cols-6 gap-1 py-0.5">
+                          <div className={`text-[8px] font-bold uppercase tracking-wider ${pt === 'premium' ? 'text-purple-600' : 'text-gray-500'}`}>{pt}</div>
+                          {['SMALL_HATCHBACK','MEDIUM_HATCHBACK','SEDAN_SUV','PREMIUM_SEDAN','LARGE_CAR'].map(ct => {
+                            const p = pkg.pricing.find((r: any) => r.car_type === ct && r.pricing_type === pt);
+                            return <div key={ct} className="text-center text-[10px] font-extrabold text-gray-900">{p ? formatINR(p.price) : '—'}</div>;
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-5 gap-1">
+                      {CATEGORY_LABELS.map(cat => (
+                        <div key={cat.key} className="text-center">
+                          <p className="text-[7px] font-bold uppercase tracking-widest text-gray-400 leading-tight">{cat.short}</p>
+                          <p className="text-[11px] font-extrabold text-gray-900 mt-0.5">{formatINR(pkg[cat.key])}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             );

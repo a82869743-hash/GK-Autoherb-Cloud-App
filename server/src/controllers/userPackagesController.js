@@ -20,28 +20,69 @@
 
 const pool = require('../config/db');
 
-// ─── Legacy service breakdown per package tier ──────────────
+// ─── AutoHerb Annual Car Care V2 — Complimentary service breakdown ──────────────
+// These are COMPLIMENTARY services included with each paid package.
+// Paid washes (Car Foam Wash) are tracked via paid_wash_count on the packages table.
 const PACKAGE_SERVICE_MAP = {
+  'Bronze Package': [
+    { service_name: 'Car Foam Wash', total_count: 1 },
+    { service_name: 'Body Wax Coat', total_count: 1 },
+  ],
+  'Silver Package': [
+    { service_name: 'Car Foam Wash', total_count: 2 },
+    { service_name: 'Body Wax Coat', total_count: 2 },
+    { service_name: 'Two Wheeler Wash', total_count: 1 },
+  ],
+  'Gold Package': [
+    { service_name: 'Car Foam Wash', total_count: 4 },
+    { service_name: 'Body Wax Coat', total_count: 3 },
+    { service_name: 'Two Wheeler Wash', total_count: 1 },
+    { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
+  ],
+  'Diamond Package': [
+    { service_name: 'Car Foam Wash', total_count: 6 },
+    { service_name: 'Body Wax Coat', total_count: 2 },
+    { service_name: 'Two Wheeler Wash', total_count: 2 },
+    { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
+    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1 },
+  ],
+  'Platinum Package': [
+    { service_name: 'Car Foam Wash', total_count: 8 },
+    { service_name: 'Body Wax Coat', total_count: 3 },
+    { service_name: 'Two Wheeler Wash', total_count: 2 },
+    { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
+    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1 },
+    { service_name: 'Deep Cleaning', total_count: 1 },
+  ],
+  // Legacy aliases for backward compatibility
   'Bronze': [
-    { service_name: 'Foam Wash', total_count: 1 },
-    { service_name: 'Wax Coat', total_count: 1 },
+    { service_name: 'Car Foam Wash', total_count: 1 },
+    { service_name: 'Body Wax Coat', total_count: 1 },
   ],
   'Silver': [
-    { service_name: 'Foam Wash', total_count: 2 },
-    { service_name: 'Wax Coat', total_count: 2 },
+    { service_name: 'Car Foam Wash', total_count: 2 },
+    { service_name: 'Body Wax Coat', total_count: 2 },
+    { service_name: 'Two Wheeler Wash', total_count: 1 },
   ],
   'Gold': [
-    { service_name: 'Foam Wash', total_count: 4 },
-    { service_name: 'Wax Coat', total_count: 3 },
+    { service_name: 'Car Foam Wash', total_count: 4 },
+    { service_name: 'Body Wax Coat', total_count: 3 },
+    { service_name: 'Two Wheeler Wash', total_count: 1 },
+    { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
   ],
   'Diamond': [
-    { service_name: 'Foam Wash', total_count: 6 },
-    { service_name: 'Wax Coat', total_count: 2 },
+    { service_name: 'Car Foam Wash', total_count: 6 },
+    { service_name: 'Body Wax Coat', total_count: 2 },
     { service_name: 'Two Wheeler Wash', total_count: 2 },
+    { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
+    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1 },
   ],
   'Platinum': [
-    { service_name: 'Foam Wash', total_count: 8 },
-    { service_name: 'Wax Coat', total_count: 3 },
+    { service_name: 'Car Foam Wash', total_count: 8 },
+    { service_name: 'Body Wax Coat', total_count: 3 },
+    { service_name: 'Two Wheeler Wash', total_count: 2 },
+    { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
+    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1 },
     { service_name: 'Deep Cleaning', total_count: 1 },
   ],
 };
