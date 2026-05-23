@@ -12,6 +12,8 @@ import Modal from '../../components/ui/Modal';
 import { SkeletonCard } from '../../components/ui/SkeletonLoader';
 import { formatTime } from '../../utils/formatters';
 import api from '../../api/axiosInstance';
+import ConfirmModal from '../../components/ui/ConfirmModal';
+import toast from 'react-hot-toast';
 import io from 'socket.io-client';
 import { useAuthStore } from '../../store/authStore';
 
@@ -31,10 +33,14 @@ export default function CustomerBookingsPage() {
   const [page, setPage] = useState(1);
   const limit = 15;
 
-  // Vehicle history modal
   const [historyRegNo, setHistoryRegNo] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
   const { data: historyData, isLoading: historyLoading } = useVehicleHistory(historyRegNo);
+
+  // Confirmation Modals
+  const [confirmType, setConfirmType] = useState<'approve' | 'reject' | null>(null);
+  const [confirmTargetId, setConfirmTargetId] = useState<number | null>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
 
   // Debounce search
   useEffect(() => {
@@ -76,6 +82,22 @@ export default function CustomerBookingsPage() {
   const openVehicleHistory = (regNo: string) => {
     setHistoryRegNo(regNo);
     setHistoryOpen(true);
+  };
+
+  const handleAction = async () => {
+    if (!confirmTargetId || !confirmType) return;
+    setIsConfirming(true);
+    try {
+      await api.patch(`/bookings/${confirmTargetId}/${confirmType}`);
+      toast.success(`Booking ${confirmType}d successfully`);
+      setConfirmType(null);
+      setConfirmTargetId(null);
+      refetch();
+    } catch (err) {
+      toast.error(`Failed to ${confirmType} booking`);
+    } finally {
+      setIsConfirming(false);
+    }
   };
 
   const handleCreateJobCart = (booking: any) => {
@@ -265,12 +287,9 @@ export default function CustomerBookingsPage() {
                         size="sm"
                         variant="ghost"
                         className="!text-red-600 hover:bg-red-50"
-                        onClick={async () => {
-                          if (!window.confirm('Reject this booking?')) return;
-                          try {
-                            await api.patch(`/bookings/${b.id}/reject`);
-                            window.location.reload();
-                          } catch (err) { alert('Failed to reject booking'); }
+                        onClick={() => {
+                          setConfirmType('reject');
+                          setConfirmTargetId(b.id);
                         }}
                       >
                         Reject
@@ -278,11 +297,9 @@ export default function CustomerBookingsPage() {
                       <Button
                         size="sm"
                         className="bg-green-600 hover:bg-green-700"
-                        onClick={async () => {
-                          try {
-                            await api.patch(`/bookings/${b.id}/approve`);
-                            window.location.reload();
-                          } catch (err) { alert('Failed to approve booking'); }
+                        onClick={() => {
+                          setConfirmType('approve');
+                          setConfirmTargetId(b.id);
                         }}
                       >
                         Approve
@@ -435,6 +452,17 @@ export default function CustomerBookingsPage() {
           </div>
         )}
       </Modal>
+
+      <ConfirmModal
+        open={confirmType !== null}
+        onClose={() => { setConfirmType(null); setConfirmTargetId(null); }}
+        onConfirm={handleAction}
+        title={confirmType === 'approve' ? 'Approve Booking' : 'Reject Booking'}
+        description={confirmType === 'approve' ? 'Are you sure you want to approve this booking?' : 'Are you sure you want to reject this booking?'}
+        confirmText={confirmType === 'approve' ? 'Approve' : 'Reject'}
+        isDestructive={confirmType === 'reject'}
+        loading={isConfirming}
+      />
     </>
   );
 }

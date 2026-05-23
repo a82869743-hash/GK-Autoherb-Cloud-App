@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../api/axiosInstance';
 import { Search, Users, ChevronRight, UserCircle, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import ConfirmModal from '../../components/ui/ConfirmModal';
 
 interface Customer {
   id: number;
@@ -20,6 +21,8 @@ export default function CustomersListPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [archiveTarget, setArchiveTarget] = useState<{ id: number; name: string } | null>(null);
+  const [archiving, setArchiving] = useState(false);
 
   const fetchCustomers = async () => {
     setLoading(true);
@@ -48,14 +51,22 @@ export default function CustomersListPage() {
     fetchCustomers();
   };
 
-  const handleDelete = async (id: number, name: string) => {
-    if (!window.confirm(`Archive customer "${name}"? They will be moved to the Recycle Bin.`)) return;
+  const handleDeleteClick = (id: number, name: string) => {
+    setArchiveTarget({ id, name });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!archiveTarget) return;
+    setArchiving(true);
     try {
-      await api.delete(`/customers/${id}`);
+      await api.delete(`/customers/${archiveTarget.id}`);
       toast.success('Customer archived');
+      setArchiveTarget(null);
       fetchCustomers();
     } catch {
       toast.error('Failed to archive customer');
+    } finally {
+      setArchiving(false);
     }
   };
 
@@ -134,7 +145,7 @@ export default function CustomersListPage() {
                     <td className="p-4 text-right" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => handleDelete(cust.id, cust.name)}
+                          onClick={(e) => { e.stopPropagation(); handleDeleteClick(cust.id, cust.name); }}
                           className="p-1.5 rounded hover:bg-red-50 transition-colors"
                           title="Archive"
                         >
@@ -173,6 +184,17 @@ export default function CustomersListPage() {
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        open={archiveTarget !== null}
+        onClose={() => setArchiveTarget(null)}
+        onConfirm={handleConfirmDelete}
+        title="Archive Customer"
+        description={`Archive customer "${archiveTarget?.name}"? They will be moved to the Recycle Bin.`}
+        confirmText="Archive Customer"
+        isDestructive={true}
+        loading={archiving}
+      />
     </div>
   );
 }

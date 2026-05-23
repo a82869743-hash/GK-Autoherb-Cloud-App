@@ -13,6 +13,7 @@ import { formatINR, formatDate } from '../../utils/formatters';
 import api from '../../api/axiosInstance';
 import toast from 'react-hot-toast';
 import { useQueryClient } from '@tanstack/react-query';
+import ConfirmModal from '../../components/ui/ConfirmModal';
 
 const statusTabs = [
   { key: 'all', label: 'All' },
@@ -30,15 +31,25 @@ export default function JobCartListPage() {
 
   const { data, isLoading } = useJobCarts({ search, status, page, limit });
   const queryClient = useQueryClient();
+  const [cancelTargetId, setCancelTargetId] = useState<number | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Cancel this job cart? It will be moved to the Recycle Bin.')) return;
+  const handleDeleteClick = (id: number) => {
+    setCancelTargetId(id);
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!cancelTargetId) return;
+    setCancelling(true);
     try {
-      await api.delete(`/job-carts/${id}`);
+      await api.delete(`/job-carts/${cancelTargetId}`);
       toast.success('Job cart cancelled');
+      setCancelTargetId(null);
       queryClient.invalidateQueries({ queryKey: ['job-carts'] });
     } catch {
       toast.error('Failed to cancel job cart');
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -88,7 +99,7 @@ export default function JobCartListPage() {
       header: '',
       render: (row) => row.status !== 'cancelled' ? (
         <button
-          onClick={(e) => { e.stopPropagation(); handleDelete(row.id); }}
+          onClick={(e) => { e.stopPropagation(); handleDeleteClick(row.id); }}
           className="p-1.5 rounded hover:bg-red-50 transition-colors"
           title="Cancel Job Cart"
         >
@@ -138,19 +149,34 @@ export default function JobCartListPage() {
           onAction={!search && status === 'all' ? () => navigate('/admin/job-carts/new') : undefined}
         />
       ) : (
-        <DataTable
-          columns={columns}
-          data={data?.data || []}
-          loading={isLoading}
-          onRowClick={(row) => navigate(`/admin/job-carts/${row.id}`)}
-          pagination={data?.pagination ? {
-            page: data.pagination.page,
-            limit: data.pagination.limit,
-            total: data.pagination.total,
-            onPageChange: setPage,
-          } : undefined}
-        />
+        <div className="overflow-x-auto -mx-4 sm:mx-0">
+          <div className="min-w-[950px] p-4 sm:p-0">
+            <DataTable
+              columns={columns}
+              data={data?.data || []}
+              loading={isLoading}
+              onRowClick={(row) => navigate(`/admin/job-carts/${row.id}`)}
+              pagination={data?.pagination ? {
+                page: data.pagination.page,
+                limit: data.pagination.limit,
+                total: data.pagination.total,
+                onPageChange: setPage,
+              } : undefined}
+            />
+          </div>
+        </div>
       )}
+
+      <ConfirmModal
+        open={cancelTargetId !== null}
+        onClose={() => setCancelTargetId(null)}
+        onConfirm={handleConfirmCancel}
+        title="Cancel Job Cart"
+        description="Are you sure you want to cancel this job cart? It will be moved to the Recycle Bin."
+        confirmText="Cancel Job Cart"
+        isDestructive={true}
+        loading={cancelling}
+      />
     </>
   );
 }

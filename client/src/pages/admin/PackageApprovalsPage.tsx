@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axiosInstance';
 import { CheckCircle, XCircle, Loader2, PackageOpen, User, Car, Clock, AlertTriangle } from 'lucide-react';
+import ConfirmModal from '../../components/ui/ConfirmModal';
 
 export default function PackageApprovalsPage() {
   const [requests, setRequests] = useState<any[]>([]);
@@ -8,6 +9,7 @@ export default function PackageApprovalsPage() {
   const [approvingId, setApprovingId] = useState<number | null>(null);
   const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [rejectModalId, setRejectModalId] = useState<number | null>(null);
+  const [approveModalId, setApproveModalId] = useState<number | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
 
@@ -28,13 +30,17 @@ export default function PackageApprovalsPage() {
     fetchRequests();
   }, []);
 
-  const handleApprove = async (id: number) => {
-    if (!window.confirm('Approve this package request? This will generate an invoice.')) return;
-    setApprovingId(id);
+  const handleApproveClick = (id: number) => {
+    setApproveModalId(id);
+  };
+
+  const handleConfirmApprove = async () => {
+    if (!approveModalId) return;
+    setApprovingId(approveModalId);
     try {
-      const res = await api.put(`/packages/requests/${id}/approve`);
+      const res = await api.put(`/packages/requests/${approveModalId}/approve`);
       if (res.data.success) {
-        alert('Package approved successfully!');
+        setApproveModalId(null);
         fetchRequests();
       }
     } catch (err) {
@@ -180,7 +186,7 @@ export default function PackageApprovalsPage() {
                   </div>
                   <div className="p-4 bg-gray-50 border-t border-gray-100 flex gap-2">
                     <button
-                      onClick={() => handleApprove(req.id)}
+                      onClick={() => handleApproveClick(req.id)}
                       disabled={approvingId === req.id}
                       className="flex-1 flex justify-center items-center gap-2 px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
                     >
@@ -211,7 +217,7 @@ export default function PackageApprovalsPage() {
             </div>
           ) : (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
-              <table className="w-full text-left border-collapse text-sm">
+              <table className="w-full min-w-[800px] text-left border-collapse text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider text-[11px]">
                     <th className="p-4">Package</th>
@@ -259,7 +265,7 @@ export default function PackageApprovalsPage() {
             </div>
           ) : (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
-              <table className="w-full text-left border-collapse text-sm">
+              <table className="w-full min-w-[800px] text-left border-collapse text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider text-[11px]">
                     <th className="p-4">Package</th>
@@ -343,6 +349,17 @@ export default function PackageApprovalsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={approveModalId !== null}
+        onClose={() => setApproveModalId(null)}
+        onConfirm={handleConfirmApprove}
+        title="Approve Package"
+        description="Are you sure you want to approve this package request? This will generate an invoice for the customer."
+        confirmText="Approve"
+        isDestructive={false}
+        loading={approvingId !== null}
+      />
     </div>
   );
 }

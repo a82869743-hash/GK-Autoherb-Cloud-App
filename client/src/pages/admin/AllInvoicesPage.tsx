@@ -8,6 +8,7 @@ import {
 import toast from 'react-hot-toast';
 
 import api from '../../api/axiosInstance';
+import ConfirmModal from '../../components/ui/ConfirmModal';
 
 type BillType = 'all' | 'job_cart' | 'manual_bill' | 'salary' | 'buy_sell_buy' | 'buy_sell_sell';
 
@@ -61,6 +62,8 @@ export default function AllInvoicesPage() {
   const [toDate, setToDate] = useState('');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [voidConfirmRecord, setVoidConfirmRecord] = useState<InvoiceRecord | null>(null);
+  const [voiding, setVoiding] = useState(false);
   const limit = 25;
   // Resolve api type filter — buy_sell_buy/sell both map to buy_sell on the server
   const apiType = activeType === 'buy_sell_buy' || activeType === 'buy_sell_sell' ? 'buy_sell' : activeType;
@@ -133,21 +136,28 @@ export default function AllInvoicesPage() {
   const totalPages = Math.ceil(total / limit);
   const hasFilters = search || fromDate || toDate;
 
-  const handleVoid = async (rec: InvoiceRecord) => {
+  const handleVoidClick = (rec: InvoiceRecord) => {
+    setVoidConfirmRecord(rec);
+  };
+
+  const handleVoidConfirm = async () => {
+    if (!voidConfirmRecord) return;
+    setVoiding(true);
+    const rec = voidConfirmRecord;
     const typeLabel = rec.type === 'manual_bill' ? 'bill' : rec.type === 'job_cart' ? 'job cart' : 'record';
-    if (!window.confirm(`Void this ${typeLabel}? It will be moved to the Recycle Bin.`)) return;
     try {
       if (rec.type === 'manual_bill') {
         await api.delete(`/billing/${rec.id}`);
       } else if (rec.type === 'job_cart') {
         await api.delete(`/job-carts/${rec.id}`);
-      } else {
-        return;
       }
       toast.success(`${typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1)} voided`);
+      setVoidConfirmRecord(null);
       fetchRecords();
     } catch {
       toast.error(`Failed to void ${typeLabel}`);
+    } finally {
+      setVoiding(false);
     }
   };
 
@@ -278,7 +288,8 @@ export default function AllInvoicesPage() {
       </div>
 
       {/* ─── Table ─── */}
-      <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #ede8e7', overflow: 'hidden' }}>
+      <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #ede8e7', overflowX: 'auto', overflowY: 'hidden' }}>
+        <div style={{ minWidth: '950px' }}>
         {/* Table Header */}
         <div style={{
           display: 'grid',
@@ -400,7 +411,7 @@ export default function AllInvoicesPage() {
               <div>
                 {(rec.type === 'manual_bill' || rec.type === 'job_cart') && (
                   <button
-                    onClick={() => handleVoid(rec)}
+                    onClick={() => handleVoidClick(rec)}
                     title="Void / Archive"
                     style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -417,6 +428,7 @@ export default function AllInvoicesPage() {
             </div>
           );
         })}
+        </div>
       </div>
 
       {/* ─── Pagination ─── */}
@@ -453,6 +465,17 @@ export default function AllInvoicesPage() {
           </button>
         </div>
       )}
+
+      <ConfirmModal
+        open={voidConfirmRecord !== null}
+        onClose={() => setVoidConfirmRecord(null)}
+        onConfirm={handleVoidConfirm}
+        title="Void Record"
+        description={`Are you sure you want to void this ${voidConfirmRecord?.type === 'manual_bill' ? 'bill' : 'job cart'}? It will be moved to the Recycle Bin.`}
+        confirmText="Void Record"
+        isDestructive={true}
+        loading={voiding}
+      />
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
