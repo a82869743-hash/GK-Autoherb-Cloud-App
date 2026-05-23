@@ -291,7 +291,15 @@ export default function BookingPage() {
 
                       return availableServices.map((usage: any) => {
                         // Find matching service from services list by name
-                        const matchedService = services.find((s) => s.name.toLowerCase() === usage.service_name.toLowerCase());
+                        const matchedService = services.find((s) => {
+                          const sName = s.name.toLowerCase();
+                          const uName = usage.service_name.toLowerCase();
+                          if (sName === uName) return true;
+                          if (uName === 'foam wash' && sName.includes('foam wash')) return true;
+                          if (uName === 'wax coat' && sName.includes('teflon')) return true;
+                          if (uName === 'deep cleaning' && sName.includes('interior cleaning')) return true;
+                          return false;
+                        });
                         const serviceId = matchedService?.id;
                         const isSelected = serviceId ? selectedServices.includes(serviceId) : false;
 
