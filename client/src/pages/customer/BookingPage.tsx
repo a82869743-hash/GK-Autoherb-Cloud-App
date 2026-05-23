@@ -160,7 +160,7 @@ export default function BookingPage() {
       const res = await createMut.mutateAsync({
         slot_id: selectedSlot.id,
         service_ids: !isPackageBooking && selectedServices.length > 0 ? selectedServices : undefined,
-        package_service_name: isPackageBooking && selectedPackageServiceNames.length > 0 ? selectedPackageServiceNames : undefined,
+        package_service_name: isPackageBooking && selectedPackageServiceNames.length > 0 ? selectedPackageServiceNames.join(',') : undefined,
         package_id: selectedPackage || undefined,
         vehicle_id: selectedVehicleId || undefined,
         vehicle_brand: brand,
