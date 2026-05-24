@@ -65,6 +65,12 @@ exports.bulkCreate = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Slot duration must be between 1 and 480 minutes' });
     }
 
+    // FIX: Clear existing unbooked slots in the requested range to allow changing slot duration
+    await pool.query(
+      'DELETE FROM slots WHERE slot_date BETWEEN ? AND ? AND start_time >= ? AND start_time < ? AND booked_count = 0',
+      [from_date, to_date, start_time, end_time]
+    );
+
     let created = 0;
     let skipped = 0;
 
