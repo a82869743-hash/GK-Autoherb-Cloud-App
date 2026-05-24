@@ -16,7 +16,7 @@ exports.list = async (req, res) => {
     }
 
     const [rows] = await pool.query(
-      `SELECT *, (booked_count < max_capacity AND is_blocked = 0) AS is_available
+      `SELECT *, DATE_FORMAT(slot_date, '%Y-%m-%d') as slot_date, (booked_count < max_capacity AND is_blocked = 0) AS is_available
        FROM slots WHERE ${where}
        ORDER BY slot_date ASC, start_time ASC`,
       params
@@ -87,7 +87,7 @@ exports.bulkCreate = async (req, res) => {
 
     // FIX: Pre-fetch existing slots in the date range to prevent duplication
     const [existingSlots] = await pool.query(
-      'SELECT slot_date, start_time FROM slots WHERE slot_date BETWEEN ? AND ?',
+      'SELECT DATE_FORMAT(slot_date, \'%Y-%m-%d\') as slot_date, start_time FROM slots WHERE slot_date BETWEEN ? AND ?',
       [from_date, to_date]
     );
     const existingSet = new Set(

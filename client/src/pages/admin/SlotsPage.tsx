@@ -26,7 +26,9 @@ function getWeekDates(offset: number): Date[] {
   });
 }
 
-function fmtDate(d: Date) { return d.toISOString().split('T')[0]; }
+function fmtDate(d: Date) { 
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 function fmtDay(d: Date) { return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }); }
 
 export default function SlotsPage() {
