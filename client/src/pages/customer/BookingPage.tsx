@@ -298,9 +298,11 @@ export default function BookingPage() {
                           const sName = s.name.toLowerCase();
                           const uName = usage.service_name.toLowerCase();
                           if (sName === uName) return true;
-                          if (uName === 'foam wash' && sName.includes('foam wash')) return true;
-                          if (uName === 'wax coat' && sName.includes('teflon')) return true;
+                          if ((uName === 'foam wash' || uName === 'car foam wash') && (sName.includes('foam wash') || sName.includes('car wash'))) return true;
+                          if ((uName === 'wax coat' || uName === 'body wax coat') && (sName.includes('teflon') || sName.includes('wax') || sName.includes('ceramic'))) return true;
                           if (uName === 'deep cleaning' && sName.includes('interior cleaning')) return true;
+                          if (uName === 'two wheeler wash' && sName.includes('bike wash')) return true;
+                          if (uName.includes('two wheeler') && sName.includes('two wheeler')) return true;
                           return false;
                         });
                         const isSelected = selectedPackageServiceNames.includes(usage.service_name);

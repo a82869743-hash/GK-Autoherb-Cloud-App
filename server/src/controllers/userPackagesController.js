@@ -122,6 +122,20 @@ async function getServiceBreakdown(conn, packageId, packageName) {
 
   if (PACKAGE_SERVICE_MAP[packageName]) return PACKAGE_SERVICE_MAP[packageName];
 
+  // Try to match base tier for new packages (e.g. "Bronze Package - Basic Wash")
+  let baseTier = '';
+  const lowerName = packageName.toLowerCase();
+  if (lowerName.includes('bronze')) baseTier = 'Bronze';
+  else if (lowerName.includes('silver')) baseTier = 'Silver';
+  else if (lowerName.includes('gold')) baseTier = 'Gold';
+  else if (lowerName.includes('diamond')) baseTier = 'Diamond';
+  else if (lowerName.includes('platinum')) baseTier = 'Platinum';
+
+  if (baseTier && PACKAGE_SERVICE_MAP[baseTier]) {
+    return PACKAGE_SERVICE_MAP[baseTier];
+  }
+
+
   const [pkgDetails] = await conn.query(
     'SELECT wash_count, wax_count FROM packages WHERE id = ?',
     [packageId]
