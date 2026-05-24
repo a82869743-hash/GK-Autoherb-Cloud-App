@@ -20,34 +20,41 @@
 
 const pool = require('../config/db');
 
-// ─── AutoHerb Annual Car Care V2 — Complimentary service breakdown ──────────────
-// These are COMPLIMENTARY services included with each paid package.
-// Paid washes (Car Foam Wash) are tracked via paid_wash_count on the packages table.
+// ─── AutoHerb Annual Car Care V2 — TOTAL service entitlements (paid + complimentary) ──────────────
+// Each package includes PAID washes + COMPLIMENTARY services.
+// The total_count here is the COMBINED entitlement that customers can use.
+//
+// BRONZE:    3 paid + 1 comp = 4 Car Foam Wash, 1 Body Wax Coat
+// SILVER:    5 paid + 2 comp = 7 Car Foam Wash, 2 Body Wax Coat, 1 Two Wheeler Wash
+// GOLD:      8 paid + 4 comp = 12 Car Foam Wash, 3 Body Wax Coat, 1 Two Wheeler Wash, 1 Two Wheeler Wax Coat
+// DIAMOND:  10 paid + 6 comp = 16 Car Foam Wash, 2 Body Wax Coat, 2 Two Wheeler Wash, 1 Two Wheeler Wax Coat, 1 Body Hybrid Ceramic Wax Coat
+// PLATINUM: 12 paid + 8 comp = 20 Car Foam Wash, 3 Body Wax Coat, 2 Two Wheeler Wash, 1 Two Wheeler Wax Coat, 1 Body Hybrid Ceramic Wax Coat, 1 Deep Cleaning
+
 const PACKAGE_SERVICE_MAP = {
   'Bronze Package': [
-    { service_name: 'Car Foam Wash', total_count: 1 },
+    { service_name: 'Car Foam Wash', total_count: 4 },
     { service_name: 'Body Wax Coat', total_count: 1 },
   ],
   'Silver Package': [
-    { service_name: 'Car Foam Wash', total_count: 2 },
+    { service_name: 'Car Foam Wash', total_count: 7 },
     { service_name: 'Body Wax Coat', total_count: 2 },
     { service_name: 'Two Wheeler Wash', total_count: 1 },
   ],
   'Gold Package': [
-    { service_name: 'Car Foam Wash', total_count: 4 },
+    { service_name: 'Car Foam Wash', total_count: 12 },
     { service_name: 'Body Wax Coat', total_count: 3 },
     { service_name: 'Two Wheeler Wash', total_count: 1 },
     { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
   ],
   'Diamond Package': [
-    { service_name: 'Car Foam Wash', total_count: 6 },
+    { service_name: 'Car Foam Wash', total_count: 16 },
     { service_name: 'Body Wax Coat', total_count: 2 },
     { service_name: 'Two Wheeler Wash', total_count: 2 },
     { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
     { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1 },
   ],
   'Platinum Package': [
-    { service_name: 'Car Foam Wash', total_count: 8 },
+    { service_name: 'Car Foam Wash', total_count: 20 },
     { service_name: 'Body Wax Coat', total_count: 3 },
     { service_name: 'Two Wheeler Wash', total_count: 2 },
     { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
@@ -56,29 +63,29 @@ const PACKAGE_SERVICE_MAP = {
   ],
   // Legacy aliases for backward compatibility
   'Bronze': [
-    { service_name: 'Car Foam Wash', total_count: 1 },
+    { service_name: 'Car Foam Wash', total_count: 4 },
     { service_name: 'Body Wax Coat', total_count: 1 },
   ],
   'Silver': [
-    { service_name: 'Car Foam Wash', total_count: 2 },
+    { service_name: 'Car Foam Wash', total_count: 7 },
     { service_name: 'Body Wax Coat', total_count: 2 },
     { service_name: 'Two Wheeler Wash', total_count: 1 },
   ],
   'Gold': [
-    { service_name: 'Car Foam Wash', total_count: 4 },
+    { service_name: 'Car Foam Wash', total_count: 12 },
     { service_name: 'Body Wax Coat', total_count: 3 },
     { service_name: 'Two Wheeler Wash', total_count: 1 },
     { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
   ],
   'Diamond': [
-    { service_name: 'Car Foam Wash', total_count: 6 },
+    { service_name: 'Car Foam Wash', total_count: 16 },
     { service_name: 'Body Wax Coat', total_count: 2 },
     { service_name: 'Two Wheeler Wash', total_count: 2 },
     { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
     { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1 },
   ],
   'Platinum': [
-    { service_name: 'Car Foam Wash', total_count: 8 },
+    { service_name: 'Car Foam Wash', total_count: 20 },
     { service_name: 'Body Wax Coat', total_count: 3 },
     { service_name: 'Two Wheeler Wash', total_count: 2 },
     { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
@@ -86,6 +93,18 @@ const PACKAGE_SERVICE_MAP = {
     { service_name: 'Deep Cleaning', total_count: 1 },
   ],
 };
+
+// ─── Package breakdown for display purposes (paid vs complimentary) ──────────────
+// Used by the API to send structured info to the frontend for card rendering
+const PACKAGE_BREAKDOWN = {
+  'Bronze Package':   { paid_washes: 3, complimentary: [{ service_name: 'Car Foam Wash', count: 1 }, { service_name: 'Body Wax Coat', count: 1 }] },
+  'Silver Package':   { paid_washes: 5, complimentary: [{ service_name: 'Car Foam Wash', count: 2 }, { service_name: 'Body Wax Coat', count: 2 }, { service_name: 'Two Wheeler Wash', count: 1 }] },
+  'Gold Package':     { paid_washes: 8, complimentary: [{ service_name: 'Car Foam Wash', count: 4 }, { service_name: 'Body Wax Coat', count: 3 }, { service_name: 'Two Wheeler Wash', count: 1 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }] },
+  'Diamond Package':  { paid_washes: 10, complimentary: [{ service_name: 'Car Foam Wash', count: 6 }, { service_name: 'Body Wax Coat', count: 2 }, { service_name: 'Two Wheeler Wash', count: 2 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 }] },
+  'Platinum Package': { paid_washes: 12, complimentary: [{ service_name: 'Car Foam Wash', count: 8 }, { service_name: 'Body Wax Coat', count: 3 }, { service_name: 'Two Wheeler Wash', count: 2 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 }, { service_name: 'Deep Cleaning', count: 1 }] },
+};
+
+exports.PACKAGE_BREAKDOWN = PACKAGE_BREAKDOWN;
 
 /**
  * getServiceBreakdown — DB-first with legacy fallback

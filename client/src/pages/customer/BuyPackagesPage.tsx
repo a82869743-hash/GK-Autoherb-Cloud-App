@@ -117,6 +117,14 @@ const ALL_SERVICES = [
   'Deep Cleaning',
 ];
 
+const PACKAGE_BREAKDOWN: Record<string, { paid_washes: number, complimentary: { service_name: string, count: number }[] }> = {
+  'bronze':   { paid_washes: 3, complimentary: [{ service_name: 'Car Foam Wash', count: 1 }, { service_name: 'Body Wax Coat', count: 1 }] },
+  'silver':   { paid_washes: 5, complimentary: [{ service_name: 'Car Foam Wash', count: 2 }, { service_name: 'Body Wax Coat', count: 2 }, { service_name: 'Two Wheeler Wash', count: 1 }] },
+  'gold':     { paid_washes: 8, complimentary: [{ service_name: 'Car Foam Wash', count: 4 }, { service_name: 'Body Wax Coat', count: 3 }, { service_name: 'Two Wheeler Wash', count: 1 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }] },
+  'diamond':  { paid_washes: 10, complimentary: [{ service_name: 'Car Foam Wash', count: 6 }, { service_name: 'Body Wax Coat', count: 2 }, { service_name: 'Two Wheeler Wash', count: 2 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 }] },
+  'platinum': { paid_washes: 12, complimentary: [{ service_name: 'Car Foam Wash', count: 8 }, { service_name: 'Body Wax Coat', count: 3 }, { service_name: 'Two Wheeler Wash', count: 2 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 }, { service_name: 'Deep Cleaning', count: 1 }] },
+};
+
 export default function BuyPackagesPage() {
   const { user } = useAuthStore();
   const { addToast } = useToastStore();
@@ -175,41 +183,8 @@ export default function BuyPackagesPage() {
     return 0;
   };
 
-  // Get service count from package's services array
-  const getServiceCount = (pkg: Pkg, serviceName: string): number => {
-    let count = 0;
-    if (pkg.services && pkg.services.length > 0) {
-      const svc = pkg.services.find(s => {
-        const dbName = s.name?.toLowerCase() || '';
-        const uiName = serviceName.toLowerCase();
-        
-        if (uiName === 'car foam wash' && dbName.includes('foam wash')) return true;
-        if (uiName === 'body wax coat' && dbName.includes('wax coat') && !dbName.includes('two wheeler') && !dbName.includes('ceramic')) return true;
-        if (uiName === 'two wheeler wash' && dbName.includes('two wheeler wash')) return true;
-        if (uiName === 'two wheeler wax coat' && dbName.includes('two wheeler wax')) return true;
-        if (uiName === 'body hybrid ceramic wax coat' && dbName.includes('ceramic')) return true;
-        if (uiName === 'deep cleaning' && dbName.includes('deep clean')) return true;
-
-        return dbName === uiName;
-      });
-      if (svc) count = svc.total_count || 0;
-    }
-
-    // Hardcoded fallback for specific services based on package tier
-    if (serviceName.toLowerCase() === 'car foam wash') {
-      const pkgName = pkg.name.toLowerCase();
-      let overrideCount = 0;
-      if (pkgName.includes('bronze')) overrideCount = 1;
-      if (pkgName.includes('silver')) overrideCount = 2;
-      if (pkgName.includes('gold')) overrideCount = 4;
-      if (pkgName.includes('diamond')) overrideCount = 6;
-      if (pkgName.includes('platinum')) overrideCount = 8;
-      
-      return Math.max(count, overrideCount);
-    }
-
-    return count;
-  };
+  // We no longer need getServiceCount since we use PACKAGE_BREAKDOWN directly based on tier
+  // but we keep a dummy function if it's used elsewhere, though it's not.
 
   // Step 1: User clicks "Request to Buy" → show confirmation modal
   const handleBuyClick = (pkg: Pkg) => {
@@ -330,9 +305,9 @@ export default function BuyPackagesPage() {
             const tierKey = getTierKey(pkg.name);
             const colors = TIER_COLORS[tierKey] || DEFAULT_TIER_COLOR;
 
-            // Extract paid foam wash count from description or use wash_count
-            const paidWashText = pkg.description?.match(/Pay\s+(?:For\s+)?(\d+)\s+Car\s+Foam\s+Wash/i);
-            const paidWashCount = paidWashText ? parseInt(paidWashText[1]) : (pkg.wash_count || 0);
+            // Extract paid foam wash count from breakdown or fallback
+            const breakdown = PACKAGE_BREAKDOWN[tierKey] || { paid_washes: pkg.wash_count || 0, complimentary: [] };
+            const paidWashCount = breakdown.paid_washes;
 
             return (
               <div
@@ -346,22 +321,35 @@ export default function BuyPackagesPage() {
                     {pkg.name.replace(/ Package$/i, '')}
                   </h3>
                   <p className="text-[11px] font-bold uppercase tracking-wider opacity-80 relative z-10">Package</p>
-                  {paidWashCount > 0 && (
-                    <div className="mt-3 text-xs font-semibold opacity-90 relative z-10 bg-white/10 inline-block px-3 py-1 rounded-full">
-                      Pay For {paidWashCount} Car Foam Wash
-                    </div>
-                  )}
                 </div>
 
-                {/* ─── Complementary Services ─── */}
+                {/* ─── Services ─── */}
                 <div className="p-4 flex-1 flex flex-col">
-                  <p className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-gray-400 mb-3 text-center">
+                  
+                  {/* Paid Services */}
+                  <p className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-gray-400 mb-2 text-center">
+                    Paid Services
+                  </p>
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                        <Check className="w-3 h-3 text-blue-600" strokeWidth={3} />
+                      </div>
+                      <span className="text-xs text-gray-800 font-semibold">
+                        {paidWashCount} Car Foam Wash{paidWashCount > 1 ? 'es' : ''}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Complementary Services */}
+                  <p className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-gray-400 mb-2 text-center">
                     Complementary
                   </p>
-
                   <div className="space-y-2 flex-1">
                     {ALL_SERVICES.map(svcName => {
-                      const count = getServiceCount(pkg, svcName);
+                      // Check if it's in the breakdown complementary list
+                      const compItem = breakdown.complimentary.find(c => c.service_name === svcName);
+                      const count = compItem ? compItem.count : 0;
                       const included = count > 0;
                       return (
                         <div key={svcName} className="flex items-center gap-2">
@@ -375,9 +363,7 @@ export default function BuyPackagesPage() {
                             </div>
                           )}
                           <span className={`text-xs ${included ? 'text-gray-800 font-semibold' : 'text-gray-400 line-through'}`}>
-                            {svcName === 'Car Foam Wash' 
-                              ? (included ? `+${count} Complimentary Foam Wash${count > 1 ? 'es' : ''}` : 'Complimentary Foam Wash')
-                              : (included && count > 1 ? `${count} ` : '') + svcName}
+                            {included && count > 1 ? `${count} ` : ''}{svcName}
                           </span>
                         </div>
                       );
