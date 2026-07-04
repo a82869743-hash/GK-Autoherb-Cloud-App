@@ -973,3 +973,76 @@ exports.expirePackages = async () => {
     return 0;
   }
 };
+
+// ═══════════════════════════════════════════════════════════
+// GET ALL USER PACKAGES (Admin only)
+// ═══════════════════════════════════════════════════════════
+exports.getAllUserPackages = async (req, res) => {
+  try {
+    const { status, search } = req.query;
+    let query = `
+      SELECT up.id, up.package_id, up.user_id, up.start_date, up.end_date, up.created_at,
+             up.package_status, up.payment_status, up.price_paid,
+             up.vehicle_segment, up.renewed_from_id, up.renewed_at,
+             p.name AS package_name, p.description,
+             u.name AS customer_name, u.mobile AS customer_mobile,
+             v.brand AS vehicle_brand, v.model AS vehicle_model, v.registration_no AS vehicle_reg_no
+      FROM user_packages up
+      JOIN packages p ON up.package_id = p.id
+      JOIN users u ON up.user_id = u.id
+      LEFT JOIN vehicles v ON up.vehicle_id = v.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (status) {
+      query += ` AND up.package_status = ?`;
+      params.push(status);
+    }
+
+    if (search) {
+      query += ` AND (u.name LIKE ? OR u.mobile LIKE ? OR v.registration_no LIKE ? OR p.name LIKE ?)`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    query += ` ORDER BY up.created_at DESC`;
+
+    const [packages] = await pool.query(query, params);
+
+    for (const pkg of packages) {
+      let serviceMap = [];
+      let usageRows = [];
+      try {
+        serviceMap = await getServiceBreakdown(pool, pkg.package_id, pkg.package_name);
+        [usageRows] = await pool.query(
+          'SELECT service_name, used_count FROM package_usage WHERE user_package_id = ?',
+          [pkg.id]
+        );
+      } catch (err) {
+        console.warn(`Failed usage load for user package ID ${pkg.id}:`, err.message);
+      }
+
+      pkg.usage = serviceMap.map(svc => {
+        const row = usageRows.find(u => u.service_name === svc.service_name);
+        const usedCount = row ? row.used_count : 0;
+        return {
+          service_name: svc.service_name,
+          total_count: svc.total_count,
+          used_count: usedCount,
+          remaining: svc.total_count - usedCount,
+        };
+      });
+
+      // Calculate days remaining
+      pkg.days_remaining = pkg.end_date
+        ? Math.max(0, Math.ceil((new Date(pkg.end_date) - new Date()) / (1000 * 60 * 60 * 24)))
+        : null;
+    }
+
+    res.json({ success: true, data: packages });
+  } catch (err) {
+    console.error('Get all user packages error:', err);
+    res.status(500).json({ success: false, error: 'Failed to fetch all user packages' });
+  }
+};
+

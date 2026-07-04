@@ -81,6 +81,7 @@ import AuditLogPage from './pages/admin/AuditLogPage';
 import StaffHRPage from './pages/admin/StaffHRPage';
 import WhatsAppPage from './pages/admin/WhatsAppPage';
 import CustomerRewardsPage from './pages/admin/CustomerRewardsPage';
+import PackageTrackingPage from './pages/admin/PackageTrackingPage';
 
 // Quotations pages
 import QuotationsListPage from './pages/admin/QuotationsListPage';
@@ -163,6 +164,7 @@ export default function App() {
         <Route path="customers/:id" element={<CustomerDetailPage />} />
         <Route path="add-customer" element={<ManualRegistrationPage />} />
         <Route path="package-approvals" element={<PackageApprovalsPage />} />
+        <Route path="package-tracking" element={<PackageTrackingPage />} />
         {/* ─── New Admin Routes ─── */}
         <Route path="reports" element={<ReportsPage />} />
         <Route path="billing" element={<QuickBillingPage />} />

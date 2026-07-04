@@ -33,4 +33,7 @@ router.post('/consume', protect, role(['admin']), ctrl.consumeService);
 // Bulk renew packages (multi-car) (admin only)
 router.post('/bulk-renew', protect, role(['admin']), ctrl.bulkRenewPackages);
 
+// Admin: Get all customer package subscriptions in the system
+router.get('/', protect, role(['admin']), ctrl.getAllUserPackages);
+
 module.exports = router;

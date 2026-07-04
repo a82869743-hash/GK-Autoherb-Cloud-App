@@ -51,6 +51,7 @@ const navCategories: NavCategory[] = [
       { to: '/admin/add-customer', icon: PlusCircle, label: 'Add Customer' },
       { to: '/admin/packages', icon: Layers, label: 'Packages' },
       { to: '/admin/package-approvals', icon: Package, label: 'Package Approvals' },
+      { to: '/admin/package-tracking', icon: Layers, label: 'Package Tracking', badge: 'New' },
       { to: '/admin/loyalty', icon: Star, label: 'Loyalty Points', badge: 'New' },
       { to: '/admin/customer-rewards', icon: Gift, label: 'Customer Rewards', badge: 'New' },
     ],

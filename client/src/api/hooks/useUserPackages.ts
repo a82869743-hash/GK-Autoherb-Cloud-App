@@ -64,3 +64,14 @@ export const useRenewPackage = () => {
     },
   });
 };
+
+/** Admin: Fetch all customer packages across the system */
+export const useAllUserPackages = (params?: { status?: string; search?: string }) =>
+  useQuery({
+    queryKey: ['user-packages', 'all', params],
+    queryFn: async () => {
+      const res = await api.get('/user-packages', { params });
+      return res.data.data;
+    },
+  });
+
