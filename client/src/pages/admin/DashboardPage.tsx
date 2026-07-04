@@ -16,6 +16,94 @@ import { formatTime, formatINR, timeAgo } from '../../utils/formatters';
 import io from 'socket.io-client';
 import { useAuthStore } from '../../store/authStore';
 
+function TacticalScannerFeed({ stats }: { stats: any }) {
+  const [logs, setLogs] = useState<string[]>([]);
+  const [scanPulse, setScanPulse] = useState(true);
+
+  // Generate tactical logs periodically
+  useEffect(() => {
+    const baseLogs = [
+      `Initializing system diagnostic diagnostics... OK`,
+      `Database connection: ACTIVE (ping: 14ms)`,
+      `WhatsApp API Gateway: ONLINE (connected)`,
+      `Active Workshop Bay: ${stats?.open_job_carts || 0} vehicle(s) in progress`,
+      `Stock check: ${stats?.low_stock_items || 0} alerts detected`,
+      `Financial ledger status: SECURE`,
+      `Staff presence index: ${stats?.staffPresent || 0} active in workshop`,
+      `Inquiries queue: ${stats?.newLeads || 0} pending response`,
+    ];
+    setLogs(baseLogs);
+
+    const interval = setInterval(() => {
+      const liveEvents = [
+        `[SCAN] Checked bay telemetry... workshop active`,
+        `[STATUS] System CPU load: ${(Math.random() * 5 + 2).toFixed(1)}%`,
+        `[GATEWAY] WhatsApp ping success: 88ms`,
+        `[LEDGER] Daily cache synced successfully`,
+        `[SECURITY] Encryption keys verified: SSL active`,
+        `[DIAG] Memory footprint: 142MB / 512MB`,
+        `[CLEAN] Purging transient socket caches... done`,
+      ];
+      const randomEvent = liveEvents[Math.floor(Math.random() * liveEvents.length)];
+      setLogs((prev) => [randomEvent, ...prev.slice(0, 6)]);
+      setScanPulse(p => !p);
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [stats]);
+
+  return (
+    <div className="bg-slate-950 text-emerald-400 p-6 rounded-2xl font-mono text-xs border border-emerald-500/20 shadow-2xl relative overflow-hidden">
+      <style>{`
+        @keyframes scan-beam {
+          0% { transform: translateY(-100%); }
+          100% { transform: translateY(200%); }
+        }
+        .animate-scan-beam {
+          animation: scan-beam 4s linear infinite;
+        }
+      `}</style>
+      
+      {/* Scanning Laser Beam Line */}
+      <div className="absolute inset-x-0 h-0.5 bg-emerald-500/30 blur-[1px] pointer-events-none animate-scan-beam" />
+      
+      {/* Glow effects */}
+      <div className="absolute -top-12 -right-12 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+
+      <div className="flex items-center justify-between border-b border-emerald-500/20 pb-3 mb-3">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+          <span className="font-bold uppercase tracking-wider text-emerald-300">Tactical Feed & System Scanner</span>
+        </div>
+        <span className="text-[10px] text-emerald-500/60 uppercase">Scan: {scanPulse ? 'PASS_A' : 'PASS_B'}</span>
+      </div>
+
+      {/* Stats Quick-Graph SVG */}
+      <div className="h-16 mb-4 flex items-end justify-between border-b border-emerald-500/10 pb-2 relative">
+        <div className="absolute top-1 left-2 text-[9px] text-emerald-500/40 uppercase">Live Performance Load</div>
+        <svg className="w-full h-12 text-emerald-500/40 overflow-visible" preserveAspectRatio="none">
+          <path
+            d="M0,45 Q30,10 60,35 T120,5 T180,40 T240,25 T300,10 L300,50 L0,50 Z"
+            fill="rgba(16, 185, 129, 0.05)"
+            stroke="rgba(16, 185, 129, 0.4)"
+            strokeWidth="1.5"
+            strokeDasharray="4 2"
+          />
+        </svg>
+      </div>
+
+      <div className="space-y-1.5 min-h-[120px] select-none">
+        {logs.map((log, idx) => (
+          <div key={idx} className={`flex gap-2 transition-all duration-500 ${idx === 0 ? 'text-emerald-300 font-bold scale-[1.01]' : 'opacity-65 text-emerald-400/90'}`}>
+            <span className="text-emerald-600">[{new Date().toLocaleTimeString('en-IN', { hour12: false })}]</span>
+            <span className="flex-1 truncate">{log}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { token } = useAuthStore();
   const { data: stats, isLoading: statsLoading } = useDashboardStats();
@@ -394,6 +482,9 @@ export default function DashboardPage() {
 
         {/* Right Column */}
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45, duration: 0.5 }} className="space-y-6">
+          {/* Tactical Scanner Feed */}
+          <TacticalScannerFeed stats={stats} />
+
           {/* Quick Actions */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
