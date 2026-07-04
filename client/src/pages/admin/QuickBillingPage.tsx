@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  IndianRupee, Package, Search, Plus, Trash2, User,
+  IndianRupee, Package, Search, Plus, Trash2, User, Car,
   FileText, ShieldCheck, Tag, AlertTriangle
 } from 'lucide-react';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -32,6 +32,10 @@ const schema = z.object({
   })).min(1, 'Add at least one item to bill'),
   payment_method: z.enum(['cash', 'upi', 'card', 'bank_transfer', 'other']),
   loyalty_redeemed: z.boolean().optional(),
+  vehicle_brand: z.string().optional(),
+  vehicle_model: z.string().optional(),
+  vehicle_reg_no: z.string().optional(),
+  vehicle_category: z.string().optional(),
 });
 
 type QuickBillForm = z.infer<typeof schema>;
@@ -59,6 +63,10 @@ export default function QuickBillingPage() {
       discount_value: 0,
       payment_method: 'cash',
       loyalty_redeemed: false,
+      vehicle_brand: '',
+      vehicle_model: '',
+      vehicle_reg_no: '',
+      vehicle_category: '',
     }
   });
 
@@ -148,6 +156,10 @@ export default function QuickBillingPage() {
         products: payloadProducts,
         payment_method: data.payment_method,
         loyalty_redeemed: data.loyalty_redeemed,
+        vehicle_brand: data.vehicle_brand,
+        vehicle_model: data.vehicle_model,
+        vehicle_reg_no: data.vehicle_reg_no,
+        vehicle_category: data.vehicle_category,
       };
 
       const res = await api.post('/billing', payload);
@@ -213,6 +225,56 @@ export default function QuickBillingPage() {
                     </button>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+
+          {/* Vehicle Details */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+            <h2 className="text-lg font-bold text-[#1c1b1b] mb-4 flex items-center gap-2">
+              <Car size={18} className="text-[#D32F2F]" /> Vehicle Details
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-[#5f5e5e] mb-1">Vehicle Brand</label>
+                <input
+                  type="text"
+                  {...register("vehicle_brand")}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-[#D32F2F] focus:ring-1 focus:ring-[#D32F2F] outline-none transition-all"
+                  placeholder="e.g. Maruti, Hyundai"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-[#5f5e5e] mb-1">Vehicle Model</label>
+                <input
+                  type="text"
+                  {...register("vehicle_model")}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-[#D32F2F] focus:ring-1 focus:ring-[#D32F2F] outline-none transition-all"
+                  placeholder="e.g. Swift, i20"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-[#5f5e5e] mb-1">Registration Number</label>
+                <input
+                  type="text"
+                  {...register("vehicle_reg_no")}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-[#D32F2F] focus:ring-1 focus:ring-[#D32F2F] outline-none transition-all uppercase"
+                  placeholder="e.g. MH12AB1234"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-[#5f5e5e] mb-1">Category</label>
+                <select
+                  {...register("vehicle_category")}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-[#D32F2F] outline-none bg-white"
+                >
+                  <option value="">Select Category...</option>
+                  <option value="hatchback">Hatchback</option>
+                  <option value="medium_hatchback">Med Hatchback</option>
+                  <option value="sedan">Sedan</option>
+                  <option value="premium_sedan">Premium Sedan</option>
+                  <option value="suv">SUV</option>
+                </select>
               </div>
             </div>
           </div>

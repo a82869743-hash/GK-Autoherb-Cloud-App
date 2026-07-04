@@ -103,7 +103,7 @@ exports.createManual = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
-    const { name, mobile, email, brand, model, category, registration_no, package_id, price } = req.body;
+    const { name, mobile, email, brand, model, category, registration_no, package_id, price, package_custom_services } = req.body;
 
     if (!name || !mobile) {
       return res.status(400).json({ success: false, error: 'Name and mobile are required' });
@@ -144,10 +144,43 @@ exports.createManual = async (req, res) => {
       );
       
       // Also insert into user_packages so the user actually gets the package!
-      await connection.query(
-        "INSERT INTO user_packages (user_id, package_id, end_date) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 1 YEAR))",
-        [customerId, package_id]
+      const [upResult] = await connection.query(
+        `INSERT INTO user_packages 
+         (user_id, package_id, end_date, payment_status, package_status, price_paid, vehicle_segment, vehicle_id)
+         VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 1 YEAR), 'paid', 'active', ?, ?, ?)`,
+        [customerId, package_id, price || 0, category || null, vehicleId]
       );
+      const userPackageId = upResult.insertId;
+
+      // Handle package custom services remaining balances
+      if (package_custom_services && Array.isArray(package_custom_services)) {
+        for (const item of package_custom_services) {
+          const total = parseInt(item.total_count) || 0;
+          const remaining = parseInt(item.remaining) || 0;
+          const used = Math.max(0, Math.min(total, total - remaining));
+          const usageStatus = remaining > 0 ? 'available' : 'consumed';
+
+          await connection.query(
+            "INSERT INTO package_usage (user_package_id, service_name, used_count, usage_status) VALUES (?, ?, ?, ?)",
+            [userPackageId, item.service_name, used, usageStatus]
+          );
+        }
+      } else {
+        // Fallback: load default services of the package and insert them with 0 used
+        const [pkgServices] = await connection.query(
+          `SELECT s.name AS service_name, ps.total_count
+           FROM package_services ps
+           JOIN services s ON ps.service_id = s.id
+           WHERE ps.package_id = ?`,
+          [package_id]
+        );
+        for (const item of pkgServices) {
+          await connection.query(
+            "INSERT INTO package_usage (user_package_id, service_name, used_count, usage_status) VALUES (?, ?, 0, 'available')",
+            [userPackageId, item.service_name]
+          );
+        }
+      }
       
       await connection.query(
         "INSERT INTO customer_notes (customer_id, note) VALUES (?, ?)",

@@ -437,7 +437,7 @@ export default function PackagesPage() {
                       ))}
                     </select>
                     {/* Count input */}
-                    <div className="relative w-24">
+                    <div className="relative w-24 shrink-0">
                       <input
                         type="number"
                         min="1"
@@ -488,7 +488,7 @@ export default function PackagesPage() {
                          <option key={inv.id} value={inv.id}>{inv.product_name} ({inv.unit})</option>
                       ))}
                     </select>
-                    <input type="number" min="1" className="w-20 px-3 py-1.5 border border-gray-300 rounded text-sm" placeholder="Qty" value={p.quantity} onChange={e => {
+                    <input type="number" min="1" className="w-20 shrink-0 px-3 py-1.5 border border-gray-300 rounded text-sm" placeholder="Qty" value={p.quantity} onChange={e => {
                       const next = [...selectedProducts];
                       next[idx].quantity = parseFloat(e.target.value) || 1;
                       setSelectedProducts(next);

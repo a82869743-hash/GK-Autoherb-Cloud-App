@@ -8,7 +8,8 @@ exports.create = async (req, res) => {
     const {
       customer_id, customer_name, customer_mobile,
       amount, description, services, products, payment_method = 'cash',
-      discount_type, discount_value, loyalty_redeemed
+      discount_type, discount_value, loyalty_redeemed,
+      vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category
     } = req.body;
 
     if (!amount || amount <= 0) {
@@ -38,8 +39,9 @@ exports.create = async (req, res) => {
 
     const [result] = await conn.query(
       `INSERT INTO manual_bills 
-       (customer_id, customer_name, customer_mobile, amount, discount_type, discount_value, description, services_json, products_json, payment_method, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (customer_id, customer_name, customer_mobile, amount, discount_type, discount_value, description, services_json, products_json, payment_method, created_by,
+        vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         customer_id || null,
         customer_name || null,
@@ -51,7 +53,11 @@ exports.create = async (req, res) => {
         services ? JSON.stringify(services) : null,
         products ? JSON.stringify(products) : null,
         payment_method,
-        req.user.id
+        req.user.id,
+        vehicle_brand || null,
+        vehicle_model || null,
+        vehicle_reg_no || null,
+        vehicle_category || null
       ]
     );
 

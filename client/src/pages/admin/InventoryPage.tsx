@@ -1,15 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Package, Edit2, Trash2, Check, Upload } from 'lucide-react';
+import { Plus, Package, Edit2, Trash2, Check, Upload, Search, ShieldAlert, BarChart3, HelpCircle, RefreshCw } from 'lucide-react';
 import { useInventory, useCreateInventory, useUpdateInventory, useAdjustQuantity, useDeleteInventory } from '../../api/hooks/useInventory';
-import AdminTopBar from '../../components/layout/AdminTopBar';
+import PremiumPageHeader from '../../components/shared/PremiumPageHeader';
+import PremiumStatCard from '../../components/shared/PremiumStatCard';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
-import SearchInput from '../../components/ui/SearchInput';
-import DataTable, { Column } from '../../components/ui/DataTable';
 import Modal from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/shared/ConfirmDialog';
-import EmptyState from '../../components/shared/EmptyState';
 import { useUIStore } from '../../store/uiStore';
 import api from '../../api/axiosInstance';
 
@@ -26,7 +24,9 @@ export default function InventoryPage() {
   const toast = useUIStore((s) => s.toast);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const { data, isLoading } = useInventory({ search, page, limit: 50 });
+  const [statusFilter, setStatusFilter] = useState('');
+
+  const { data, isLoading, refetch } = useInventory({ search, page, limit: 100 });
 
   // ─── Add/Edit Modal ─────────────────────
   const [modalOpen, setModalOpen] = useState(false);
@@ -70,7 +70,7 @@ export default function InventoryPage() {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       toast('success', res.data.message || 'Import successful');
-      window.location.reload(); // Refresh data
+      refetch();
     } catch (err: any) {
       toast('error', err.response?.data?.error || 'Failed to import file');
     } finally {
@@ -98,143 +98,100 @@ export default function InventoryPage() {
   };
 
   const handleSave = async () => {
-    if (!formName.trim()) { toast('error', 'Product name is required'); return; }
+    if (!formName.trim()) {
+      toast('error', 'Product name is required');
+      return;
+    }
+
     try {
       if (editItem) {
-        await updateMut.mutateAsync({ id: editItem.id, product_name: formName, unit: formUnit, low_stock_threshold: formThreshold });
-        toast('success', 'Product updated');
+        await updateMut.mutateAsync({
+          id: editItem.id,
+          product_name: formName,
+          unit: formUnit,
+          low_stock_threshold: formThreshold,
+        });
+        toast('success', 'Product updated successfully');
       } else {
-        await createMut.mutateAsync({ product_name: formName, unit: formUnit, quantity: formQty, low_stock_threshold: formThreshold });
-        toast('success', 'Product added');
+        await createMut.mutateAsync({
+          product_name: formName,
+          unit: formUnit,
+          quantity: formQty,
+          low_stock_threshold: formThreshold,
+        });
+        toast('success', 'Product added successfully');
       }
       setModalOpen(false);
+      refetch();
     } catch (err: any) {
-      toast('error', err?.response?.data?.error || 'Failed to save');
+      toast('error', err.response?.data?.error || 'Failed to save product');
     }
   };
 
-  const handleInlineQtySave = async (id: number, currentQty: number) => {
-    const newVal = parseFloat(editingQtyVal);
-    if (isNaN(newVal)) { setEditingQtyId(null); return; }
-    const delta = newVal - currentQty;
-    if (delta === 0) { setEditingQtyId(null); return; }
+  const handleInlineQtySave = async (id: number, oldVal: number) => {
+    const val = parseFloat(editingQtyVal);
+    if (isNaN(val) || val < 0) {
+      toast('error', 'Please enter a valid positive number');
+      return;
+    }
+
+    const diff = val - oldVal;
+    if (diff === 0) {
+      setEditingQtyId(null);
+      return;
+    }
+
     try {
-      await adjustMut.mutateAsync({ id, delta });
-      toast('success', 'Quantity updated');
-    } catch { toast('error', 'Failed to update quantity'); }
-    setEditingQtyId(null);
+      await adjustMut.mutateAsync({
+        id,
+        delta: diff,
+      });
+      toast('success', 'Quantity updated successfully');
+      setEditingQtyId(null);
+      refetch();
+    } catch (err: any) {
+      toast('error', err.response?.data?.error || 'Adjustment failed');
+    }
   };
 
   const handleDelete = async () => {
     if (!deleteId) return;
     try {
       await deleteMut.mutateAsync(deleteId);
-      toast('success', 'Product deleted');
-    } catch { toast('error', 'Failed to delete'); }
-    setDeleteConfirmOpen(false);
-    setDeleteId(null);
+      toast('success', 'Product deleted successfully');
+      setDeleteConfirmOpen(false);
+      setDeleteId(null);
+      refetch();
+    } catch (err: any) {
+      toast('error', err.response?.data?.error || 'Failed to delete product');
+    }
   };
 
-  const columns: Column<any>[] = [
-    {
-      key: 'product_name',
-      header: 'Product Name',
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          {row.is_low_stock && (
-            <div className="w-1 h-8 bg-[#F57C00] rounded-full shrink-0" />
-          )}
-          <span className="font-bold text-[#1c1b1b]">{row.product_name}</span>
-        </div>
-      ),
-    },
-    { key: 'unit', header: 'Unit' },
-    {
-      key: 'quantity',
-      header: 'Quantity',
-      render: (row) => {
-        if (editingQtyId === row.id) {
-          return (
-            <div className="flex items-center gap-1">
-              <input
-                ref={qtyInputRef}
-                type="number"
-                className="w-20 px-2 py-1 border border-[#D32F2F] rounded text-sm font-bold text-center bg-white focus:outline-none"
-                value={editingQtyVal}
-                onChange={(e) => setEditingQtyVal(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleInlineQtySave(row.id, parseFloat(row.quantity));
-                  if (e.key === 'Escape') setEditingQtyId(null);
-                }}
-                onBlur={() => handleInlineQtySave(row.id, parseFloat(row.quantity))}
-              />
-              <button
-                onClick={() => handleInlineQtySave(row.id, parseFloat(row.quantity))}
-                className="p-1 text-green-600 hover:bg-green-50 rounded"
-              >
-                <Check size={14} />
-              </button>
-            </div>
-          );
-        }
-        return (
-          <button
-            onClick={() => { setEditingQtyId(row.id); setEditingQtyVal(String(parseFloat(row.quantity))); }}
-            className="font-bold text-[#1c1b1b] hover:text-[#D32F2F] cursor-pointer hover:underline transition-colors"
-            title="Click to edit"
-          >
-            {parseFloat(row.quantity)}
-          </button>
-        );
-      },
-    },
-    {
-      key: 'low_stock_threshold',
-      header: 'Low Stock Level',
-      render: (row) => <span className="text-[#5f5e5e]">{parseFloat(row.low_stock_threshold)}</span>,
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      render: (row) => row.is_low_stock ? (
-        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
-          Low Stock
-        </span>
-      ) : (
-        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-green-50 text-green-700 border border-green-200">
-          OK
-        </span>
-      ),
-    },
-    {
-      key: 'actions',
-      header: '',
-      render: (row) => (
-        <div className="flex items-center gap-1">
-          <button
-            onClick={(e) => { e.stopPropagation(); openEditModal(row); }}
-            className="p-2 rounded-lg text-gray-400 hover:text-[#D32F2F] hover:bg-red-50 transition-colors"
-            title="Edit"
-          >
-            <Edit2 size={14} />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); setDeleteId(row.id); setDeleteConfirmOpen(true); }}
-            className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-            title="Delete"
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
-      ),
-    },
-  ];
+  // Compute stat totals
+  const allItems = data?.data || [];
+  
+  // Filter items based on statusFilter
+  const filteredItems = allItems.filter((item: any) => {
+    if (statusFilter === 'low') return item.is_low_stock && parseFloat(item.quantity) > 0;
+    if (statusFilter === 'out') return parseFloat(item.quantity) === 0;
+    if (statusFilter === 'ok') return !item.is_low_stock && parseFloat(item.quantity) > 0;
+    return true;
+  });
+
+  const totalProducts = allItems.length;
+  const lowStockCount = allItems.filter((i: any) => i.is_low_stock && parseFloat(i.quantity) > 0).length;
+  const outOfStockCount = allItems.filter((i: any) => parseFloat(i.quantity) === 0).length;
+  const totalVolume = allItems.reduce((sum: number, i: any) => sum + (parseFloat(i.quantity) || 0), 0);
 
   return (
-    <>
-      <AdminTopBar
-        title="Inventory"
-        subtitle={`${data?.pagination?.total || 0} products`}
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 font-sans">
+      {/* Page Header */}
+      <PremiumPageHeader
+        title="Corporate Inventory Registry"
+        subtitle="Manage product stocks, raw chemical materials, and low-level threshold triggers."
+        icon={Package}
+        iconColor="#2563EB"
+        accentGradient="from-blue-600 to-indigo-600"
         actions={
           <div className="flex gap-2">
             <input
@@ -247,99 +204,216 @@ export default function InventoryPage() {
             <Button variant="secondary" onClick={() => fileInputRef.current?.click()} icon={<Upload size={16} />} loading={isUploading}>
               Import Excel
             </Button>
-            <Button onClick={openAddModal} icon={<Plus size={16} />}>
+            <Button onClick={openAddModal} icon={<Plus size={16} />} className="shadow-lg shadow-blue-500/20">
               Add Product
             </Button>
           </div>
         }
       />
 
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
-        <SearchInput
-          value={search}
-          onChange={(v) => { setSearch(v); setPage(1); }}
-          placeholder="Search products..."
-          className="sm:w-80"
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <PremiumStatCard
+          title="Total Products"
+          value={totalProducts}
+          icon={Package}
+          color="#2563EB"
+          gradient="from-blue-500/10 to-indigo-400/5"
+          delay={0.1}
+        />
+        <PremiumStatCard
+          title="Low Stock Items"
+          value={lowStockCount}
+          icon={ShieldAlert}
+          color="#F59E0B"
+          gradient="from-amber-500/10 to-yellow-400/5"
+          delay={0.2}
+        />
+        <PremiumStatCard
+          title="Out of Stock"
+          value={outOfStockCount}
+          icon={ShieldAlert}
+          color="#EF4444"
+          gradient="from-red-500/10 to-rose-400/5"
+          delay={0.3}
+        />
+        <PremiumStatCard
+          title="Total Stock Units"
+          value={totalVolume}
+          icon={BarChart3}
+          color="#10B981"
+          gradient="from-emerald-500/10 to-teal-400/5"
+          delay={0.4}
         />
       </div>
 
-      {!isLoading && !data?.data?.length ? (
-        <EmptyState
-          icon={Package}
-          title="No Products Found"
-          description={search ? 'Try a different search' : 'Add your first inventory item'}
-          actionLabel={!search ? '+ Add Product' : undefined}
-          onAction={!search ? openAddModal : undefined}
-        />
-      ) : (
-        <DataTable
-          columns={columns}
-          data={data?.data || []}
-          loading={isLoading}
-          pagination={data?.pagination ? {
-            page: data.pagination.page,
-            limit: data.pagination.limit,
-            total: data.pagination.total,
-            onPageChange: setPage,
-          } : undefined}
-        />
-      )}
+      {/* Search and Filters */}
+      <div className="flex flex-col md:flex-row gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+        <div className="flex-1 relative">
+          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search products by name..."
+            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          />
+        </div>
+        <div className="w-full md:w-48">
+          <select
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="">All Stock Levels</option>
+            <option value="ok">Stock level OK</option>
+            <option value="low">Low stock alert</option>
+            <option value="out">Out of stock</option>
+          </select>
+        </div>
+      </div>
 
-      {/* Add / Edit Modal */}
-      <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title={editItem ? 'Edit Product' : 'Add Product'}
-        size="sm"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave} loading={createMut.isPending || updateMut.isPending}>
-              {editItem ? 'Save Changes' : 'Add Product'}
-            </Button>
-          </>
-        }
+      {/* Main Table */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+        {isLoading ? (
+          <div className="p-12 text-center">
+            <RefreshCw className="animate-spin w-8 h-8 text-blue-600 mx-auto mb-2" />
+            <p className="text-sm text-gray-500">Loading stock records...</p>
+          </div>
+        ) : filteredItems.length === 0 ? (
+          <div className="p-12 text-center text-gray-500">
+            <Package size={40} className="mx-auto text-gray-300 mb-3" />
+            <p className="text-sm font-semibold text-gray-700">No Products Found</p>
+            <p className="text-xs text-gray-400 mt-1">Try refining search parameters.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-100 text-left text-sm">
+              <thead className="bg-gray-50">
+                <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  <th className="p-4">Product ID</th>
+                  <th className="p-4">Product Name</th>
+                  <th className="p-4">Base Unit</th>
+                  <th className="p-4">Current Stock</th>
+                  <th className="p-4">Alert Threshold</th>
+                  <th className="p-4">Status</th>
+                  <th className="p-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredItems.map((row: any) => {
+                  const isLow = row.is_low_stock && parseFloat(row.quantity) > 0;
+                  const isOut = parseFloat(row.quantity) === 0;
+
+                  return (
+                    <tr key={row.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="p-4 font-mono text-xs text-gray-400">
+                        #INV-{String(row.id).padStart(4, '0')}
+                      </td>
+                      <td className="p-4 font-semibold text-gray-900">
+                        {row.product_name}
+                      </td>
+                      <td className="p-4 text-gray-500 uppercase font-bold text-xs">
+                        {row.unit}
+                      </td>
+                      <td className="p-4">
+                        {editingQtyId === row.id ? (
+                          <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              ref={qtyInputRef}
+                              type="number"
+                              className="w-16 px-1.5 py-0.5 border border-gray-300 rounded text-center text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              value={editingQtyVal}
+                              onChange={(e) => setEditingQtyVal(e.target.value)}
+                            />
+                            <button
+                              onClick={() => handleInlineQtySave(row.id, parseFloat(row.quantity))}
+                              className="p-1 text-green-600 hover:bg-green-50 rounded"
+                            >
+                              <Check size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setEditingQtyId(row.id); setEditingQtyVal(String(parseFloat(row.quantity))); }}
+                            className="font-bold text-gray-900 hover:text-blue-600 hover:underline cursor-pointer transition-colors"
+                            title="Click to quickly edit quantity"
+                          >
+                            {parseFloat(row.quantity)}
+                          </button>
+                        )}
+                      </td>
+                      <td className="p-4 text-gray-500 font-medium">
+                        {parseFloat(row.low_stock_threshold)}
+                      </td>
+                      <td className="p-4">
+                        {isOut ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-800 border border-red-200">
+                            Out of Stock
+                          </span>
+                        ) : isLow ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                            Low Stock
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            OK
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="p-1.5 rounded-lg"
+                            title="Edit Product Details"
+                            onClick={() => openEditModal(row)}
+                          >
+                            <Edit2 size={13} />
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="p-1.5 rounded-lg hover:text-red-600 hover:bg-red-50"
+                            title="Delete Product"
+                            onClick={() => { setDeleteId(row.id); setDeleteConfirmOpen(true); }}
+                          >
+                            <Trash2 size={13} />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Add / Edit Product Modal */}
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editItem ? 'Edit Product' : 'Add Product'} size="sm"
+        footer={<><Button variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button><Button onClick={handleSave} loading={createMut.isPending || updateMut.isPending}>{editItem ? 'Save Changes' : 'Add Product'}</Button></>}
       >
-        <div className="space-y-4">
-          <Input
-            label="Product Name"
-            value={formName}
-            onChange={(e) => setFormName(e.target.value)}
-            placeholder="e.g. Teflon Spray"
-          />
-          <Select
-            label="Unit"
-            options={unitOptions}
-            value={formUnit}
-            onChange={(e) => setFormUnit(e.target.value)}
-          />
-          {!editItem && (
-            <Input
-              label="Initial Quantity"
-              type="number"
-              value={formQty || ''}
-              onChange={(e) => setFormQty(parseFloat(e.target.value) || 0)}
-            />
-          )}
-          <Input
-            label="Low Stock Threshold"
-            type="number"
-            value={formThreshold || ''}
-            onChange={(e) => setFormThreshold(parseFloat(e.target.value) || 0)}
-          />
+        <div className="space-y-4 py-2">
+          <Input label="Product Name *" value={formName} onChange={e => setFormName(e.target.value)} placeholder="e.g. Teflon Spray" />
+          <Select label="Unit *" options={unitOptions} value={formUnit} onChange={e => setFormUnit(e.target.value)} />
+          {!editItem && <Input label="Initial Quantity *" type="number" value={formQty || ''} onChange={e => setFormQty(parseFloat(e.target.value) || 0)} />}
+          <Input label="Low Stock Threshold *" type="number" value={formThreshold || ''} onChange={e => setFormThreshold(parseFloat(e.target.value) || 0)} />
         </div>
       </Modal>
 
-      {/* Delete Confirm */}
+      {/* Delete Confirmation */}
       <ConfirmDialog
         open={deleteConfirmOpen}
         onClose={() => { setDeleteConfirmOpen(false); setDeleteId(null); }}
         onConfirm={handleDelete}
         title="Delete Product"
-        message="This will hide the product from all lists. Historical job cart references will be preserved. Continue?"
+        message="This will hide the product from active inventory. Historical data references will be preserved. Continue?"
         confirmLabel="Delete"
         loading={deleteMut.isPending}
       />
-    </>
+    </div>
   );
 }

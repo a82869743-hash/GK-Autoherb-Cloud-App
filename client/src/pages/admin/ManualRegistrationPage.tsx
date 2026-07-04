@@ -35,11 +35,35 @@ export default function ManualRegistrationPage() {
   });
 
   const [packages, setPackages] = useState<any[]>([]);
+  const [packageServices, setPackageServices] = useState<any[]>([]);
 
   useEffect(() => {
     fetchRegistrations();
     fetchPackages();
   }, []);
+
+  useEffect(() => {
+    if (!formData.package_id) {
+      setPackageServices([]);
+      return;
+    }
+    const loadServices = async () => {
+      try {
+        const res = await api.get(`/packages/${formData.package_id}/services`);
+        if (res.data.success) {
+          const mapped = res.data.data.map((s: any) => ({
+            service_name: s.name,
+            total_count: s.total_count || 1,
+            remaining: s.total_count || 1
+          }));
+          setPackageServices(mapped);
+        }
+      } catch (err) {
+        console.error('Failed to fetch package services:', err);
+      }
+    };
+    loadServices();
+  }, [formData.package_id]);
 
   const fetchRegistrations = async () => {
     setLoading(true);
@@ -73,15 +97,27 @@ export default function ManualRegistrationPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (formData.package_id) {
+      if (!formData.brand.trim() || !formData.model.trim() || !formData.registration_no.trim() || !formData.category) {
+        alert('All vehicle details (Brand, Model, Reg No, Category) are required when selecting a package.');
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
-      const res = await api.post('/customers/manual-registration', formData);
+      const payload = {
+        ...formData,
+        package_custom_services: formData.package_id ? packageServices : undefined
+      };
+      const res = await api.post('/customers/manual-registration', payload);
       if (res.data.success) {
         alert('Customer registered successfully!');
         setFormData({
           name: '', mobile: '', email: '', brand: '', model: '',
           category: '', registration_no: '', package_id: '', price: ''
         });
+        setPackageServices([]);
         fetchRegistrations();
       }
     } catch (err: any) {
@@ -180,11 +216,44 @@ export default function ManualRegistrationPage() {
                 </select>
               </div>
               {formData.package_id && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Final Price (₹)</label>
-                  <div className="relative">
-                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input type="number" name="price" value={formData.price} onChange={handleChange} className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500" placeholder="0" />
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Final Price (₹)</label>
+                    <div className="relative">
+                      <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input type="number" name="price" value={formData.price} onChange={handleChange} className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500" placeholder="0" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-3 border-t border-dashed border-gray-200">
+                    <label className="block text-xs font-semibold text-gray-700">Remaining Service Balances</label>
+                    <p className="text-[10px] text-gray-400">Specify current remaining counts for this customer's package services.</p>
+                    
+                    <div className="space-y-2">
+                      {packageServices.map((svc, idx) => (
+                        <div key={idx} className="flex items-center justify-between gap-2 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                          <span className="text-xs font-medium text-gray-700 truncate flex-1" title={svc.service_name}>
+                            {svc.service_name}
+                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <input
+                              type="number"
+                              min="0"
+                              max={svc.total_count}
+                              className="w-14 px-2 py-1 text-center border border-gray-300 rounded text-xs focus:ring-1 focus:ring-red-500 bg-white"
+                              value={svc.remaining}
+                              onChange={(e) => {
+                                const val = Math.max(0, Math.min(svc.total_count, parseInt(e.target.value) || 0));
+                                const next = [...packageServices];
+                                next[idx].remaining = val;
+                                setPackageServices(next);
+                              }}
+                            />
+                            <span className="text-xs text-gray-500 font-semibold">/ {svc.total_count}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
