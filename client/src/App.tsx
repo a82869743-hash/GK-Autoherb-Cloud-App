@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import { useInactivityTimer, useTokenRefresh } from './utils/useInactivityTimer';
@@ -113,6 +114,147 @@ export default function App() {
 
   // Silent token refresh (checks expiry on mount, refreshes every 45 min)
   useTokenRefresh();
+
+  // Global Theme Overrides Effect
+  useEffect(() => {
+    const applyTheme = () => {
+      const accentColor = localStorage.getItem('crm-accent') || 'red';
+      const accentStyles: any = {
+        red: {
+          primary: '#D32F2F',
+          hover: '#af101a',
+          gradient: 'linear-gradient(135deg, #af101a 0%, #D32F2F 50%, #FF5252 100%)',
+          shadow: 'rgba(211, 47, 47, 0.2)',
+        },
+        emerald: {
+          primary: '#10B981',
+          hover: '#059669',
+          gradient: 'linear-gradient(135deg, #059669 0%, #10B981 50%, #34D399 100%)',
+          shadow: 'rgba(16, 185, 129, 0.2)',
+        },
+        blue: {
+          primary: '#2563EB',
+          hover: '#1D4ED8',
+          gradient: 'linear-gradient(135deg, #1D4ED8 0%, #2563EB 50%, #60A5FA 100%)',
+          shadow: 'rgba(37, 99, 235, 0.2)',
+        },
+        violet: {
+          primary: '#8B5CF6',
+          hover: '#7C3AED',
+          gradient: 'linear-gradient(135deg, #7C3AED 0%, #8B5CF6 50%, #A78BFA 100%)',
+          shadow: 'rgba(139, 92, 246, 0.2)',
+        }
+      };
+
+      const activeStyle = accentStyles[accentColor] || accentStyles.red;
+      
+      let styleTag = document.getElementById('crm-global-theme') as HTMLStyleElement;
+      if (!styleTag) {
+        styleTag = document.createElement('style');
+        styleTag.id = 'crm-global-theme';
+        document.head.appendChild(styleTag);
+      }
+      
+      styleTag.innerHTML = `
+        :root {
+          --primary-accent: ${activeStyle.primary};
+          --primary-hover: ${activeStyle.hover};
+          --primary-gradient: ${activeStyle.gradient};
+          --primary-shadow: ${activeStyle.shadow};
+        }
+        
+        /* Global button / text / border overrides */
+        .bg-gradient-to-br.from-\\[\\#af101a\\].to-\\[\\#D32F2F\\] {
+          background: var(--primary-gradient) !important;
+        }
+        .bg-gradient-to-br.from-red-50.to-red-100 {
+          border-color: var(--primary-accent) !important;
+        }
+        .text-\\[\\#D32F2F\\] {
+          color: var(--primary-accent) !important;
+        }
+        .text-[#D32F2F] {
+          color: var(--primary-accent) !important;
+        }
+        .text-red-600 {
+          color: var(--primary-accent) !important;
+        }
+        .bg-\\[\\#D32F2F\\] {
+          background-color: var(--primary-accent) !important;
+        }
+        .bg-[#D32F2F] {
+          background-color: var(--primary-accent) !important;
+        }
+        .bg-red-600 {
+          background-color: var(--primary-accent) !important;
+        }
+        .hover\\:bg-red-700:hover {
+          background-color: var(--primary-hover) !important;
+        }
+        .from-red-600 {
+          --tw-gradient-from: var(--primary-accent) !important;
+        }
+        .to-red-800 {
+          --tw-gradient-to: var(--primary-hover) !important;
+        }
+        .border-red-200 {
+          border-color: var(--primary-accent) !important;
+        }
+        .bg-red-50 {
+          background-color: rgba(211, 47, 47, 0.05) !important;
+        }
+        .text-red-700 {
+          color: var(--primary-accent) !important;
+        }
+        .border-l-4.pl-6 {
+          border-left-color: var(--primary-accent) !important;
+          border-image: none !important;
+        }
+        .border-t-\\[\\#D32F2F\\] {
+          border-top-color: var(--primary-accent) !important;
+        }
+        .hover\\:text-\\[\\#D32F2F\\]:hover {
+          color: var(--primary-accent) !important;
+        }
+        .hover\\:bg-\\[\\#D32F2F\\]:hover {
+          background-color: var(--primary-accent) !important;
+        }
+        .group:hover .group-hover\\:text-\\[\\#D32F2F\\] {
+          color: var(--primary-accent) !important;
+        }
+        .group:hover .group-hover\\:bg-gradient-to-br {
+          background: var(--primary-gradient) !important;
+        }
+        .focus\\:ring-\\[\\#D32F2F\\]:focus {
+          --tw-ring-color: var(--primary-accent) !important;
+        }
+        .focus\\:border-\\[\\#D32F2F\\]:focus {
+          border-color: var(--primary-accent) !important;
+        }
+        .border-\\[\\#D32F2F\\] {
+          border-color: var(--primary-accent) !important;
+        }
+        
+        /* Sidebar active highlights */
+        .text-[#D32F2F] {
+          color: var(--primary-accent) !important;
+        }
+      `;
+    };
+
+    applyTheme();
+
+    const handleThemeChange = () => {
+      applyTheme();
+    };
+    window.addEventListener('crm-theme-changed', handleThemeChange);
+    window.addEventListener('storage', handleThemeChange);
+
+    return () => {
+      window.removeEventListener('crm-theme-changed', handleThemeChange);
+      window.removeEventListener('storage', handleThemeChange);
+    };
+  }, []);
 
   const getDefaultRedirect = () => {
     if (!isAuthenticated || !user) return '/login';

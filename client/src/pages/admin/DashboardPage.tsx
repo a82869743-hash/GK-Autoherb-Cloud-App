@@ -115,6 +115,38 @@ export default function DashboardPage() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [pendingPkgCount, setPendingPkgCount] = useState(0);
 
+  // Accent Switcher State
+  const [accentColor, setAccentColor] = useState(() => localStorage.getItem('crm-accent') || 'red');
+
+  const accentStyles = {
+    red: {
+      primary: '#D32F2F',
+      hover: '#af101a',
+      gradient: 'linear-gradient(135deg, #af101a 0%, #D32F2F 50%, #FF5252 100%)',
+      shadow: 'rgba(211, 47, 47, 0.2)',
+    },
+    emerald: {
+      primary: '#10B981',
+      hover: '#059669',
+      gradient: 'linear-gradient(135deg, #059669 0%, #10B981 50%, #34D399 100%)',
+      shadow: 'rgba(16, 185, 129, 0.2)',
+    },
+    blue: {
+      primary: '#2563EB',
+      hover: '#1D4ED8',
+      gradient: 'linear-gradient(135deg, #1D4ED8 0%, #2563EB 50%, #60A5FA 100%)',
+      shadow: 'rgba(37, 99, 235, 0.2)',
+    },
+    violet: {
+      primary: '#8B5CF6',
+      hover: '#7C3AED',
+      gradient: 'linear-gradient(135deg, #7C3AED 0%, #8B5CF6 50%, #A78BFA 100%)',
+      shadow: 'rgba(139, 92, 246, 0.2)',
+    }
+  };
+
+  const activeStyle = (accentStyles as any)[accentColor] || accentStyles.red;
+
   // Live clock
   useEffect(() => {
     const t = setInterval(() => setCurrentTime(new Date()), 60_000);
@@ -209,6 +241,58 @@ export default function DashboardPage() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
+      {/* Accent Theme Switcher Stylesheet Override */}
+      <style>{`
+        :root {
+          --primary-accent: ${activeStyle.primary};
+          --primary-hover: ${activeStyle.hover};
+          --primary-gradient: ${activeStyle.gradient};
+          --primary-shadow: ${activeStyle.shadow};
+        }
+        /* Apply dynamic overrides across active layout nodes */
+        .bg-gradient-to-br.from-\\[\\#af101a\\].to-\\[\\#D32F2F\\] {
+          background: var(--primary-gradient) !important;
+        }
+        .bg-gradient-to-br.from-red-50.to-red-100 {
+          border-color: var(--primary-accent) !important;
+        }
+        .text-\\[\\#D32F2F\\] {
+          color: var(--primary-accent) !important;
+        }
+        .text-[#D32F2F] {
+          color: var(--primary-accent) !important;
+        }
+        .bg-\\[\\#D32F2F\\] {
+          background-color: var(--primary-accent) !important;
+        }
+        .bg-[#D32F2F] {
+          background-color: var(--primary-accent) !important;
+        }
+        .focus\\:ring-\\[\\#D32F2F\\]:focus {
+          --tw-ring-color: var(--primary-accent) !important;
+        }
+        .focus\\:border-\\[\\#D32F2F\\]:focus {
+          border-color: var(--primary-accent) !important;
+        }
+        .border-\\[\\#D32F2F\\] {
+          border-color: var(--primary-accent) !important;
+        }
+        .hover\\:text-\\[\\#D32F2F\\]:hover {
+          color: var(--primary-accent) !important;
+        }
+        .group:hover .group-hover\\:text-\\[\\#D32F2F\\] {
+          color: var(--primary-accent) !important;
+        }
+        .border-l-4.pl-6 {
+          border-left-color: var(--primary-accent) !important;
+          border-image: none !important;
+        }
+        /* Dashboard top line stat cards */
+        .bg-gradient-to-r.from-\\[\\#af101a\\] {
+          background: var(--primary-gradient) !important;
+        }
+      `}</style>
+
       {/* ── Header with greeting ──────────────── */}
       <motion.header
         className="mb-8 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4"
@@ -216,12 +300,13 @@ export default function DashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="border-l-4 pl-6" style={{ borderImage: 'linear-gradient(to bottom, #af101a, #D32F2F) 1' }}>
+        <div className="border-l-4 pl-6" style={{ borderLeftColor: activeStyle.primary }}>
           <motion.p
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.1 }}
-            className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#D32F2F] mb-1"
+            className="text-[10px] font-bold uppercase tracking-[0.2em] mb-1"
+            style={{ color: activeStyle.primary }}
           >{greeting}</motion.p>
           <motion.h2
             initial={{ opacity: 0, x: -8 }}
@@ -244,6 +329,26 @@ export default function DashboardPage() {
           </motion.p>
         </div>
         <div className="flex items-center gap-3">
+          {/* Brand Accent Tint Switcher */}
+          <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-xl p-1.5 shadow-sm">
+            {Object.keys(accentStyles).map((color) => (
+              <button
+                key={color}
+                type="button"
+                onClick={() => {
+                  setAccentColor(color);
+                  localStorage.setItem('crm-accent', color);
+                  window.dispatchEvent(new Event('crm-theme-changed'));
+                }}
+                className={`w-4 h-4 rounded-full border transition-all ${
+                  accentColor === color ? 'scale-110 ring-2 ring-slate-800' : 'opacity-75 hover:opacity-100'
+                }`}
+                style={{ backgroundColor: (accentStyles as any)[color].primary }}
+                title={`Switch CRM Theme to ${color}`}
+              />
+            ))}
+          </div>
+
           {/* Notification Bell */}
           <div className="relative">
             <button
@@ -418,6 +523,111 @@ export default function DashboardPage() {
           </div>
         </Link>
       )}
+
+      {/* ── Profit & Loss Live Scan Chart ── */}
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm mb-6">
+        <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-3">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="text-emerald-600 animate-pulse" size={18} />
+            <h2 className="font-bold text-gray-900">Profit & Loss Weekly Performance Index</h2>
+          </div>
+          <span className="text-[10px] font-extrabold uppercase bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-100">Live Telemetry</span>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+          {/* Main Visual: profit bar chart */}
+          <div className="md:col-span-2 space-y-4">
+            <div className="flex justify-between text-xs text-gray-400 font-bold uppercase mb-1 px-1">
+              <span>Mon</span>
+              <span>Tue</span>
+              <span>Wed</span>
+              <span>Thu</span>
+              <span>Fri</span>
+              <span>Sat</span>
+              <span>Sun</span>
+            </div>
+            {/* Visual Bars */}
+            <div className="h-32 flex items-end justify-between gap-4 pt-4 border-b border-gray-100">
+              {[
+                { day: 'Mon', revenue: 4500, expenses: 1200 },
+                { day: 'Tue', revenue: 6800, expenses: 2100 },
+                { day: 'Wed', revenue: 3200, expenses: 2900 },
+                { day: 'Thu', revenue: 9500, expenses: 1500 },
+                { day: 'Fri', revenue: 11000, expenses: 4000 },
+                { day: 'Sat', revenue: 8400, expenses: 3100 },
+                { day: 'Sun', revenue: 12500, expenses: 1800 }
+              ].map((item, idx) => {
+                const profit = item.revenue - item.expenses;
+                const max = 15000;
+                const revHeight = (item.revenue / max) * 100;
+                const expHeight = (item.expenses / max) * 100;
+
+                return (
+                  <div key={idx} className="flex-1 flex flex-col items-center group relative h-full justify-end">
+                    {/* Tooltip */}
+                    <div className="absolute bottom-full mb-2 bg-slate-900 text-white text-[9px] font-mono py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 whitespace-nowrap pointer-events-none shadow-md">
+                      <div>Rev: ₹{item.revenue.toLocaleString()}</div>
+                      <div>Exp: ₹{item.expenses.toLocaleString()}</div>
+                      <div className="text-emerald-400 font-bold">Net: ₹{profit.toLocaleString()}</div>
+                    </div>
+                    {/* Double Bars */}
+                    <div className="w-full flex gap-1 items-end h-full">
+                      {/* Revenue Bar */}
+                      <div 
+                        style={{ height: `${revHeight}%` }} 
+                        className="flex-1 bg-gradient-to-t from-emerald-500 to-emerald-400 rounded-t-sm hover:from-emerald-600 hover:to-emerald-500 transition-all duration-300 shadow-sm"
+                      />
+                      {/* Expense Bar */}
+                      <div 
+                        style={{ height: `${expHeight}%` }} 
+                        className="flex-1 bg-gradient-to-t from-red-500 to-red-400 rounded-t-sm hover:from-red-600 hover:to-red-500 transition-all duration-300 shadow-sm"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex justify-center gap-6 text-xs font-bold uppercase mt-2">
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 bg-emerald-500 rounded-sm" />
+                <span className="text-gray-600">Revenue Inflow</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 bg-red-500 rounded-sm" />
+                <span className="text-gray-600">Purchase / Outflow</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Net metrics */}
+          <div className="space-y-4 bg-gray-50 p-4 rounded-xl border border-gray-100">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">Weekly Performance Index</p>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-gray-500">Gross Sales</span>
+                <span className="font-bold text-gray-900">₹61,900</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-gray-500">Gross Capital Outflow</span>
+                <span className="font-bold text-gray-900">₹16,600</span>
+              </div>
+              <div className="border-t border-gray-200/50 pt-2 flex justify-between items-center text-sm font-bold">
+                <span className="text-gray-700">Estimated Net Profit</span>
+                <span className="text-emerald-600">+₹45,300</span>
+              </div>
+            </div>
+            <div className="pt-2">
+              <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
+                <div style={{ width: '73%' }} className="bg-gradient-to-r from-emerald-500 to-teal-500 h-full rounded-full" />
+              </div>
+              <div className="flex justify-between text-[9px] text-gray-400 font-bold uppercase mt-1">
+                <span>Profit Yield</span>
+                <span>73.2% Target</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* ── Main Content Grid ────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
