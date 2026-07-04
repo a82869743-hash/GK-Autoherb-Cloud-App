@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Briefcase, IndianRupee, Package, Users, TrendingUp, TrendingDown,
   Calendar, Clock, ChevronRight, Car, CalendarCheck, AlertTriangle,
@@ -69,27 +70,42 @@ export default function DashboardPage() {
   const jobs = recentJobs?.data || [];
   const greeting = currentTime.getHours() < 12 ? 'Good Morning' : currentTime.getHours() < 17 ? 'Good Afternoon' : 'Good Evening';
 
-  // ── Stat Card Component ─────────────────────
-  const StatCard = ({ title, value, subtitle, colorClass, icon: Icon, to, trend, alert }: any) => {
+  // ── Stat Card Component with Motion ─────────
+  const StatCard = ({ title, value, subtitle, colorClass, icon: Icon, to, trend, alert, index = 0 }: any) => {
     const content = (
-      <div className={`relative bg-white p-5 rounded-2xl border shadow-sm transition-all duration-300 hover:shadow-lg hover:-translate-y-1 group h-full overflow-hidden ${
-        to ? 'cursor-pointer' : ''
-      } ${alert ? 'border-amber-200 bg-amber-50/30' : 'border-gray-100'}`}>
+      <motion.div
+        initial={{ opacity: 0, y: 16, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ delay: index * 0.07, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+        whileHover={{ y: -4, boxShadow: '0 12px 40px rgba(0,0,0,0.08)' }}
+        className={`relative bg-white p-5 rounded-2xl border shadow-sm h-full overflow-hidden ${
+          to ? 'cursor-pointer' : ''
+        } ${alert ? 'border-amber-200 bg-amber-50/30' : 'border-gray-100'}`}
+      >
         {/* Subtle gradient accent */}
         <div className={`absolute top-0 left-0 right-0 h-1 rounded-t-2xl ${
           alert ? 'bg-gradient-to-r from-amber-400 to-orange-400' : 'bg-gradient-to-r from-[#af101a] to-[#D32F2F] opacity-0 group-hover:opacity-100 transition-opacity'
         }`} />
         <div className="flex items-start justify-between mb-3">
-          <div className={`p-2.5 rounded-xl ${colorClass} transition-all duration-300 group-hover:scale-110 group-hover:shadow-md`}>
+          <motion.div
+            className={`p-2.5 rounded-xl ${colorClass}`}
+            whileHover={{ scale: 1.15, rotate: 3 }}
+            transition={{ type: 'spring', stiffness: 300 }}
+          >
             <Icon size={20} />
-          </div>
+          </motion.div>
           {trend !== undefined && trend !== null && (
-            <div className={`flex items-center gap-0.5 text-xs font-bold px-2 py-0.5 rounded-full ${
-              trend > 0 ? 'bg-green-50 text-green-600' : trend < 0 ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-500'
-            }`}>
+            <motion.div
+              initial={{ opacity: 0, x: 8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: index * 0.07 + 0.3 }}
+              className={`flex items-center gap-0.5 text-xs font-bold px-2 py-0.5 rounded-full ${
+                trend > 0 ? 'bg-green-50 text-green-600' : trend < 0 ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-500'
+              }`}
+            >
               {trend > 0 ? <TrendingUp size={12} /> : trend < 0 ? <TrendingDown size={12} /> : null}
               {trend > 0 ? '+' : ''}{trend}%
-            </div>
+            </motion.div>
           )}
         </div>
         <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-gray-400 mb-1">{title}</p>
@@ -98,26 +114,46 @@ export default function DashboardPage() {
           <span className="text-[11px] text-gray-500 font-medium">{subtitle}</span>
           {to && <ArrowUpRight size={14} className="text-gray-300 group-hover:text-[#D32F2F] transition-colors" />}
         </div>
-      </div>
+      </motion.div>
     );
-    return to ? <Link to={to} className="block h-full">{content}</Link> : content;
+    return to ? <Link to={to} className="block h-full group">{content}</Link> : content;
   };
 
   return (
-    <>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
       {/* ── Header with greeting ──────────────── */}
-      <header className="mb-8 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
+      <motion.header
+        className="mb-8 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4"
+        initial={{ opacity: 0, y: -12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+      >
         <div className="border-l-4 pl-6" style={{ borderImage: 'linear-gradient(to bottom, #af101a, #D32F2F) 1' }}>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#D32F2F] mb-1">{greeting}</p>
-          <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#1c1b1b]">
+          <motion.p
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.1 }}
+            className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#D32F2F] mb-1"
+          >{greeting}</motion.p>
+          <motion.h2
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.15 }}
+            className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#1c1b1b]"
+          >
             DASHBOARD
-          </h2>
-          <p className="text-[#5f5e5e] text-sm font-medium mt-1 flex items-center gap-2">
+          </motion.h2>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.25 }}
+            className="text-[#5f5e5e] text-sm font-medium mt-1 flex items-center gap-2"
+          >
             <Clock size={14} />
             {currentTime.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             <span className="text-gray-300">•</span>
             {currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-          </p>
+          </motion.p>
         </div>
         <div className="flex items-center gap-3">
           {/* Notification Bell */}
@@ -169,7 +205,7 @@ export default function DashboardPage() {
             <Zap size={16} /> New Job Cart
           </Link>
         </div>
-      </header>
+      </motion.header>
 
       {/* ── KPI Grid ─────────────────────────────── */}
       {statsLoading ? (
@@ -186,6 +222,7 @@ export default function DashboardPage() {
             colorClass="bg-emerald-100 text-emerald-600"
             to="/admin/accounts"
             trend={stats?.revenue_change}
+            index={0}
           />
           <StatCard 
             title="Active Jobs" 
@@ -194,6 +231,7 @@ export default function DashboardPage() {
             subtitle={`${stats?.completedLast7Days || 0} completed this week`}
             colorClass="bg-[#D32F2F]/10 text-[#D32F2F]"
             to="/admin/job-carts"
+            index={1}
           />
           <StatCard 
             title="Today's Bookings" 
@@ -202,6 +240,7 @@ export default function DashboardPage() {
             subtitle={`${stats?.totalCustomers || 0} total customers`}
             colorClass="bg-violet-100 text-violet-600"
             to="/admin/customer-bookings"
+            index={2}
           />
           <StatCard 
             title="Low Stock" 
@@ -211,6 +250,7 @@ export default function DashboardPage() {
             colorClass={stats?.low_stock_items > 0 ? "bg-amber-100 text-amber-600" : "bg-blue-100 text-blue-600"}
             to="/admin/inventory"
             alert={stats?.low_stock_items > 3}
+            index={3}
           />
           <StatCard 
             title="New Leads" 
@@ -219,6 +259,7 @@ export default function DashboardPage() {
             subtitle="Unanswered inquiries"
             colorClass="bg-orange-100 text-orange-600"
             to="/admin/inquiries"
+            index={4}
           />
           <StatCard 
             title="Staff Present" 
@@ -227,6 +268,7 @@ export default function DashboardPage() {
             subtitle="Checked in today"
             colorClass="bg-teal-100 text-teal-600"
             to="/admin/staff"
+            index={5}
           />
         </div>
       )}
@@ -292,7 +334,7 @@ export default function DashboardPage() {
       {/* ── Main Content Grid ────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Recent Job Carts */}
-        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35, duration: 0.5 }} className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white flex justify-between items-center">
             <div className="flex items-center gap-2">
               <BarChart3 size={16} className="text-[#D32F2F]" />
@@ -348,10 +390,10 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-        </div>
+        </motion.div>
 
         {/* Right Column */}
-        <div className="space-y-6">
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45, duration: 0.5 }} className="space-y-6">
           {/* Quick Actions */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
@@ -466,8 +508,8 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
-        </div>
+        </motion.div>
       </div>
-    </>
+    </motion.div>
   );
 }

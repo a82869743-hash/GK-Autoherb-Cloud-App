@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
+const { awardWelcomeRewardInternal } = require('./customerRewardsController');
 
 const generateToken = (user) => {
   if (!process.env.JWT_SECRET) {
@@ -61,6 +62,13 @@ exports.register = async (req, res) => {
         // Non-fatal: log error but don't block registration
         console.error('Failed to save car during registration:', carErr.message);
       }
+    }
+
+    // Award Welcome Reward automatically
+    try {
+      await awardWelcomeRewardInternal(userId);
+    } catch (rewardErr) {
+      console.error('Failed to award welcome reward during registration:', rewardErr.message);
     }
 
     const user = { id: userId, name: name.trim(), mobile, role };
@@ -267,6 +275,13 @@ exports.adminCreateCustomer = async (req, res) => {
 
     // Create loyalty record
     await pool.query('INSERT INTO loyalty (customer_id) VALUES (?)', [userId]);
+
+    // Award Welcome Reward automatically
+    try {
+      await awardWelcomeRewardInternal(userId);
+    } catch (rewardErr) {
+      console.error('Failed to award welcome reward during admin customer creation:', rewardErr.message);
+    }
 
     console.log(`[AUTH] Admin created customer #${userId}: ${name} (${mobile})`);
 

@@ -27,6 +27,8 @@ router.delete('/:id/services/:sid', auth, role(['admin', 'staff']), ctrl.deleteS
 // Photos
 router.post('/:id/photos',        auth, role(['admin', 'staff']), upload.single('photo'), ctrl.uploadPhoto);
 router.delete('/:id/photos/:pid', auth, role(['admin', 'staff']), ctrl.deletePhoto);
+router.get('/:id/photos/download', auth, role(['admin', 'staff', 'customer']), ctrl.downloadAllPhotos);
+
 
 // Invoice
 router.get('/:id/invoice', auth, role(['admin', 'customer']), ctrl.getInvoice);

@@ -21,10 +21,16 @@ router.get('/active', protect, ctrl.getActivePackage);
 // Package subscription history
 router.get('/history', protect, ctrl.listUserPackages);
 
+// Export package subscription history (Excel)
+router.get('/export', protect, ctrl.exportUserPackages);
+
 // Renew a package (admin only)
 router.post('/:id/renew', protect, role(['admin']), ctrl.renewPackage);
 
 // Consume a reserved service (admin only — after job completion)
 router.post('/consume', protect, role(['admin']), ctrl.consumeService);
+
+// Bulk renew packages (multi-car) (admin only)
+router.post('/bulk-renew', protect, role(['admin']), ctrl.bulkRenewPackages);
 
 module.exports = router;

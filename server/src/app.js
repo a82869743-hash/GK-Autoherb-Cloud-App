@@ -37,6 +37,10 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// ─── Global Audit Logger ────────────────────────────
+const auditLogger = require('./middleware/auditLog');
+app.use(auditLogger);
+
 // ─── Request logging (production-safe) ──────────────
 if (process.env.NODE_ENV !== 'production') {
   app.use((req, _res, next) => {
@@ -87,6 +91,7 @@ app.use('/api/settings',   require('./routes/settings'));
 app.use('/api/dashboard',  require('./routes/dashboard'));
 app.use('/api/vehicles',   require('./routes/vehicles'));
 app.use('/api/customers',  require('./routes/customers'));
+app.use('/api/quotations', require('./routes/quotations'));
 
 // ─── New Feature Routes ─────────────────────────────────────
 app.use('/api/user-packages', require('./routes/userPackages'));
@@ -100,6 +105,17 @@ app.use('/api/archive',       require('./routes/archive'));
 // ─── Phase 2 Routes ────────────────────────────────────────
 app.use('/api/search',        require('./routes/search'));
 app.use('/api/quick-wash',    require('./routes/quickWash'));
+
+// ─── Phase 2 Extended Routes ───────────────────────────────
+app.use('/api/payments',      require('./routes/payments'));
+app.use('/api/feedback',      require('./routes/feedback'));
+app.use('/api/balance-sheet', require('./routes/balanceSheet'));
+app.use('/api/audit',         require('./routes/audit'));
+app.use('/api/staff-hr',      require('./routes/staffHR'));
+app.use('/api/whatsapp',      require('./routes/whatsapp'));
+app.use('/api/shared-files',  require('./routes/sharedFiles'));
+app.use('/api/customer-rewards', require('./routes/customerRewards'));
+app.use('/api/referrals',     require('./routes/referrals'));
 
 // ─── Socket.io Auth + GPS ───────────────────────────
 const jwt = require('jsonwebtoken');

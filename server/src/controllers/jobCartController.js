@@ -40,7 +40,7 @@ exports.create = async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const { registration_no, customer_id, customer_name, customer_mobile, customer_email, car_brand, car_model, visit_date, notes, booking_id } = req.body;
+    const { registration_no, customer_id, customer_name, customer_mobile, customer_email, car_brand, car_model, car_registration_year, visit_date, notes, booking_id } = req.body;
     const regNo = (registration_no || '').toUpperCase().replace(/\s/g, '');
 
     if (!regNo || !car_brand || !car_model) {
@@ -55,6 +55,10 @@ exports.create = async (req, res) => {
     if (existingVehicle.length) {
       vehicleId = existingVehicle[0].id;
       custId = existingVehicle[0].customer_id;
+      // Optionally update registration_year if missing
+      if (car_registration_year) {
+         await conn.query('UPDATE vehicles SET registration_year = ? WHERE id = ?', [car_registration_year, vehicleId]);
+      }
     } else {
       // Need customer — find or create
       if (!custId && customer_mobile) {
@@ -79,8 +83,8 @@ exports.create = async (req, res) => {
 
       // Create vehicle
       const [newVehicle] = await conn.query(
-        'INSERT INTO vehicles (registration_no, customer_id, brand, model) VALUES (?, ?, ?, ?)',
-        [regNo, custId, car_brand, car_model]
+        'INSERT INTO vehicles (registration_no, customer_id, brand, model, registration_year) VALUES (?, ?, ?, ?, ?)',
+        [regNo, custId, car_brand, car_model, car_registration_year || null]
       );
       vehicleId = newVehicle.insertId;
     }
@@ -273,9 +277,15 @@ exports.update = async (req, res) => {
     const { id } = req.params;
     const { visit_date, notes, discount_type, discount_value, invoice_notes } = req.body;
 
-    const [cart] = await pool.query('SELECT status FROM job_carts WHERE id = ?', [id]);
+    const [cart] = await pool.query('SELECT status, completed_at FROM job_carts WHERE id = ?', [id]);
     if (!cart.length) return res.status(404).json({ success: false, error: 'Not found' });
-    if (cart[0].status === 'complete') return res.status(422).json({ success: false, error: 'Cannot edit completed job cart' });
+    
+    if (cart[0].status === 'complete') {
+      const isWithin1Day = (new Date() - new Date(cart[0].completed_at)) < 24 * 60 * 60 * 1000;
+      if (!isWithin1Day && req.user.role !== 'admin') {
+        return res.status(422).json({ success: false, error: 'Cannot edit completed job cart after 1 day without Admin override' });
+      }
+    }
 
     await pool.query(
       'UPDATE job_carts SET visit_date = ?, notes = ?, discount_type = ?, discount_value = ?, invoice_notes = ? WHERE id = ?', 
@@ -335,7 +345,22 @@ exports.complete = async (req, res) => {
     }
 
     // 4. Award loyalty
-    if (credits_awarded > 0 || free_washes_awarded > 0 || wax_awarded > 0) {
+    // Check for New Customer Welcome Reward (if this is their first completed job cart)
+    const [pastCarts] = await conn.query(
+      `SELECT COUNT(*) as count FROM job_carts jc JOIN vehicles v ON jc.vehicle_id = v.id WHERE v.customer_id = ? AND jc.status = 'complete'`,
+      [customerId]
+    );
+    
+    let welcomeCredits = 0;
+    let isFirstVisit = false;
+    if (pastCarts[0].count === 0) {
+      welcomeCredits = 100; // 100 credits for first service
+      isFirstVisit = true;
+    }
+
+    const totalCreditsToAward = Number(credits_awarded) + welcomeCredits;
+
+    if (totalCreditsToAward > 0 || free_washes_awarded > 0 || wax_awarded > 0) {
       await conn.query(
         `INSERT INTO loyalty (customer_id, credits, free_washes, wax_count)
          VALUES (?, ?, ?, ?)
@@ -343,7 +368,7 @@ exports.complete = async (req, res) => {
            credits = credits + VALUES(credits),
            free_washes = free_washes + VALUES(free_washes),
            wax_count = wax_count + VALUES(wax_count)`,
-        [customerId, credits_awarded, free_washes_awarded, wax_awarded]
+        [customerId, totalCreditsToAward, free_washes_awarded, wax_awarded]
       );
     }
 
@@ -399,7 +424,7 @@ exports.complete = async (req, res) => {
         const c = custInfo[0];
         const [svcs] = await pool.query('SELECT service_name FROM job_services WHERE job_cart_id = ?', [id]);
         const serviceList = svcs.map(s => s.service_name).join(', ');
-        const messageBody = `Dear ${c.name}, your ${c.brand} ${c.model} (${c.registration_no}) service is complete at GK AutoHerb! Services: ${serviceList}. Total: Rs.${grandTotal}. Thank you!`;
+        const messageBody = `Dear ${c.name}, your ${c.brand} ${c.model} (${c.registration_no}) service is complete at GK AutoHerb! Services: ${serviceList}. Total: Rs.${grandTotal}.${isFirstVisit ? ' Bonus: 100 Welcome Credits added to your wallet!' : ''} Thank you!`;
         
         // Fire-and-forget WhatsApp (existing custom template)
         messagingService.sendWhatsApp(`91${c.mobile}`, 'job_complete', { body: messageBody }).catch(() => {});
@@ -444,12 +469,18 @@ exports.addService = async (req, res) => {
 
     if (!service_name) return res.status(400).json({ success: false, error: 'Service name is required' });
 
-    const [cart] = await conn.query('SELECT status FROM job_carts WHERE id = ?', [id]);
+    const [cart] = await conn.query('SELECT status, completed_at FROM job_carts WHERE id = ?', [id]);
     if (!cart.length) { await conn.rollback(); return res.status(404).json({ success: false, error: 'Not found' }); }
-    if (cart[0].status === 'complete') { await conn.rollback(); return res.status(422).json({ success: false, error: 'Cannot modify completed cart' }); }
+    if (cart[0].status === 'complete') {
+      const isWithin1Day = (new Date() - new Date(cart[0].completed_at)) < 24 * 60 * 60 * 1000;
+      if (!isWithin1Day && req.user.role !== 'admin') {
+        await conn.rollback(); 
+        return res.status(422).json({ success: false, error: 'Cannot modify completed cart after 1 day without Admin override' });
+      }
+    }
 
     const [svcResult] = await conn.query(
-      'INSERT INTO job_services (job_cart_id, service_name, service_price, labor_charges) VALUES (?, ?, ?, ?)',
+      'INSERT INTO job_services (job_cart_id, service_name, service_price, labor_charges, last_edited_at) VALUES (?, ?, ?, ?, NOW())',
       [id, service_name, service_price, labor_charges]
     );
     const serviceId = svcResult.insertId;
@@ -481,12 +512,18 @@ exports.updateService = async (req, res) => {
     const { id, sid } = req.params;
     const { service_name, service_price, labor_charges, products = [] } = req.body;
 
-    const [cart] = await conn.query('SELECT status FROM job_carts WHERE id = ?', [id]);
+    const [cart] = await conn.query('SELECT status, completed_at FROM job_carts WHERE id = ?', [id]);
     if (!cart.length) { await conn.rollback(); return res.status(404).json({ success: false, error: 'Cart not found' }); }
-    if (cart[0].status === 'complete') { await conn.rollback(); return res.status(422).json({ success: false, error: 'Cannot modify completed cart' }); }
+    if (cart[0].status === 'complete') {
+      const isWithin1Day = (new Date() - new Date(cart[0].completed_at)) < 24 * 60 * 60 * 1000;
+      if (!isWithin1Day && req.user.role !== 'admin') {
+        await conn.rollback(); 
+        return res.status(422).json({ success: false, error: 'Cannot modify completed cart after 1 day without Admin override' });
+      }
+    }
 
     await conn.query(
-      'UPDATE job_services SET service_name = ?, service_price = ?, labor_charges = ? WHERE id = ? AND job_cart_id = ?',
+      'UPDATE job_services SET service_name = ?, service_price = ?, labor_charges = ?, last_edited_at = NOW() WHERE id = ? AND job_cart_id = ?',
       [service_name, service_price, labor_charges, sid, id]
     );
 
@@ -515,9 +552,14 @@ exports.updateService = async (req, res) => {
 exports.deleteService = async (req, res) => {
   try {
     const { id, sid } = req.params;
-    const [cart] = await pool.query('SELECT status FROM job_carts WHERE id = ?', [id]);
+    const [cart] = await pool.query('SELECT status, completed_at FROM job_carts WHERE id = ?', [id]);
     if (!cart.length) return res.status(404).json({ success: false, error: 'Not found' });
-    if (cart[0].status === 'complete') return res.status(422).json({ success: false, error: 'Cannot modify completed cart' });
+    if (cart[0].status === 'complete') {
+      const isWithin1Day = (new Date() - new Date(cart[0].completed_at)) < 24 * 60 * 60 * 1000;
+      if (!isWithin1Day && req.user.role !== 'admin') {
+        return res.status(422).json({ success: false, error: 'Cannot modify completed cart after 1 day without Admin override' });
+      }
+    }
 
     await pool.query('DELETE FROM job_services WHERE id = ? AND job_cart_id = ?', [sid, id]);
     res.json({ success: true, message: 'Service deleted' });
@@ -576,6 +618,32 @@ exports.deletePhoto = async (req, res) => {
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };
+
+// ─── DOWNLOAD ALL PHOTOS ───────────────────────────
+exports.downloadAllPhotos = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [photos] = await pool.query('SELECT public_id FROM job_photos WHERE job_cart_id = ? AND public_id IS NOT NULL', [id]);
+    
+    if (!photos.length) {
+      return res.status(404).json({ success: false, error: 'No photos found to download' });
+    }
+
+    const publicIds = photos.map(p => p.public_id);
+    
+    const zipUrl = cloudinary.utils.download_zip_url({
+      public_ids: publicIds,
+      resource_type: 'image',
+      target_public_id: `job_${id}_photos`
+    });
+
+    res.json({ success: true, data: { url: zipUrl } });
+  } catch (err) {
+    console.error('Download photos error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
 
 // ─── GET INVOICE PDF ────────────────────────
 exports.getInvoice = async (req, res) => {

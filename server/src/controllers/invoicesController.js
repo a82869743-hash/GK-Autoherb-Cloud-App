@@ -196,3 +196,96 @@ exports.listAll = async (req, res) => {
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };
+
+// ─── EXPORT INVOICE AS PDF ──────────────────────────────────────────────
+exports.exportPdf = async (req, res) => {
+  try {
+    const { id, type } = req.query;
+    if (!id || !type) return res.status(400).json({ success: false, error: 'Missing id or type' });
+
+    let invoiceData = null;
+
+    if (type === 'job_cart') {
+      const [rows] = await pool.query(`
+        SELECT jc.*, u.name as customer_name, u.mobile as customer_mobile, v.registration_no, v.brand, v.model
+        FROM job_carts jc
+        JOIN vehicles v ON jc.vehicle_id = v.id
+        JOIN users u ON v.customer_id = u.id
+        WHERE jc.id = ?
+      `, [id]);
+      if (rows.length) {
+        const jc = rows[0];
+        const [services] = await pool.query('SELECT js.service_name, js.service_price, js.labor_charges FROM job_services js WHERE js.job_cart_id = ?', [id]);
+        const [products] = await pool.query('SELECT jp.part_name, jp.quantity, jp.unit_cost FROM job_products jp JOIN job_services js ON jp.job_service_id = js.id WHERE js.job_cart_id = ?', [id]);
+        invoiceData = { ...jc, title: 'Job Cart Invoice', reference: jc.invoice_number || `JC-${jc.id}`, items: [...services.map(s => ({ name: s.service_name, price: Number(s.service_price) + Number(s.labor_charges) })), ...products.map(p => ({ name: p.part_name, price: Number(p.quantity) * Number(p.unit_cost) }))] };
+      }
+    } else if (type === 'manual_bill') {
+      const [rows] = await pool.query('SELECT mb.* FROM manual_bills mb WHERE id = ?', [id]);
+      if (rows.length) {
+        const mb = rows[0];
+        const [items] = await pool.query('SELECT item_name, quantity, rate FROM manual_bill_items WHERE manual_bill_id = ?', [id]);
+        invoiceData = { ...mb, customer_name: mb.customer_name || 'Walk-in', title: 'Manual Bill', reference: `MB-${mb.id}`, date: mb.created_at, items: items.map(i => ({ name: i.item_name, price: Number(i.quantity) * Number(i.rate) })) };
+      }
+    } else if (type === 'quick_wash') {
+      const [rows] = await pool.query(`
+        SELECT b.*, u.name as customer_name, u.mobile as customer_mobile, s.name as service_name, s.price
+        FROM bookings b
+        JOIN users u ON b.customer_id = u.id
+        LEFT JOIN services s ON b.service_id = s.id
+        WHERE b.id = ? AND b.job_type = 'quick_wash'
+      `, [id]);
+      if (rows.length) {
+        const b = rows[0];
+        invoiceData = { ...b, title: 'Quick Wash Receipt', reference: `QW-${b.id}`, date: b.completed_at || b.created_at, items: [{ name: b.service_name || 'Quick Wash', price: Number(b.price || 0) }] };
+      }
+    }
+
+    if (!invoiceData) return res.status(404).json({ success: false, error: 'Invoice not found' });
+
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ margin: 50 });
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Invoice_${invoiceData.reference}.pdf`);
+    doc.pipe(res);
+
+    doc.fontSize(20).text('GK AutoHerb', { align: 'center' });
+    doc.fontSize(10).text('Premium Car Detailing Studio', { align: 'center' });
+    doc.moveDown();
+    
+    doc.fontSize(14).text(invoiceData.title, { underline: true });
+    doc.fontSize(10).text(`Reference: ${invoiceData.reference}`);
+    doc.text(`Date: ${new Date(invoiceData.date || invoiceData.completed_at || invoiceData.created_at).toLocaleDateString()}`);
+    doc.moveDown();
+    
+    doc.text(`Customer: ${invoiceData.customer_name || 'Walk-in Customer'}`);
+    if (invoiceData.customer_mobile) doc.text(`Mobile: ${invoiceData.customer_mobile}`);
+    if (invoiceData.registration_no) doc.text(`Vehicle: ${invoiceData.registration_no} ${invoiceData.brand ? `(${invoiceData.brand} ${invoiceData.model})` : ''}`);
+    doc.moveDown();
+    
+    doc.text('---------------------------------------------------------');
+    let total = 0;
+    invoiceData.items.forEach(item => {
+      doc.text(`${item.name} - INR ${item.price.toFixed(2)}`);
+      total += item.price;
+    });
+    doc.text('---------------------------------------------------------');
+    
+    if (invoiceData.discount_value > 0) {
+      doc.text(`Subtotal: INR ${total.toFixed(2)}`, { align: 'right' });
+      let discountAmount = invoiceData.discount_type === 'percentage' ? (total * invoiceData.discount_value / 100) : invoiceData.discount_value;
+      doc.text(`Discount: INR -${Number(discountAmount).toFixed(2)}`, { align: 'right' });
+      total -= discountAmount;
+    }
+    
+    doc.fontSize(12).text(`Total Amount: INR ${total.toFixed(2)}`, { align: 'right' });
+    doc.moveDown(2);
+    doc.fontSize(10).text('Thank you for your business!', { align: 'center' });
+    
+    doc.end();
+
+  } catch (err) {
+    console.error('Export PDF error:', err);
+    if (!res.headersSent) res.status(500).json({ success: false, error: 'Server error' });
+  }
+};

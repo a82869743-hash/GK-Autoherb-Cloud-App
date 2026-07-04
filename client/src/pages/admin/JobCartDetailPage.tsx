@@ -39,9 +39,27 @@ export default function JobCartDetailPage() {
   const updateServiceMut = useUpdateJobService();
   const deleteServiceMut = useDeleteJobService();
 
+  const isAdmin = user?.role === 'admin';
   const isStaff = user?.role === 'staff';
   const isCustomer = user?.role === 'customer';
-  const canEdit = !isCustomer && cart?.status !== 'complete';
+  
+  let canEdit = !isCustomer && cart?.status !== 'complete';
+  let editTimeRemaining = null;
+
+  if (cart?.status === 'complete' && cart?.completed_at) {
+    const completedAt = new Date(cart.completed_at);
+    const now = new Date();
+    const hoursSinceComplete = (now.getTime() - completedAt.getTime()) / (1000 * 60 * 60);
+    
+    if (isAdmin) {
+      canEdit = true; // Admin override
+    } else if (hoursSinceComplete < 24) {
+      canEdit = true;
+      editTimeRemaining = Math.floor(24 - hoursSinceComplete);
+    }
+  } else if (cart?.status === 'complete') {
+    canEdit = isAdmin;
+  }
 
   // ─── Catalog data ──────────────────────
   const [servicesCatalog, setServicesCatalog] = useState<any[]>([]);
@@ -396,6 +414,16 @@ export default function JobCartDetailPage() {
       <div className="max-w-4xl space-y-6">
 
         {/* ─── Header Card ─────────────────────── */}
+        {cart.status === 'complete' && canEdit && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800 flex items-center gap-2 mb-2">
+            <Edit2 size={16} />
+            <span className="font-medium">
+              {isAdmin 
+                ? "Admin Override: You can edit this completed job cart." 
+                : `Edit Window Open: You have ${editTimeRemaining} hours left to edit this completed job cart.`}
+            </span>
+          </div>
+        )}
         <div className="bg-white rounded-lg p-6 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div className="flex-1">

@@ -62,14 +62,14 @@ class MessagingService {
     }
   }
 
-  /**
-   * Send WhatsApp Message via 2Factor.in (if supported)
-   * Falls back to SMS if WhatsApp not configured
-   */
   async sendWhatsApp(to, templateName, defaultParams = {}) {
-    // 2Factor.in WhatsApp is a separate product — fall back to SMS for now
-    console.log(`[WHATSAPP] Falling back to SMS for: ${to}`);
-    return this.sendSMS(to, null, null, { content: defaultParams.body || '' });
+    const whatsappController = require('../controllers/whatsappController');
+    return await whatsappController._sendWhatsAppMessage(
+      to, 
+      templateName, 
+      defaultParams.params || [], 
+      defaultParams.body || ''
+    );
   }
 }
 

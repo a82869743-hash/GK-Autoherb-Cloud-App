@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../../api/axiosInstance';
 import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
-import { PackageOpen, Car, CheckCircle, Loader2, ArrowRight, ShieldCheck, X, AlertCircle, Clock, XCircle, Check, Minus } from 'lucide-react';
+import { PackageOpen, Car, CheckCircle, Loader2, ArrowRight, ShieldCheck, X, AlertCircle, Clock, XCircle, Check, Minus, FileSpreadsheet, FileDown } from 'lucide-react';
 
 interface Vehicle {
   id: number;
@@ -139,6 +139,33 @@ export default function BuyPackagesPage() {
   // Confirmation modal state
   const [confirmPkg, setConfirmPkg] = useState<Pkg | null>(null);
   const [myRequests, setMyRequests] = useState<any[]>([]);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
+
+  const handleExport = async (format: 'pdf' | 'excel') => {
+    if (format === 'pdf') setExportingPdf(true);
+    else setExportingExcel(true);
+    try {
+      const response = await api.get(`/user-packages/export?format=${format}`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], {
+        type: format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const link = document.createElement('a');
+      link.href = window.URL.createObjectURL(blob);
+      link.download = `Package_History_${new Date().toISOString().slice(0, 10)}.${format === 'pdf' ? 'pdf' : 'xlsx'}`;
+      link.click();
+      window.URL.revokeObjectURL(link.href);
+      addToast('success', `Package history exported to ${format.toUpperCase()} successfully!`);
+    } catch (err) {
+      console.error(err);
+      addToast('error', `Failed to export package history to ${format.toUpperCase()}.`);
+    } finally {
+      if (format === 'pdf') setExportingPdf(false);
+      else setExportingExcel(false);
+    }
+  };
 
   useEffect(() => {
     async function loadData() {
@@ -450,6 +477,35 @@ export default function BuyPackagesPage() {
 
         return (
           <div className="mt-12 max-w-4xl mx-auto space-y-6">
+            {/* Header with Export Buttons */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-100 pb-4">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <PackageOpen className="w-5 h-5 text-red-600" />
+                  My Package History & Requests
+                </h2>
+                <p className="text-xs text-gray-500 mt-1">Track your active packages, purchase requests, and download statements.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleExport('excel')}
+                  disabled={exportingExcel}
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-all disabled:opacity-50"
+                >
+                  {exportingExcel ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
+                  Export Excel
+                </button>
+                <button
+                  onClick={() => handleExport('pdf')}
+                  disabled={exportingPdf}
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 transition-all disabled:opacity-50"
+                >
+                  {exportingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+                  Export PDF
+                </button>
+              </div>
+            </div>
+
             {/* Active Package */}
             {activeRequest && (
               <div>

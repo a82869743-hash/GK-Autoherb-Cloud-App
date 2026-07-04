@@ -597,3 +597,191 @@ export interface PremiumService {
   sort_order: number;
   addons?: ServiceAddon[];
 }
+
+// ─── Phase 2 Extended Types ──────────────────────────────
+
+export interface Payment {
+  id: number;
+  customer_id: number;
+  job_cart_id?: number;
+  booking_id?: number;
+  amount: number;
+  payment_type: 'full' | 'advance' | 'balance' | 'refund';
+  payment_method: 'cash' | 'upi' | 'card' | 'net_banking' | 'cheque';
+  payment_status: 'pending' | 'completed' | 'failed' | 'refunded';
+  transaction_ref?: string;
+  notes?: string;
+  paid_at?: string;
+  created_by?: number;
+  customer_name?: string;
+  customer_mobile?: string;
+  created_at: string;
+}
+
+export interface AdvancePayment {
+  id: number;
+  customer_id: number;
+  booking_id?: number;
+  job_cart_id?: number;
+  advance_amount: number;
+  total_amount: number;
+  balance_due: number;
+  payment_method: string;
+  status: 'advance_paid' | 'fully_paid' | 'cancelled';
+  due_date?: string;
+  notes?: string;
+  created_at: string;
+}
+
+export interface Refund {
+  id: number;
+  payment_id: number;
+  customer_id: number;
+  amount: number;
+  reason?: string;
+  status: 'pending' | 'approved' | 'processed' | 'rejected';
+  created_at: string;
+}
+
+export interface Feedback {
+  id: number;
+  customer_id: number;
+  job_cart_id?: number;
+  booking_id?: number;
+  rating: number;
+  review_text?: string;
+  service_quality?: number;
+  timeliness?: number;
+  value_for_money?: number;
+  admin_reply?: string;
+  replied_at?: string;
+  is_public: boolean;
+  customer_name?: string;
+  created_at: string;
+}
+
+export interface ReferralCode {
+  id: number;
+  customer_id: number;
+  code: string;
+  reward_points: number;
+  max_uses: number;
+  current_uses: number;
+  is_active: boolean;
+}
+
+export interface Wallet {
+  id: number;
+  customer_id: number;
+  balance: number;
+  total_earned: number;
+  total_spent: number;
+}
+
+export interface AuditLog {
+  id: number;
+  user_id: number;
+  action: string;
+  entity_type: string;
+  entity_id?: number;
+  details?: string;
+  ip_address?: string;
+  user_name?: string;
+  user_role?: string;
+  created_at: string;
+}
+
+export interface StaffTask {
+  id: number;
+  assigned_to: number;
+  assigned_by: number;
+  title: string;
+  description?: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  due_date?: string;
+  completed_at?: string;
+  staff_name?: string;
+  created_at: string;
+}
+
+export interface StaffLeave {
+  id: number;
+  staff_id: number;
+  leave_type: 'casual' | 'sick' | 'earned' | 'unpaid';
+  from_date: string;
+  to_date: string;
+  days: number;
+  reason?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  approved_by?: number;
+  staff_name?: string;
+  created_at: string;
+}
+
+export interface StaffPerformance {
+  id: number;
+  staff_id: number;
+  period: string;
+  jobs_completed: number;
+  avg_rating: number;
+  attendance_pct: number;
+  bonus_amount: number;
+  notes?: string;
+  staff_name?: string;
+}
+
+export interface Expense {
+  id: number;
+  category_id: number;
+  category_name?: string;
+  amount: number;
+  description?: string;
+  expense_date: string;
+  payment_method: string;
+  gst_amount: number;
+  gst_number?: string;
+  created_by: number;
+  created_by_name?: string;
+  created_at: string;
+}
+
+export interface ExpenseCategory {
+  id: number;
+  name: string;
+  description?: string;
+  is_active: boolean;
+}
+
+export interface BalanceSheet {
+  period: { from: string; to: string };
+  income: {
+    job_revenue: number;
+    bill_revenue: number;
+    package_revenue: number;
+    payments_collected: number;
+    total: number;
+  };
+  expenses: {
+    operational: number;
+    staff_payments: number;
+    purchases: number;
+    gst_paid: number;
+    total: number;
+    by_category: Array<{ category: string; total: number }>;
+  };
+  refunds: number;
+  net_profit: number;
+  profit_margin: number;
+}
+
+export interface PaymentStats {
+  today_collected: number;
+  month_collected: number;
+  pending_amount: number;
+  today_count: number;
+  refund_count: number;
+  total_balance_due: number;
+  pending_count: number;
+}
+

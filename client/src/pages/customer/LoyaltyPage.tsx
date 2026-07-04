@@ -1,20 +1,53 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CreditCard, Droplets, Sparkles, Gift, TrendingUp, Star, ArrowUpRight, ArrowDownRight, Coins } from 'lucide-react';
+import { 
+  CreditCard, 
+  Droplets, 
+  Sparkles, 
+  Gift, 
+  TrendingUp, 
+  Star, 
+  ArrowUpRight, 
+  ArrowDownRight, 
+  Coins, 
+  Copy, 
+  Check, 
+  Share2, 
+  Users, 
+  Clock, 
+  CheckCircle,
+  HelpCircle
+} from 'lucide-react';
 import { useLoyalty, useLoyaltyHistory } from '../../api/hooks/useLoyalty';
+import { useReferralCode, useReferralHistory, useApplyReferral } from '../../api/hooks/useReferrals';
+import { useAuthStore } from '../../store/authStore';
 import Button from '../../components/ui/Button';
 import { SkeletonCard } from '../../components/ui/SkeletonLoader';
 import { formatINR, formatDate } from '../../utils/formatters';
+import { toast } from 'react-hot-toast';
 
 export default function LoyaltyPage() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const { data: loyalty, isLoading } = useLoyalty('mine');
   const { data: history } = useLoyaltyHistory('mine');
+  
+  // Referral states & queries
+  const { data: referral, isLoading: isRefLoading } = useReferralCode(user?.id || 'mine');
+  const { data: refHistory } = useReferralHistory(user?.id || 'mine');
+  const applyReferralMutation = useApplyReferral();
+  
+  const [activeTab, setActiveTab] = useState<'loyalty' | 'referrals'>('loyalty');
+  const [copied, setCopied] = useState(false);
+  const [friendCode, setFriendCode] = useState('');
 
-  if (isLoading) {
+  if (isLoading || isRefLoading) {
     return (
       <div className="pt-4 space-y-4">
         <h2 className="text-2xl font-extrabold text-[#1c1b1b] tracking-tight">Loyalty & Rewards</h2>
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">{[1,2,3].map(i => <SkeletonCard key={i} />)}</div>
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+          {[1, 2, 3].map(i => <SkeletonCard key={i} />)}
+        </div>
       </div>
     );
   }
@@ -23,40 +56,103 @@ export default function LoyaltyPage() {
   const pointValue = loyalty?.loyalty_settings?.point_value || 1;
   const pointsEnabled = loyalty?.loyalty_settings?.enabled !== false;
 
+  const handleCopyCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    toast.success('Referral code copied!');
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleWhatsAppShare = (code: string) => {
+    const text = `Hey! Sign up at GK AutoHerb Car Detailing using my referral code *${code}* and we both earn ${referral?.reward_points || 100} bonus reward points on your first service! Check it out:`;
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleApplyFriendCode = () => {
+    if (!friendCode.trim()) {
+      toast.error('Please enter a valid referral code');
+      return;
+    }
+    applyReferralMutation.mutate({
+      code: friendCode.trim().toUpperCase(),
+      new_customer_id: user?.id || ''
+    }, {
+      onSuccess: () => {
+        setFriendCode('');
+      }
+    });
+  };
+
   return (
-    <div className="pt-4">
+    <div className="pt-4 max-w-4xl mx-auto">
+      {/* ── Page Header ───────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div>
+          <h2 className="text-2xl font-extrabold text-[#1c1b1b] tracking-tight">Loyalty & Rewards</h2>
+          <p className="text-xs text-gray-500 mt-1">Manage your loyalty wallet, redeem reward points, and refer friends.</p>
+        </div>
+        
+        {/* Tab Switcher */}
+        <div className="flex bg-gray-100 p-1 rounded-xl w-fit border border-gray-200/50">
+          <button
+            onClick={() => setActiveTab('loyalty')}
+            className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all ${
+              activeTab === 'loyalty'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-900'
+            }`}
+          >
+            <Coins size={14} />
+            Loyalty Wallet
+          </button>
+          <button
+            onClick={() => setActiveTab('referrals')}
+            className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all ${
+              activeTab === 'referrals'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-900'
+            }`}
+          >
+            <Users size={14} />
+            Refer & Earn
+          </button>
+        </div>
+      </div>
+
       {/* ── Hero Stats Section ───────────────────────────── */}
       <div className="relative hero-bg rounded-2xl overflow-hidden mb-8 pattern-overlay">
         <div className="relative z-10 px-6 sm:px-10 py-8 sm:py-10">
           <div className="flex items-center gap-2 mb-4">
             <Gift size={16} className="text-[#D32F2F]" />
-            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]">Loyalty & Rewards</span>
+            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]">Loyalty Account Summary</span>
           </div>
           
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6">
-            {/* Points (new) */}
             {pointsEnabled && (
               <div className="opacity-0 animate-fade-in-up" style={{ animationDelay: '0.05s', animationFillMode: 'forwards' }}>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">Points</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Points Balance</p>
                 <p className="text-2xl sm:text-3xl font-black text-amber-400 tracking-tight">{points}</p>
-                <p className="text-[10px] text-gray-500 mt-1">Worth {formatINR(points * pointValue)}</p>
+                <p className="text-[10px] text-gray-400 mt-1">Worth {formatINR(points * pointValue)}</p>
                 <div className="w-12 h-1 bg-amber-400 rounded-full mt-2" />
               </div>
             )}
-
             <div className="opacity-0 animate-fade-in-up" style={{ animationDelay: '0.1s', animationFillMode: 'forwards' }}>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">Credits</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Credits</p>
               <p className="text-2xl sm:text-3xl font-black text-white tracking-tight">{formatINR(loyalty?.credits || 0)}</p>
+              <p className="text-[10px] text-gray-400 mt-1">Store Balance</p>
               <div className="w-12 h-1 bg-[#D32F2F] rounded-full mt-2" />
             </div>
             <div className="opacity-0 animate-fade-in-up" style={{ animationDelay: '0.2s', animationFillMode: 'forwards' }}>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">Free Washes</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Free Washes</p>
               <p className="text-2xl sm:text-3xl font-black text-white tracking-tight">{loyalty?.free_washes || 0}</p>
+              <p className="text-[10px] text-gray-400 mt-1">Available</p>
               <div className="w-12 h-1 bg-blue-500 rounded-full mt-2" />
             </div>
             <div className="opacity-0 animate-fade-in-up" style={{ animationDelay: '0.3s', animationFillMode: 'forwards' }}>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">Wax Treatments</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Wax Treatments</p>
               <p className="text-2xl sm:text-3xl font-black text-white tracking-tight">{loyalty?.wax_count || 0}</p>
+              <p className="text-[10px] text-gray-400 mt-1">Accrued</p>
               <div className="w-12 h-1 bg-purple-500 rounded-full mt-2" />
             </div>
           </div>
@@ -64,85 +160,238 @@ export default function LoyaltyPage() {
         <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#D32F2F] via-[#D32F2F]/40 to-transparent" />
       </div>
 
-      {/* Points Info Banner */}
-      {pointsEnabled && points > 0 && (
-        <div className="mb-8 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/60 rounded-xl p-4 sm:p-5 flex items-center gap-4">
-          <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-            <Coins size={20} className="text-amber-600" />
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-bold text-gray-900">You have {points} reward points!</p>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Your points are worth {formatINR(points * pointValue)}. Points are automatically applied on your next service.
-            </p>
-          </div>
-        </div>
-      )}
+      {/* ── Active Tab Content ──────────────────────────── */}
+      {activeTab === 'loyalty' ? (
+        <div className="space-y-6">
+          {/* Points Info Banner */}
+          {pointsEnabled && points > 0 && (
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/60 rounded-xl p-4 sm:p-5 flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                <Coins size={20} className="text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-gray-900">You have {points} reward points!</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Your points are worth {formatINR(points * pointValue)}. Points are automatically applied on your next service.
+                </p>
+              </div>
+            </div>
+          )}
 
-      {/* Actions */}
-      {(loyalty?.free_washes > 0) && (
-        <div className="mb-8">
-          <Button onClick={() => navigate('/customer/bookings/new?free_wash=true')} icon={<Gift size={14} />}>
-            Use a Free Wash
-          </Button>
-        </div>
-      )}
+          {/* Actions */}
+          {loyalty?.free_washes > 0 && (
+            <div className="bg-white rounded-xl p-4 border border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
+                  <Gift size={16} />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-900">Claim your free wash voucher</p>
+                  <p className="text-xs text-gray-500">You have earned this wash through our membership frequency.</p>
+                </div>
+              </div>
+              <Button onClick={() => navigate('/customer/bookings/new?free_wash=true')} icon={<Gift size={14} />}>
+                Use a Free Wash
+              </Button>
+            </div>
+          )}
 
-      {/* ── Transaction History ──────────────────────────── */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
-          <TrendingUp size={16} className="text-[#D32F2F]" />
-          <h3 className="text-xs font-extrabold uppercase tracking-widest text-[#5f5e5e]">Reward History</h3>
-        </div>
-        {history?.length ? (
-          <div className="divide-y divide-gray-50">
-            {history.map((item: any, idx: number) => {
-              // Determine if it's a point transaction or legacy credit/wash transaction
-              const isPointTx = item.type && ['earn', 'redeem', 'bonus', 'adjustment', 'expire'].includes(item.type);
-              const isPositive = isPointTx ? item.points >= 0 : item.amount > 0;
+          {/* Transaction History */}
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
+              <TrendingUp size={16} className="text-[#D32F2F]" />
+              <h3 className="text-xs font-extrabold uppercase tracking-widest text-[#5f5e5e]">Reward Ledger History</h3>
+            </div>
+            {history?.length ? (
+              <div className="divide-y divide-gray-50">
+                {history.map((item: any, idx: number) => {
+                  const isPointTx = item.type && ['earn', 'redeem', 'bonus', 'adjustment', 'expire'].includes(item.type);
+                  const isPositive = isPointTx ? item.points >= 0 : item.amount > 0;
 
-              return (
-                <div
-                  key={item.id}
-                  className="px-6 py-3.5 flex items-center justify-between hover:bg-[#faf7f5] transition-colors opacity-0 animate-fade-in-up"
-                  style={{ animationDelay: `${idx * 0.04}s`, animationFillMode: 'forwards' }}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
-                      isPositive ? 'bg-green-100' : 'bg-red-50'
-                    }`}>
-                      {isPositive
-                        ? <ArrowUpRight size={14} className="text-green-600" />
-                        : <ArrowDownRight size={14} className="text-red-500" />
-                      }
+                  return (
+                    <div
+                      key={item.id}
+                      className="px-6 py-3.5 flex items-center justify-between hover:bg-[#faf7f5] transition-colors opacity-0 animate-fade-in-up"
+                      style={{ animationDelay: `${idx * 0.04}s`, animationFillMode: 'forwards' }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+                          isPositive ? 'bg-green-100' : 'bg-red-50'
+                        }`}>
+                          {isPositive
+                            ? <ArrowUpRight size={14} className="text-green-600" />
+                            : <ArrowDownRight size={14} className="text-red-500" />
+                          }
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-[#1c1b1b]">{item.description}</p>
+                          <p className="text-xs text-[#5f5e5e] mt-0.5">{formatDate(item.created_at)}</p>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0 ml-3">
+                        {isPointTx ? (
+                          <span className={`text-sm font-extrabold px-2.5 py-1 rounded-lg ${
+                            isPositive ? 'text-green-600 bg-green-50' : 'text-red-500 bg-red-50'
+                          }`}>
+                            {isPositive ? '+' : ''}{item.points} pts
+                          </span>
+                        ) : item.amount > 0 ? (
+                          <span className="text-sm font-extrabold text-green-600 bg-green-50 px-2.5 py-1 rounded-lg">
+                            +{formatINR(item.amount)}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-bold text-[#1c1b1b]">{item.description}</p>
-                      <p className="text-xs text-[#5f5e5e] mt-0.5">{formatDate(item.created_at)}</p>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="px-6 py-10 text-center text-sm text-[#5f5e5e]">
+                No reward history yet. Earn points automatically by booking services with us!
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {/* Referral Card Info */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Share Code Card */}
+            <div className="md:col-span-2 bg-white rounded-xl p-6 border border-gray-100 flex flex-col justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <Gift size={20} className="text-[#D32F2F]" />
+                  Invite Friends, Earn Rewards!
+                </h3>
+                <p className="text-xs text-gray-500 mt-2 leading-relaxed">
+                  Share your referral link/code with friends. Once they sign up and complete their first service, we'll automatically add <span className="font-bold text-amber-600">{referral?.reward_points || 100} reward points</span> to your wallet as a thank-you!
+                </p>
+              </div>
+
+              {referral ? (
+                <div className="mt-6">
+                  <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-2">YOUR REFERRAL CODE</p>
+                  <div className="flex flex-col sm:flex-row items-stretch gap-2">
+                    <div className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between font-mono text-lg font-black text-gray-800 tracking-wider">
+                      {referral.code}
+                      <button 
+                        onClick={() => handleCopyCode(referral.code)}
+                        className="text-gray-400 hover:text-gray-800 transition-colors p-1"
+                        title="Copy code"
+                      >
+                        {copied ? <Check size={16} className="text-green-600" /> : <Copy size={16} />}
+                      </button>
                     </div>
+                    <button
+                      onClick={() => handleWhatsAppShare(referral.code)}
+                      className="bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-xs px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm"
+                    >
+                      <Share2 size={14} />
+                      Share on WhatsApp
+                    </button>
                   </div>
-
-                  <div className="text-right shrink-0 ml-3">
-                    {isPointTx ? (
-                      <span className={`text-sm font-extrabold px-2.5 py-1 rounded-lg ${
-                        isPositive ? 'text-green-600 bg-green-50' : 'text-red-500 bg-red-50'
-                      }`}>
-                        {isPositive ? '+' : ''}{item.points} pts
-                      </span>
-                    ) : item.amount > 0 ? (
-                      <span className="text-sm font-extrabold text-green-600 bg-green-50 px-2.5 py-1 rounded-lg">
-                        +{formatINR(item.amount)}
-                      </span>
-                    ) : null}
+                  <div className="flex items-center justify-between mt-3 text-[10px] text-gray-400 font-medium">
+                    <span>Current Uses: {referral.current_uses} / {referral.max_uses}</span>
+                    <span>Expiry: Never</span>
                   </div>
                 </div>
-              );
-            })}
+              ) : (
+                <div className="py-4 text-center text-xs text-gray-400">Loading referral code...</div>
+              )}
+            </div>
+
+            {/* Apply Code Card */}
+            <div className="bg-white rounded-xl p-6 border border-gray-100 flex flex-col justify-between">
+              <div>
+                <h3 className="text-base font-bold text-gray-900 flex items-center gap-1.5">
+                  <Star size={18} className="text-amber-500" />
+                  Have a Code?
+                </h3>
+                <p className="text-xs text-gray-500 mt-2 leading-relaxed">
+                  Enter a friend's referral code below to claim your welcome reward points immediately!
+                </p>
+              </div>
+
+              <div className="mt-6">
+                <div className="space-y-2.5">
+                  <input
+                    type="text"
+                    value={friendCode}
+                    onChange={(e) => setFriendCode(e.target.value)}
+                    placeholder="ENTER FRIEND'S CODE"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-center font-mono text-sm font-bold placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]"
+                  />
+                  <Button
+                    onClick={handleApplyFriendCode}
+                    className="w-full text-xs font-bold py-2.5"
+                    loading={applyReferralMutation.isPending}
+                  >
+                    Claim Welcome Reward
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
-        ) : (
-          <div className="px-6 py-8 text-center text-sm text-[#5f5e5e]">No reward history yet. Earn rewards by visiting us!</div>
-        )}
-      </div>
+
+          {/* Referred Friends Ledger */}
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
+              <Users size={16} className="text-[#D32F2F]" />
+              <h3 className="text-xs font-extrabold uppercase tracking-widest text-[#5f5e5e]">Referred Friends Status</h3>
+            </div>
+            {refHistory?.length ? (
+              <div className="divide-y divide-gray-50">
+                {refHistory.map((item: any, idx: number) => {
+                  const isCredited = item.status === 'credited';
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="px-6 py-3.5 flex items-center justify-between hover:bg-[#faf7f5] transition-colors opacity-0 animate-fade-in-up"
+                      style={{ animationDelay: `${idx * 0.04}s`, animationFillMode: 'forwards' }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                          isCredited ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'
+                        }`}>
+                          {isCredited ? <CheckCircle size={16} /> : <Clock size={16} />}
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-[#1c1b1b]">{item.referred_name || 'Anonymous User'}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5 text-xs text-[#5f5e5e]">
+                            <span>Code: {item.referral_code}</span>
+                            <span>•</span>
+                            <span>{formatDate(item.created_at)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0 ml-3 flex flex-col items-end gap-1">
+                        <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
+                          isCredited 
+                            ? 'text-green-700 bg-green-50 border border-green-200' 
+                            : 'text-amber-700 bg-amber-50 border border-amber-200'
+                        }`}>
+                          {item.status}
+                        </span>
+                        <span className="text-xs font-bold text-gray-500">
+                          +{item.reward_value} pts
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="px-6 py-10 text-center text-xs text-[#5f5e5e] flex flex-col items-center gap-2">
+                <HelpCircle size={32} className="text-gray-300" />
+                <p>No referred friends yet. Share your code to start earning reward points!</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

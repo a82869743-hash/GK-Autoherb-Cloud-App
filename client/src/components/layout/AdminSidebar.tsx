@@ -6,7 +6,7 @@ import {
   LayoutDashboard, ClipboardList, Package, Calendar, CalendarCheck, Wrench, Users,
   DollarSign, MessageSquare, HelpCircle, Upload, Settings, LogOut, X, ShoppingCart,
   Layers, FileText, Wallet, Archive, PlusCircle, Trash2, ChevronDown, ChevronRight,
-  Droplets, Star, Search, Truck, Sparkles
+  Droplets, Star, Search, Truck, Sparkles, CreditCard, BarChart3, Shield, CheckSquare, Gift
 } from 'lucide-react';
 
 // ─── Category-based navigation with collapsible sections ─────
@@ -52,6 +52,7 @@ const navCategories: NavCategory[] = [
       { to: '/admin/packages', icon: Layers, label: 'Packages' },
       { to: '/admin/package-approvals', icon: Package, label: 'Package Approvals' },
       { to: '/admin/loyalty', icon: Star, label: 'Loyalty Points', badge: 'New' },
+      { to: '/admin/customer-rewards', icon: Gift, label: 'Customer Rewards', badge: 'New' },
     ],
   },
   {
@@ -72,8 +73,11 @@ const navCategories: NavCategory[] = [
     label: 'Finance',
     items: [
       { to: '/admin/accounts', icon: DollarSign, label: 'Accounts' },
+      { to: '/admin/payments', icon: CreditCard, label: 'Payments', badge: 'New' },
       { to: '/admin/billing', icon: FileText, label: 'Manual Billing' },
       { to: '/admin/invoices', icon: Archive, label: 'All Invoices' },
+      { to: '/admin/quotations', icon: ClipboardList, label: 'Quotations', badge: 'New' },
+      { to: '/admin/balance-sheet', icon: BarChart3, label: 'Balance Sheet', badge: 'New' },
     ],
   },
   {
@@ -81,18 +85,22 @@ const navCategories: NavCategory[] = [
     items: [
       { to: '/admin/staff', icon: Users, label: 'Staff' },
       { to: '/admin/salary', icon: Wallet, label: 'Salary' },
+      { to: '/admin/staff-hr', icon: CheckSquare, label: 'Tasks & HR', badge: 'New' },
     ],
   },
   {
     label: 'Communication',
     items: [
       { to: '/admin/messages', icon: MessageSquare, label: 'Messages' },
+      { to: '/admin/whatsapp', icon: MessageSquare, label: 'WhatsApp', badge: 'New' },
       { to: '/admin/inquiries', icon: HelpCircle, label: 'Inquiries' },
+      { to: '/admin/feedback', icon: Star, label: 'Feedback', badge: 'New' },
     ],
   },
   {
     label: 'System',
     items: [
+      { to: '/admin/audit-logs', icon: Shield, label: 'Audit Logs', badge: 'New' },
       { to: '/admin/import', icon: Upload, label: 'Import' },
       { to: '/admin/archive', icon: Trash2, label: 'Recycle Bin' },
       { to: '/admin/settings', icon: Settings, label: 'Settings' },

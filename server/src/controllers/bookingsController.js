@@ -370,9 +370,10 @@ exports.create = async (req, res) => {
 
     await conn.commit();
 
-    // 9. Fire-and-forget SMS (non-blocking) — use messagingService for custom text
+    // 9. Fire-and-forget SMS & WhatsApp (non-blocking)
     try {
       const messagingService = require('../services/messagingService');
+      const whatsappController = require('./whatsappController');
       const [custRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [customerId]);
       const [slotRows] = await pool.query('SELECT slot_date, start_time FROM slots WHERE id = ?', [slot_id]);
       if (custRows.length && custRows[0].mobile && slotRows.length) {
@@ -380,9 +381,12 @@ exports.create = async (req, res) => {
         const time = slotRows[0].start_time ? slotRows[0].start_time.substring(0, 5) : '';
         const msg = `GK AutoHerb: Hi ${custRows[0].name}, your booking #${bookingId} is pending approval for ${date} at ${time}. We'll confirm shortly!`;
         messagingService.sendSMS(custRows[0].mobile, null, null, { content: msg }).catch(() => {});
+
+        const waMsg = `⏳ *Booking Pending*\n\nHi ${custRows[0].name},\nYour booking #${bookingId} is pending approval for ${date} at ${time}. We'll confirm shortly!\n\nThank you for choosing GK AutoHerb! 🚗`;
+        whatsappController._sendWhatsAppMessage(custRows[0].mobile, null, [], waMsg).catch(() => {});
       }
-    } catch (smsErr) {
-      console.error('[SMS] Booking SMS setup failed (non-blocking):', smsErr.message);
+    } catch (msgErr) {
+      console.error('[SMS/WA] Booking notification setup failed (non-blocking):', msgErr.message);
     }
 
     console.log(`[BOOKING] #${bookingId} created — pending_approval, customer=${customerId}, slot=${slot_id}, type=${bookingType}`);
@@ -470,16 +474,26 @@ exports.approve = async (req, res) => {
 
     await conn.commit();
 
-    // Fire-and-forget confirmation SMS
+    // Fire-and-forget confirmation SMS & WhatsApp
     try {
       const messagingService = require('../services/messagingService');
+      const whatsappController = require('./whatsappController');
       const [custRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [booking.customer_id]);
       const [slotRows] = await pool.query('SELECT slot_date, start_time FROM slots WHERE id = ?', [booking.slot_id]);
+      
+      let serviceName = booking.package_service_name || 'Service';
+      if (serviceName === 'Service' && booking.service_id) {
+          const [svcRows] = await pool.query('SELECT name FROM services WHERE id = ?', [booking.service_id]);
+          if (svcRows.length) serviceName = svcRows[0].name;
+      }
+
       if (custRows.length && custRows[0].mobile && slotRows.length) {
         const date = new Date(slotRows[0].slot_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
         const time = slotRows[0].start_time ? slotRows[0].start_time.substring(0, 5) : '';
         const msg = `GK AutoHerb: Hi ${custRows[0].name}, your booking #${id} for ${date} at ${time} is CONFIRMED! See you soon.`;
         messagingService.sendSMS(custRows[0].mobile, null, null, { content: msg }).catch(() => {});
+
+        whatsappController.sendBookingConfirmation(custRows[0].mobile, custRows[0].name, date, time, serviceName).catch(() => {});
       }
     } catch { /* non-blocking */ }
 
@@ -567,15 +581,19 @@ exports.reject = async (req, res) => {
 
     await conn.commit();
 
-    // Fire-and-forget rejection SMS
+    // Fire-and-forget rejection SMS & WhatsApp
     try {
       const messagingService = require('../services/messagingService');
+      const whatsappController = require('./whatsappController');
       const [custRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [booking.customer_id]);
       if (custRows.length && custRows[0].mobile) {
         const msg = packageRestored
           ? `GK AutoHerb: Hi ${custRows[0].name}, your booking #${id} has been rejected and your package balance has been restored. Contact us for details.`
           : `GK AutoHerb: Hi ${custRows[0].name}, your booking #${id} has been rejected. ${booking_notes ? 'Reason: ' + booking_notes : 'Contact us for details.'}`;
         messagingService.sendSMS(custRows[0].mobile, null, null, { content: msg }).catch(() => {});
+
+        const waMsg = `❌ *Booking Rejected*\n\nHi ${custRows[0].name},\nYour booking #${id} has been rejected.\n${booking_notes ? 'Reason: ' + booking_notes : ''}\n${packageRestored ? 'Your package balance has been restored.' : ''}\n\nPlease contact us for more details.`;
+        whatsappController._sendWhatsAppMessage(custRows[0].mobile, null, [], waMsg).catch(() => {});
       }
     } catch { /* non-blocking */ }
 

@@ -64,12 +64,27 @@ import SettingsPage from './pages/admin/SettingsPage';
 import QuickBillingPage from './pages/admin/QuickBillingPage';
 import AllInvoicesPage from './pages/admin/AllInvoicesPage';
 import ArchivePage from './pages/admin/ArchivePage';
+import ReportsPage from './pages/admin/ReportsPage';
+import VendorsPage from './pages/admin/VendorsPage';
 
 // Phase 2 pages
 import QuickWashPage from './pages/admin/QuickWashPage';
 import LoyaltySettingsPage from './pages/admin/LoyaltySettingsPage';
 import PremiumServicesPage from './pages/admin/PremiumServicesPage';
 import AdminDeliveriesPage from './pages/admin/DeliveriesPage';
+
+// Phase 2 Extended pages
+import PaymentsPage from './pages/admin/PaymentsPage';
+import FeedbackPage from './pages/admin/FeedbackPage';
+import BalanceSheetPage from './pages/admin/BalanceSheetPage';
+import AuditLogPage from './pages/admin/AuditLogPage';
+import StaffHRPage from './pages/admin/StaffHRPage';
+import WhatsAppPage from './pages/admin/WhatsAppPage';
+import CustomerRewardsPage from './pages/admin/CustomerRewardsPage';
+
+// Quotations pages
+import QuotationsListPage from './pages/admin/QuotationsListPage';
+import QuotationCreatePage from './pages/admin/QuotationCreatePage';
 
 // Delivery pages
 import DeliveryPage from './pages/staff/DeliveryPage';
@@ -149,17 +164,29 @@ export default function App() {
         <Route path="add-customer" element={<ManualRegistrationPage />} />
         <Route path="package-approvals" element={<PackageApprovalsPage />} />
         {/* ─── New Admin Routes ─── */}
-        <Route path="reports" element={<Placeholder title="Reports" />} />
+        <Route path="reports" element={<ReportsPage />} />
         <Route path="billing" element={<QuickBillingPage />} />
         <Route path="invoices" element={<AllInvoicesPage />} />
         <Route path="salary" element={<StaffSalaryPage />} />
-        <Route path="vendors" element={<Placeholder title="Vendor Management" />} />
+        <Route path="vendors" element={<VendorsPage />} />
         <Route path="archive" element={<ArchivePage />} />
         {/* ─── Phase 2 Routes ─── */}
         <Route path="quick-wash" element={<QuickWashPage />} />
         <Route path="loyalty" element={<LoyaltySettingsPage />} />
         <Route path="premium-services" element={<PremiumServicesPage />} />
         <Route path="deliveries" element={<AdminDeliveriesPage />} />
+        {/* ─── Phase 2 Extended Routes ─── */}
+        <Route path="payments" element={<PaymentsPage />} />
+        <Route path="feedback" element={<FeedbackPage />} />
+        <Route path="balance-sheet" element={<BalanceSheetPage />} />
+        <Route path="audit-logs" element={<AuditLogPage />} />
+        <Route path="staff-hr" element={<StaffHRPage />} />
+        <Route path="whatsapp" element={<WhatsAppPage />} />
+        <Route path="customer-rewards" element={<CustomerRewardsPage />} />
+        {/* ─── Quotations Routes ─── */}
+        <Route path="quotations" element={<QuotationsListPage />} />
+        <Route path="quotations/new" element={<QuotationCreatePage />} />
+        <Route path="quotations/edit/:id" element={<QuotationCreatePage />} />
       </Route>
 
       {/* Customer routes */}

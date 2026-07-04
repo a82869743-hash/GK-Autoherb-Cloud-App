@@ -62,6 +62,7 @@ export default function JobCartCreatePage() {
   const [carBrand, setCarBrand] = useState(prefill?.car_brand || '');
   const [carModel, setCarModel] = useState(prefill?.car_model || '');
   const [carVariant, setCarVariant] = useState(prefill?.car_variant || '');
+  const [carRegYear, setCarRegYear] = useState(prefill?.car_registration_year?.toString() || '');
   // Fix timezone: use local date instead of toISOString() which shifts dates in IST
   const now = new Date();
   const [visitDate, setVisitDate] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
@@ -80,6 +81,12 @@ export default function JobCartCreatePage() {
   const brandOptions = (brandsRes?.data || []).map((b: string) => ({ value: b, label: b }));
   const modelOptions = (modelsRes?.data || []).map((m: string) => ({ value: m, label: m }));
   const variantOptions = (variantsRes?.data || []).map((v: string) => ({ value: v, label: v }));
+
+  const currentYear = new Date().getFullYear();
+  const yearOptions = Array.from({ length: (currentYear + 2) - 1990 + 1 }, (_, i) => {
+    const y = 1990 + i;
+    return { value: y.toString(), label: y.toString() };
+  }).reverse();
 
   // Services
   const [serviceBlocks, setServiceBlocks] = useState<ServiceBlock[]>(() => {
@@ -135,6 +142,9 @@ export default function JobCartCreatePage() {
       setCustomerEmail(lookupData.customer?.email || '');
       setCarBrand(lookupData.vehicle?.brand || '');
       setCarModel(lookupData.vehicle?.model || '');
+      if ((lookupData.vehicle as any)?.year_of_manufacture) {
+        setCarRegYear((lookupData.vehicle as any).year_of_manufacture.toString());
+      }
       setIsReturning(true);
       setNextVisit(lookupData.next_visit_number || 1);
     }
@@ -230,6 +240,7 @@ export default function JobCartCreatePage() {
         customer_email: customerEmail,
         car_brand: carBrand,
         car_model: carModel,
+        car_registration_year: carRegYear ? parseInt(carRegYear) : null,
         visit_date: visitDate,
         notes,
         booking_id: bookingId,
@@ -347,6 +358,13 @@ export default function JobCartCreatePage() {
               onChange={e => { setCarModel(e.target.value); setCarVariant(''); }}
               placeholder={carBrand ? 'Select model...' : 'Select brand first'}
               disabled={!!customerId || !carBrand}
+            />
+            <Select
+              label="Registration Year"
+              options={yearOptions}
+              value={carRegYear}
+              onChange={e => setCarRegYear(e.target.value)}
+              placeholder="Select year..."
             />
             <Select
               label="Variant"

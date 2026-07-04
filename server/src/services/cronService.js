@@ -133,5 +133,68 @@ exports.initCronJobs = () => {
     }
   });
   
+  // 5. ADVANCE PAYMENT DUE REMINDERS — Send WhatsApp/SMS for advance payments due tomorrow
+  // Runs at 10:00 AM every day
+  cron.schedule('0 10 * * *', async () => {
+    console.log('[CRON] Running advance payment due reminders');
+    try {
+      const [duePayments] = await pool.query(`
+        SELECT ap.id, ap.balance_due, ap.due_date, u.name, u.mobile
+        FROM advance_payments ap
+        JOIN users u ON ap.customer_id = u.id
+        WHERE ap.status = 'advance_paid'
+          AND ap.balance_due > 0
+          AND DATE(ap.due_date) = DATE_ADD(CURDATE(), INTERVAL 1 DAY)
+          AND u.mobile IS NOT NULL
+      `);
+
+      for (const payment of duePayments) {
+        if (payment.mobile) {
+          await messagingService.sendWhatsApp(
+            `91${payment.mobile}`, 
+            'payment_reminder', 
+            { body: `Hi ${payment.name}, gentle reminder for your pending payment of Rs.${payment.balance_due} due tomorrow (${payment.due_date}). Thank you! - GK AutoHerb` }
+          ).catch(() => {});
+        }
+      }
+      console.log(`[CRON] Sent ${duePayments.length} advance payment due reminders`);
+    } catch (err) {
+      if (err.code !== 'ER_BAD_FIELD_ERROR' && err.code !== 'ER_NO_SUCH_TABLE') {
+        console.error('[CRON] Error in advance payment reminder task:', err);
+      }
+    }
+  });
+  
+  // 6. PACKAGE RENEWAL REMINDERS — Send WhatsApp for packages expiring in 7 days
+  // Runs at 11:00 AM every day
+  cron.schedule('0 11 * * *', async () => {
+    console.log('[CRON] Running package renewal reminders');
+    try {
+      const [expiringPackages] = await pool.query(`
+        SELECT up.id, up.end_date, p.name AS package_name, u.name, u.mobile, v.brand, v.model, v.registration_no
+        FROM user_packages up
+        JOIN packages p ON up.package_id = p.id
+        JOIN users u ON up.user_id = u.id
+        LEFT JOIN vehicles v ON up.vehicle_id = v.id
+        WHERE up.package_status = 'active'
+          AND DATE(up.end_date) = DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+          AND u.mobile IS NOT NULL
+      `);
+
+      for (const pkg of expiringPackages) {
+        if (pkg.mobile) {
+          const vehicleStr = pkg.brand ? ` for your ${pkg.brand} ${pkg.model} (${pkg.registration_no})` : '';
+          const body = `⚠️ *Package Expiring Soon*\n\nHi ${pkg.name},\nYour *${pkg.package_name}*${vehicleStr} is expiring in 7 days (${new Date(pkg.end_date).toLocaleDateString()}). Please renew to continue enjoying premium services! 💎`;
+          await messagingService.sendWhatsApp(`91${pkg.mobile}`, null, { body }).catch(() => {});
+        }
+      }
+      console.log(`[CRON] Sent ${expiringPackages.length} package renewal reminders`);
+    } catch (err) {
+      if (err.code !== 'ER_BAD_FIELD_ERROR' && err.code !== 'ER_NO_SUCH_TABLE') {
+        console.error('[CRON] Error in package renewal reminder task:', err);
+      }
+    }
+  });
+  
   console.log('[CRON] Jobs initialized successfully');
 };

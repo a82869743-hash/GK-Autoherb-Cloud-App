@@ -156,10 +156,30 @@ export default function CustomerDetailPage() {
           {/* Package History */}
           {packageHistory.length > 0 && (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden p-6">
-              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
-                <RefreshCw className="w-5 h-5 text-gray-400" />
-                Package History
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <RefreshCw className="w-5 h-5 text-gray-400" />
+                  Package History
+                </h3>
+                <div className="flex gap-2">
+                  <a
+                    href={`${api.defaults.baseURL}/user-packages/export?user_id=${id}&format=pdf&token=${localStorage.getItem('token')}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors border border-red-100 flex items-center gap-1"
+                  >
+                    PDF
+                  </a>
+                  <a
+                    href={`${api.defaults.baseURL}/user-packages/export?user_id=${id}&format=excel&token=${localStorage.getItem('token')}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs font-medium text-green-600 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-lg transition-colors border border-green-100 flex items-center gap-1"
+                  >
+                    Excel
+                  </a>
+                </div>
+              </div>
               <div className="space-y-3">
                 {packageHistory.map((pkg: any) => {
                   const isExpired = pkg.status === 'expired' || (pkg.end_date && new Date(pkg.end_date) < new Date());

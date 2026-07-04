@@ -5,7 +5,6 @@
 
 -- 1. Add new columns to packages (skip is_active & visible_to_customer — they exist)
 -- Use a stored procedure to safely add columns only if missing
-DELIMITER //
 CREATE PROCEDURE _add_col_if_missing(
   IN tbl VARCHAR(64), IN col VARCHAR(64), IN col_def VARCHAR(255)
 )
@@ -19,8 +18,7 @@ BEGIN
     EXECUTE stmt;
     DEALLOCATE PREPARE stmt;
   END IF;
-END //
-DELIMITER ;
+END;
 
 -- packages table — add missing columns
 CALL _add_col_if_missing('packages', 'paid_wash_count', 'INT UNSIGNED NOT NULL DEFAULT 0 AFTER wax_count');
