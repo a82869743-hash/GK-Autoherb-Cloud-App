@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/axiosInstance';
 import { UserCircle, Car, ArrowLeft, Loader2, Send, History, Calendar, ClipboardList, Package, Clock, RefreshCw } from 'lucide-react';
+import Modal from '../../components/ui/Modal';
+import Input from '../../components/ui/Input';
+import Select from '../../components/ui/Select';
+import Button from '../../components/ui/Button';
 
 export default function CustomerDetailPage() {
   const { id } = useParams();
@@ -12,6 +16,108 @@ export default function CustomerDetailPage() {
   const [loading, setLoading] = useState(true);
   const [newNote, setNewNote] = useState('');
   const [submittingNote, setSubmittingNote] = useState(false);
+
+  // Assign package state
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [packages, setPackages] = useState<any[]>([]);
+  const [selectedPackageId, setSelectedPackageId] = useState('');
+  const [selectedVehicleId, setSelectedVehicleId] = useState('');
+  const [pricePaid, setPricePaid] = useState('');
+  const [packageServices, setPackageServices] = useState<any[]>([]);
+  const [assigning, setAssigning] = useState(false);
+
+  // Fetch all packages when modal opens
+  useEffect(() => {
+    if (assignModalOpen) {
+      const fetchPackages = async () => {
+        try {
+          const res = await api.get('/packages');
+          if (res.data.success) {
+            setPackages(res.data.data);
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      };
+      fetchPackages();
+    }
+  }, [assignModalOpen]);
+
+  // Fetch services when selected package changes
+  useEffect(() => {
+    if (!selectedPackageId) {
+      setPackageServices([]);
+      return;
+    }
+    const loadServices = async () => {
+      try {
+        const res = await api.get(`/packages/${selectedPackageId}/services`);
+        if (res.data.success) {
+          const mapped = res.data.data.map((s: any) => ({
+            service_name: s.name,
+            total_count: s.total_count || 1,
+            remaining: s.total_count || 1
+          }));
+          setPackageServices(mapped);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    loadServices();
+  }, [selectedPackageId]);
+
+  // Auto-fill price based on package and selected vehicle category
+  useEffect(() => {
+    if (!selectedPackageId || !selectedVehicleId) return;
+    const pkg = packages.find(p => p.id.toString() === selectedPackageId);
+    const vehicle = data?.vehicles?.find((v: any) => v.id.toString() === selectedVehicleId);
+    if (pkg && vehicle) {
+      const cat = vehicle.category || 'sedan';
+      let priceKey = 'price_sedan';
+      if (cat === 'hatchback') priceKey = 'price_hatchback';
+      else if (cat === 'medium_hatchback') priceKey = 'price_medium_hatchback';
+      else if (cat === 'premium_sedan') priceKey = 'price_premium_sedan';
+      else if (cat === 'suv') priceKey = 'price_suv';
+      
+      setPricePaid(pkg[priceKey] || pkg.price_sedan || '0');
+    }
+  }, [selectedPackageId, selectedVehicleId, packages, data]);
+
+  const handleAssignPackageSubmit = async () => {
+    if (!selectedPackageId || !selectedVehicleId) {
+      alert('Please select both a package and a vehicle.');
+      return;
+    }
+    setAssigning(true);
+    try {
+      const vehicle = data.vehicles.find((v: any) => v.id.toString() === selectedVehicleId);
+      const payload = {
+        user_id: Number(id),
+        package_id: Number(selectedPackageId),
+        vehicle_id: Number(selectedVehicleId),
+        vehicle_segment: vehicle?.category || 'sedan',
+        price_paid: Number(pricePaid) || 0,
+        duration_months: 12,
+        package_custom_services: packageServices
+      };
+      const res = await api.post('/packages/assign', payload);
+      if (res.data.success) {
+        alert('Package assigned successfully!');
+        setAssignModalOpen(false);
+        setSelectedPackageId('');
+        setSelectedVehicleId('');
+        setPricePaid('');
+        setPackageServices([]);
+        fetchDetail();
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.error || 'Failed to assign package');
+    } finally {
+      setAssigning(false);
+    }
+  };
 
   useEffect(() => {
     fetchDetail();
@@ -29,6 +135,8 @@ export default function CustomerDetailPage() {
       }
       if (resPkg.data && resPkg.data.success && resPkg.data.data) {
         setActivePackage(resPkg.data.data);
+      } else {
+        setActivePackage(null);
       }
       // Package history — filter out the active one
       const allPkgs = resPkgHistory.data?.data || [];
@@ -76,12 +184,21 @@ export default function CustomerDetailPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
-      <button 
-        onClick={() => navigate('/admin/customers')}
-        className="flex items-center gap-2 text-gray-500 hover:text-gray-900 mb-6 font-medium transition-colors"
-      >
-        <ArrowLeft className="w-4 h-4" /> Back to Customers
-      </button>
+      <div className="flex justify-between items-center mb-6">
+        <button 
+          onClick={() => navigate('/admin/customers')}
+          className="flex items-center gap-2 text-gray-500 hover:text-gray-900 font-medium transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to Customers
+        </button>
+        <button
+          onClick={() => setAssignModalOpen(true)}
+          className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-800 text-white text-xs font-bold rounded-xl hover:from-red-700 hover:to-red-900 transition flex items-center gap-1.5 shadow-md shadow-red-500/25"
+        >
+          <Package size={14} />
+          Assign Package
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
@@ -303,6 +420,93 @@ export default function CustomerDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Assign Package Modal */}
+      <Modal
+        open={assignModalOpen}
+        onClose={() => setAssignModalOpen(false)}
+        title="Assign Package to Customer"
+        size="md"
+      >
+        <div className="space-y-4 py-2">
+          {/* Select Vehicle */}
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1">Select Customer Vehicle *</label>
+            <select
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+              value={selectedVehicleId}
+              onChange={(e) => setSelectedVehicleId(e.target.value)}
+            >
+              <option value="">Choose a vehicle...</option>
+              {data.vehicles.map((v: any) => (
+                <option key={v.id} value={v.id}>
+                  {v.brand} {v.model} ({v.registration_no || 'No Reg'}) - {v.category ? v.category.toUpperCase() : 'UNKNOWN'}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Select Package */}
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1">Select Package *</label>
+            <select
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+              value={selectedPackageId}
+              onChange={(e) => setSelectedPackageId(e.target.value)}
+            >
+              <option value="">Choose a package...</option>
+              {packages.map((pkg: any) => (
+                <option key={pkg.id} value={pkg.id}>
+                  {pkg.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Price Paid */}
+          <Input
+            label="Price Paid (₹) *"
+            type="number"
+            value={pricePaid}
+            onChange={(e) => setPricePaid(e.target.value)}
+            placeholder="0"
+          />
+
+          {/* Service Balances List */}
+          {packageServices.length > 0 && (
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-3">
+              <p className="text-xs font-bold uppercase tracking-wider text-gray-500">Remaining Service Balances</p>
+              <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto">
+                {packageServices.map((svc: any, idx: number) => (
+                  <div key={svc.service_name} className="flex justify-between items-center bg-white p-2 rounded-lg border border-gray-100">
+                    <span className="text-xs font-semibold text-gray-700">{svc.service_name}</span>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min="0"
+                        className="w-12 px-1.5 py-0.5 border border-gray-300 rounded text-center text-xs font-bold focus:outline-none focus:ring-1 focus:ring-red-500"
+                        value={svc.remaining}
+                        onChange={(e) => {
+                          const val = Math.max(0, parseInt(e.target.value) || 0);
+                          const updated = [...packageServices];
+                          updated[idx].remaining = val;
+                          setPackageServices(updated);
+                        }}
+                      />
+                      <span className="text-[10px] text-gray-400 font-bold">/ {svc.total_count}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="secondary" onClick={() => setAssignModalOpen(false)}>Cancel</Button>
+            <Button variant="primary" onClick={handleAssignPackageSubmit} loading={assigning}>Assign Package</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

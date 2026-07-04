@@ -163,7 +163,7 @@ exports.assignPackage = async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    const { user_id, package_id, vehicle_id, vehicle_segment, price_paid, duration_months = 12 } = req.body;
+    const { user_id, package_id, vehicle_id, vehicle_segment, price_paid, duration_months = 12, package_custom_services } = req.body;
 
     if (!user_id || !package_id) {
       await conn.rollback();
@@ -210,14 +210,28 @@ exports.assignPackage = async (req, res) => {
     const userPackageId = result.insertId;
 
     // Create package_usage rows
-    const packageName = packages[0].name;
-    const serviceBreakdown = await getServiceBreakdown(conn, package_id, packageName);
+    if (package_custom_services && Array.isArray(package_custom_services)) {
+      for (const item of package_custom_services) {
+        const total = parseInt(item.total_count) || 0;
+        const remaining = parseInt(item.remaining) || 0;
+        const used = Math.max(0, Math.min(total, total - remaining));
+        const usageStatus = remaining > 0 ? 'available' : 'consumed';
 
-    for (const svc of serviceBreakdown) {
-      await conn.query(
-        'INSERT INTO package_usage (user_package_id, service_name, used_count, usage_status) VALUES (?, ?, 0, ?)',
-        [userPackageId, svc.service_name, 'available']
-      );
+        await conn.query(
+          "INSERT INTO package_usage (user_package_id, service_name, used_count, usage_status) VALUES (?, ?, ?, ?)",
+          [userPackageId, item.service_name, used, usageStatus]
+        );
+      }
+    } else {
+      const packageName = packages[0].name;
+      const serviceBreakdown = await getServiceBreakdown(conn, package_id, packageName);
+
+      for (const svc of serviceBreakdown) {
+        await conn.query(
+          'INSERT INTO package_usage (user_package_id, service_name, used_count, usage_status) VALUES (?, ?, 0, ?)',
+          [userPackageId, svc.service_name, 'available']
+        );
+      }
     }
 
     await conn.commit();
@@ -225,7 +239,7 @@ exports.assignPackage = async (req, res) => {
     res.status(201).json({
       success: true,
       data: { id: userPackageId },
-      message: `${packageName} package assigned to user ${user_id}`,
+      message: `${packages[0].name} package assigned to user ${user_id}`,
     });
   } catch (err) {
     await conn.rollback();

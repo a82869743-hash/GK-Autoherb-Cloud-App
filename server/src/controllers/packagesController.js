@@ -445,7 +445,51 @@ exports.getPackageServices = async (req, res) => {
        ORDER BY s.name ASC`,
       [id]
     );
-    res.json({ success: true, data: rows });
+    if (rows.length > 0) {
+      return res.json({ success: true, data: rows });
+    }
+
+    // Fallback to legacy wash_count, wax_count
+    const [pkgDetails] = await pool.query(
+      'SELECT wash_count, wax_count FROM packages WHERE id = ?',
+      [id]
+    );
+    const fallback = [];
+    if (pkgDetails.length > 0) {
+      if (pkgDetails[0].wash_count > 0) {
+        fallback.push({
+          ps_id: -1,
+          total_count: pkgDetails[0].wash_count,
+          id: -1,
+          name: 'Foam Wash',
+          description: 'Standard Foam Wash',
+          price_hatchback: 0,
+          price_medium_hatchback: 0,
+          price_sedan: 0,
+          price_premium_sedan: 0,
+          price_suv: 0,
+          duration_minutes: 30,
+          is_active: 1
+        });
+      }
+      if (pkgDetails[0].wax_count > 0) {
+        fallback.push({
+          ps_id: -2,
+          total_count: pkgDetails[0].wax_count,
+          id: -2,
+          name: 'Wax Coat',
+          description: 'Standard Wax Coat',
+          price_hatchback: 0,
+          price_medium_hatchback: 0,
+          price_sedan: 0,
+          price_premium_sedan: 0,
+          price_suv: 0,
+          duration_minutes: 30,
+          is_active: 1
+        });
+      }
+    }
+    res.json({ success: true, data: fallback });
   } catch (err) {
     console.error('Package services list error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
