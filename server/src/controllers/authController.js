@@ -29,8 +29,11 @@ exports.register = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Name, mobile, and password are required' });
     }
 
+    // Clean and normalize mobile number (strip non-digits and take last 10 digits)
+    const cleanMobile = mobile.replace(/\D/g, '').slice(-10);
+
     // Check if mobile already exists
-    const [existing] = await conn.query('SELECT id FROM users WHERE mobile = ?', [mobile]);
+    const [existing] = await conn.query('SELECT id FROM users WHERE mobile = ?', [cleanMobile]);
     if (existing.length > 0) {
       return res.status(409).json({ success: false, error: 'Mobile already registered' });
     }
@@ -57,7 +60,7 @@ exports.register = async (req, res) => {
 
       // Check self-referral
       const [referrerUser] = await conn.query('SELECT mobile FROM users WHERE id = ?', [refCodeRecord.customer_id]);
-      if (referrerUser.length && referrerUser[0].mobile === mobile) {
+      if (referrerUser.length && referrerUser[0].mobile === cleanMobile) {
         await conn.rollback();
         return res.status(400).json({ success: false, error: 'Cannot refer yourself' });
       }
@@ -84,7 +87,7 @@ exports.register = async (req, res) => {
     // Insert user
     const [result] = await conn.query(
       'INSERT INTO users (name, mobile, password_hash, role, referral_code, referred_by) VALUES (?, ?, ?, ?, ?, ?)',
-      [name.trim(), mobile, password_hash, role, userCode, referrerId]
+      [name.trim(), cleanMobile, password_hash, role, userCode, referrerId]
     );
     console.log("DB INSERT RESULT:", result);
 
@@ -140,7 +143,7 @@ exports.register = async (req, res) => {
 
     await conn.commit();
 
-    const user = { id: userId, name: name.trim(), mobile, role };
+    const user = { id: userId, name: name.trim(), mobile: cleanMobile, role };
     const token = generateToken(user);
 
     res.status(201).json({
@@ -173,8 +176,11 @@ exports.login = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Mobile and password are required' });
     }
 
+    // Clean and normalize mobile number (strip non-digits and take last 10 digits)
+    const cleanMobile = mobile.replace(/\D/g, '').slice(-10);
+
     // Find user by mobile
-    const [users] = await pool.query('SELECT * FROM users WHERE mobile = ?', [mobile]);
+    const [users] = await pool.query('SELECT * FROM users WHERE mobile = ?', [cleanMobile]);
 
     if (users.length === 0) {
       return res.status(401).json({ success: false, error: 'Invalid credentials: User not found' });
