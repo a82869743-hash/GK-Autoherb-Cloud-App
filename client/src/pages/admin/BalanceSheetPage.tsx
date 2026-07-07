@@ -139,7 +139,7 @@ export default function BalanceSheetPage() {
                 {(categories || []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div><label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Amount (₹)</label>
                 <input type="number" value={expenseForm.amount} onChange={e => setExpenseForm(p => ({ ...p, amount: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm" placeholder="0.00" />
               </div>

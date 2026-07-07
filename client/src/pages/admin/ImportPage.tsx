@@ -120,7 +120,7 @@ export default function ImportPage() {
             <h3 className="font-bold text-green-900 text-lg">Import Complete</h3>
           </div>
           
-          <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
             <div className="bg-white p-4 rounded shadow-sm">
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Items Found</p>
               <p className="text-2xl font-black text-[#1c1b1b]">{uploadResult.totalParsed}</p>

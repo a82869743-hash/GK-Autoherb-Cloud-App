@@ -174,7 +174,7 @@ export default function ManualRegistrationPage() {
             {/* Vehicle Details */}
             <div className="space-y-4 pt-4 border-t">
               <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Vehicle Details</h4>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Brand</label>
                   <input name="brand" value={formData.brand} onChange={handleChange} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-red-500" placeholder="e.g. BMW" />
@@ -184,7 +184,7 @@ export default function ManualRegistrationPage() {
                   <input name="model" value={formData.model} onChange={handleChange} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-red-500" placeholder="e.g. X1" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Reg No.</label>
                   <input name="registration_no" value={formData.registration_no} onChange={handleChange} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm uppercase focus:bg-white focus:ring-2 focus:ring-red-500" placeholder="MH01AB1234" />

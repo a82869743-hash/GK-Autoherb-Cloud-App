@@ -422,7 +422,7 @@ function CreateQuickWashModal({ onClose }: { onClose: () => void }) {
           </div>
 
           {/* Brand & Model dropdowns */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wider">Brand</label>
               <div className="relative">

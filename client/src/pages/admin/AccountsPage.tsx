@@ -1032,7 +1032,7 @@ export default function AccountsPage() {
       {/* Add Purchase Bill Modal */}
       <Modal open={purchaseModalOpen} onClose={() => setPurchaseModalOpen(false)} title="Record Purchase Bill">
         <form onSubmit={handlePurchaseSubmit} className="space-y-4 py-2 max-h-[80vh] overflow-y-auto pr-2">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select
               label="Select Vendor *"
               value={purchaseForm.vendor_id}
@@ -1052,7 +1052,7 @@ export default function AccountsPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               type="text"
               label="Invoice Number"
@@ -1159,7 +1159,7 @@ export default function AccountsPage() {
             required
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               type="number"
               label="Original Invoice / Bill ID *"

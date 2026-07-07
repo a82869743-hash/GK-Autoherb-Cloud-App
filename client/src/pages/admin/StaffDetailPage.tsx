@@ -195,7 +195,7 @@ export default function StaffDetailPage() {
               <option value="half_day">Half Day</option>
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Check-In Time" type="time" value={attForm.check_in_time} onChange={e => setAttForm({...attForm, check_in_time: e.target.value})} />
             <Input label="Check-Out Time" type="time" value={attForm.check_out_time} onChange={e => setAttForm({...attForm, check_out_time: e.target.value})} />
           </div>

@@ -100,33 +100,35 @@ export default function ArchivePage() {
                     <p className="font-semibold">No archived customers</p>
                   </div>
                 ) : (
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 border-b text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                        <th className="p-4">Customer</th>
-                        <th className="p-4">Contact</th>
-                        <th className="p-4">Archived On</th>
-                        <th className="p-4 text-right">Restore</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {data.customers.map((c: any) => (
-                        <tr key={c.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="p-4 font-bold text-gray-900">{c.name}</td>
-                          <td className="p-4 text-gray-600">{c.mobile || '—'}</td>
-                          <td className="p-4 text-gray-500">{formatDate(c.created_at)}</td>
-                          <td className="p-4 text-right">
-                            <button
-                              onClick={() => restore('customer', c.id)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-50 text-green-700 text-xs font-bold rounded-lg hover:bg-green-100 transition-colors"
-                            >
-                              <RotateCcw size={12} /> Restore
-                            </button>
-                          </td>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 border-b text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                          <th className="p-4">Customer</th>
+                          <th className="p-4">Contact</th>
+                          <th className="p-4">Archived On</th>
+                          <th className="p-4 text-right">Restore</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {data.customers.map((c: any) => (
+                          <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="p-4 font-bold text-gray-900">{c.name}</td>
+                            <td className="p-4 text-gray-600">{c.mobile || '—'}</td>
+                            <td className="p-4 text-gray-500">{formatDate(c.created_at)}</td>
+                            <td className="p-4 text-right">
+                              <button
+                                onClick={() => restore('customer', c.id)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-50 text-green-700 text-xs font-bold rounded-lg hover:bg-green-100 transition-colors"
+                              >
+                                <RotateCcw size={12} /> Restore
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             )}
@@ -140,36 +142,38 @@ export default function ArchivePage() {
                     <p className="font-semibold">No cancelled job carts</p>
                   </div>
                 ) : (
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 border-b text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                        <th className="p-4">Vehicle</th>
-                        <th className="p-4">Customer</th>
-                        <th className="p-4">Date</th>
-                        <th className="p-4 text-right">Restore</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {data.jobCarts.map((jc: any) => (
-                        <tr key={jc.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="p-4">
-                            <span className="font-bold text-gray-900">{jc.registration_no}</span>
-                            <p className="text-xs text-gray-500">{jc.brand} {jc.model}</p>
-                          </td>
-                          <td className="p-4 text-gray-600">{jc.customer_name}</td>
-                          <td className="p-4 text-gray-500">{formatDate(jc.visit_date || jc.created_at)}</td>
-                          <td className="p-4 text-right">
-                            <button
-                              onClick={() => restore('jobCart', jc.id)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-50 text-green-700 text-xs font-bold rounded-lg hover:bg-green-100 transition-colors"
-                            >
-                              <RotateCcw size={12} /> Restore
-                            </button>
-                          </td>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 border-b text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                          <th className="p-4">Vehicle</th>
+                          <th className="p-4">Customer</th>
+                          <th className="p-4">Date</th>
+                          <th className="p-4 text-right">Restore</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {data.jobCarts.map((jc: any) => (
+                          <tr key={jc.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="p-4">
+                              <span className="font-bold text-gray-900">{jc.registration_no}</span>
+                              <p className="text-xs text-gray-500">{jc.brand} {jc.model}</p>
+                            </td>
+                            <td className="p-4 text-gray-600">{jc.customer_name}</td>
+                            <td className="p-4 text-gray-500">{formatDate(jc.visit_date || jc.created_at)}</td>
+                            <td className="p-4 text-right">
+                              <button
+                                onClick={() => restore('jobCart', jc.id)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-50 text-green-700 text-xs font-bold rounded-lg hover:bg-green-100 transition-colors"
+                              >
+                                <RotateCcw size={12} /> Restore
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             )}
@@ -183,35 +187,37 @@ export default function ArchivePage() {
                     <p className="font-semibold">No voided bills</p>
                   </div>
                 ) : (
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 border-b text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                        <th className="p-4">Bill ID</th>
-                        <th className="p-4">Customer</th>
-                        <th className="p-4">Amount</th>
-                        <th className="p-4">Date</th>
-                        <th className="p-4 text-right">Restore</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {data.bills.map((b: any) => (
-                        <tr key={b.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="p-4 font-bold text-gray-900 font-mono">MB-{b.id}</td>
-                          <td className="p-4 text-gray-600">{b.customer_name || 'Walk-in'}</td>
-                          <td className="p-4 font-bold text-[#D32F2F]">₹{Number(b.amount || 0).toLocaleString('en-IN')}</td>
-                          <td className="p-4 text-gray-500">{formatDate(b.created_at)}</td>
-                          <td className="p-4 text-right">
-                            <button
-                              onClick={() => restore('bill', b.id)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-50 text-green-700 text-xs font-bold rounded-lg hover:bg-green-100 transition-colors"
-                            >
-                              <RotateCcw size={12} /> Restore
-                            </button>
-                          </td>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 border-b text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                          <th className="p-4">Bill ID</th>
+                          <th className="p-4">Customer</th>
+                          <th className="p-4">Amount</th>
+                          <th className="p-4">Date</th>
+                          <th className="p-4 text-right">Restore</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {data.bills.map((b: any) => (
+                          <tr key={b.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="p-4 font-bold text-gray-900 font-mono">MB-{b.id}</td>
+                            <td className="p-4 text-gray-600">{b.customer_name || 'Walk-in'}</td>
+                            <td className="p-4 font-bold text-[#D32F2F]">₹{Number(b.amount || 0).toLocaleString('en-IN')}</td>
+                            <td className="p-4 text-gray-500">{formatDate(b.created_at)}</td>
+                            <td className="p-4 text-right">
+                              <button
+                                onClick={() => restore('bill', b.id)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-50 text-green-700 text-xs font-bold rounded-lg hover:bg-green-100 transition-colors"
+                              >
+                                <RotateCcw size={12} /> Restore
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             )}

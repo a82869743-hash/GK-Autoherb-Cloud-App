@@ -365,65 +365,67 @@ export default function StaffHRPage() {
       {/* Performance Tab */}
       {tab === 'performance' && (
         <AnimatedCard className="bg-white rounded-2xl border border-gray-100 overflow-hidden" delay={0.15}>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Staff</th>
-                <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Period</th>
-                <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Jobs</th>
-                <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Rating</th>
-                <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Attendance</th>
-                <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Bonus</th>
-              </tr>
-            </thead>
-            <tbody>
-              {performance.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="text-center py-12 text-gray-400 text-sm">
-                    No performance data yet
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-100">
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Staff</th>
+                  <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Period</th>
+                  <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Jobs</th>
+                  <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Rating</th>
+                  <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Attendance</th>
+                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Bonus</th>
                 </tr>
-              ) : (
-                performance.map((p: any, i: number) => (
-                  <motion.tr
-                    key={p.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: i * 0.05 }}
-                    className="border-b border-gray-50 hover:bg-gray-50/50"
-                  >
-                    <td className="py-3 px-4 font-medium text-[#1c1b1b]">{p.staff_name}</td>
-                    <td className="py-3 px-4 text-center text-gray-600">{p.period}</td>
-                    <td className="py-3 px-4 text-center font-semibold">{p.jobs_completed}</td>
-                    <td className="py-3 px-4 text-center">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          parseFloat(p.avg_rating) >= 4
-                            ? 'bg-emerald-50 text-emerald-700'
-                            : parseFloat(p.avg_rating) >= 3
-                            ? 'bg-amber-50 text-amber-700'
-                            : 'bg-red-50 text-red-700'
-                        }`}
-                      >
-                        ★ {parseFloat(p.avg_rating).toFixed(1)}
-                      </span>
+              </thead>
+              <tbody>
+                {performance.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-12 text-gray-400 text-sm">
+                      No performance data yet
                     </td>
-                    <td className="py-3 px-4 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                          <div className="h-full bg-sky-500 rounded-full" style={{ width: `${p.attendance_pct}%` }} />
+                  </tr>
+                ) : (
+                  performance.map((p: any, i: number) => (
+                    <motion.tr
+                      key={p.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: i * 0.05 }}
+                      className="border-b border-gray-50 hover:bg-gray-50/50"
+                    >
+                      <td className="py-3 px-4 font-medium text-[#1c1b1b]">{p.staff_name}</td>
+                      <td className="py-3 px-4 text-center text-gray-600">{p.period}</td>
+                      <td className="py-3 px-4 text-center font-semibold">{p.jobs_completed}</td>
+                      <td className="py-3 px-4 text-center">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            parseFloat(p.avg_rating) >= 4
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : parseFloat(p.avg_rating) >= 3
+                              ? 'bg-amber-50 text-amber-700'
+                              : 'bg-red-50 text-red-700'
+                          }`}
+                        >
+                          ★ {parseFloat(p.avg_rating).toFixed(1)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div className="h-full bg-sky-500 rounded-full" style={{ width: `${p.attendance_pct}%` }} />
+                          </div>
+                          <span className="text-xs text-gray-600">{p.attendance_pct}%</span>
                         </div>
-                        <span className="text-xs text-gray-600">{p.attendance_pct}%</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-right font-bold text-emerald-600">
-                      ₹{parseFloat(p.bonus_amount).toLocaleString('en-IN')}
-                    </td>
-                  </motion.tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                      </td>
+                      <td className="py-3 px-4 text-right font-bold text-emerald-600">
+                        ₹{parseFloat(p.bonus_amount).toLocaleString('en-IN')}
+                      </td>
+                    </motion.tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </AnimatedCard>
       )}
 
@@ -462,77 +464,79 @@ export default function StaffHRPage() {
           </AnimatedCard>
 
           <AnimatedCard className="bg-white rounded-2xl border border-gray-100 overflow-hidden" delay={0.1}>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Staff Member</th>
-                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Base Salary</th>
-                  <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Days (Att/Leave)</th>
-                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Bonus / Deduct</th>
-                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Net Salary</th>
-                  <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Status</th>
-                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {payrollList.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="text-center py-12 text-gray-400 text-sm">
-                      No payroll records processed for this month.
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Staff Member</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Base Salary</th>
+                    <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Days (Att/Leave)</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Bonus / Deduct</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Net Salary</th>
+                    <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Actions</th>
                   </tr>
-                ) : (
-                  payrollList.map((p: any, i: number) => (
-                    <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-[#1c1b1b]">{p.staff_name}</div>
-                        <div className="text-[10px] text-gray-400">{p.staff_mobile}</div>
-                      </td>
-                      <td className="py-3 px-4 text-right font-medium">{formatINR(p.base_salary)}</td>
-                      <td className="py-3 px-4 text-center">
-                        <span className="text-emerald-600 font-semibold">{p.present_days}d</span>
-                        <span className="text-gray-300 mx-1">/</span>
-                        <span className="text-amber-600">{p.leave_days}L</span>
-                      </td>
-                      <td className="py-3 px-4 text-right text-xs">
-                        <div className="text-emerald-600 font-semibold">+{formatINR(p.bonuses)}</div>
-                        <div className="text-red-500">-{formatINR(p.deductions)}</div>
-                      </td>
-                      <td className="py-3 px-4 text-right font-bold text-[#1c1b1b]">{formatINR(p.net_salary)}</td>
-                      <td className="py-3 px-4 text-center">
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${
-                            p.payment_status === 'paid' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                          }`}
-                        >
-                          {p.payment_status}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-right space-x-1.5">
-                        {p.payment_status === 'pending' && (
-                          <button
-                            onClick={() => {
-                              setPayModal(p);
-                              setPayForm({ payment_mode: 'cash', bonuses: parseFloat(p.bonuses), deductions: parseFloat(p.deductions) });
-                            }}
-                            className="text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 transition"
-                          >
-                            Mark Paid
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setSlipModal(p)}
-                          className="p-1 hover:bg-gray-100 rounded text-gray-500 inline-flex items-center gap-1 text-xs"
-                          title="View Slip"
-                        >
-                          <Printer size={14} /> Slip
-                        </button>
+                </thead>
+                <tbody>
+                  {payrollList.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="text-center py-12 text-gray-400 text-sm">
+                        No payroll records processed for this month.
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    payrollList.map((p: any, i: number) => (
+                      <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                        <td className="py-3 px-4">
+                          <div className="font-semibold text-[#1c1b1b]">{p.staff_name}</div>
+                          <div className="text-[10px] text-gray-400">{p.staff_mobile}</div>
+                        </td>
+                        <td className="py-3 px-4 text-right font-medium">{formatINR(p.base_salary)}</td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="text-emerald-600 font-semibold">{p.present_days}d</span>
+                          <span className="text-gray-300 mx-1">/</span>
+                          <span className="text-amber-600">{p.leave_days}L</span>
+                        </td>
+                        <td className="py-3 px-4 text-right text-xs">
+                          <div className="text-emerald-600 font-semibold">+{formatINR(p.bonuses)}</div>
+                          <div className="text-red-500">-{formatINR(p.deductions)}</div>
+                        </td>
+                        <td className="py-3 px-4 text-right font-bold text-[#1c1b1b]">{formatINR(p.net_salary)}</td>
+                        <td className="py-3 px-4 text-center">
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${
+                              p.payment_status === 'paid' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                            }`}
+                          >
+                            {p.payment_status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right space-x-1.5">
+                          {p.payment_status === 'pending' && (
+                            <button
+                              onClick={() => {
+                                setPayModal(p);
+                                setPayForm({ payment_mode: 'cash', bonuses: parseFloat(p.bonuses), deductions: parseFloat(p.deductions) });
+                              }}
+                              className="text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 transition"
+                            >
+                              Mark Paid
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setSlipModal(p)}
+                            className="p-1 hover:bg-gray-100 rounded text-gray-500 inline-flex items-center gap-1 text-xs"
+                            title="View Slip"
+                          >
+                            <Printer size={14} /> Slip
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </AnimatedCard>
         </div>
       )}
@@ -540,50 +544,52 @@ export default function StaffHRPage() {
       {/* Attendance Tab */}
       {tab === 'attendance' && (
         <AnimatedCard className="bg-white rounded-2xl border border-gray-100 overflow-hidden" delay={0.15}>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Staff Member</th>
-                <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Date</th>
-                <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Punch-In</th>
-                <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Punch-Out</th>
-                <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {attendanceList.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="text-center py-12 text-gray-400 text-sm">
-                    No attendance logs recorded.
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-100">
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Staff Member</th>
+                  <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Date</th>
+                  <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Punch-In</th>
+                  <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Punch-Out</th>
+                  <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Status</th>
                 </tr>
-              ) : (
-                attendanceList.map((att: any, i: number) => (
-                  <tr key={att.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                    <td className="py-3 px-4 font-semibold text-[#1c1b1b]">{att.staff_name}</td>
-                    <td className="py-3 px-4 text-center">
-                      {new Date(att.att_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    </td>
-                    <td className="py-3 px-4 text-center text-gray-600">{att.check_in || '—'}</td>
-                    <td className="py-3 px-4 text-center text-gray-600">{att.check_out || '—'}</td>
-                    <td className="py-3 px-4 text-center">
-                      <span
-                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full capitalize ${
-                          att.status === 'present'
-                            ? 'bg-emerald-50 text-emerald-700'
-                            : att.status === 'half_day'
-                            ? 'bg-amber-50 text-amber-700'
-                            : 'bg-red-50 text-red-700'
-                        }`}
-                      >
-                        {att.status.replace('_', ' ')}
-                      </span>
+              </thead>
+              <tbody>
+                {attendanceList.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="text-center py-12 text-gray-400 text-sm">
+                      No attendance logs recorded.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  attendanceList.map((att: any, i: number) => (
+                    <tr key={att.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                      <td className="py-3 px-4 font-semibold text-[#1c1b1b]">{att.staff_name}</td>
+                      <td className="py-3 px-4 text-center">
+                        {new Date(att.att_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </td>
+                      <td className="py-3 px-4 text-center text-gray-600">{att.check_in || '—'}</td>
+                      <td className="py-3 px-4 text-center text-gray-600">{att.check_out || '—'}</td>
+                      <td className="py-3 px-4 text-center">
+                        <span
+                          className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full capitalize ${
+                            att.status === 'present'
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : att.status === 'half_day'
+                              ? 'bg-amber-50 text-amber-700'
+                              : 'bg-red-50 text-red-700'
+                          }`}
+                        >
+                          {att.status.replace('_', ' ')}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </AnimatedCard>
       )}
 
@@ -626,7 +632,7 @@ export default function StaffHRPage() {
                 placeholder="Task details..."
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Priority</label>
                 <select
@@ -671,7 +677,7 @@ export default function StaffHRPage() {
               <span className="text-xs text-gray-500 font-semibold">Calculated Net Salary:</span>
               <span className="text-sm font-bold text-gray-800">{formatINR(payModal?.net_salary)}</span>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Additional Bonus</label>
                 <input

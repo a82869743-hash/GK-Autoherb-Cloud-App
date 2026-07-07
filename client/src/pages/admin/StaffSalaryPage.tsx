@@ -279,7 +279,7 @@ export default function StaffSalaryPage() {
                   ))}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Base Salary</label>
                   <input type="number" value={addForm.base_salary} onChange={e => setAddForm({...addForm, base_salary: parseFloat(e.target.value) || 0})} className="w-full px-3 py-2 border rounded-lg text-sm" />
@@ -289,7 +289,7 @@ export default function StaffSalaryPage() {
                   <input type="number" value={addForm.bonus} onChange={e => setAddForm({...addForm, bonus: parseFloat(e.target.value) || 0})} className="w-full px-3 py-2 border rounded-lg text-sm" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Deductions</label>
                   <input type="number" value={addForm.deductions} onChange={e => setAddForm({...addForm, deductions: parseFloat(e.target.value) || 0})} className="w-full px-3 py-2 border rounded-lg text-sm" />

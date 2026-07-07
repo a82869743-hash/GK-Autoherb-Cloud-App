@@ -168,7 +168,7 @@ export default function PremiumServicesPage() {
       >
         <div className="space-y-4">
           <Input label="Add-on Name" value={addonName} onChange={e => setAddonName(e.target.value)} placeholder="e.g. Engine Bay Cleaning" />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input label="Price (₹)" type="number" value={addonPrice || ''} onChange={e => setAddonPrice(parseFloat(e.target.value) || 0)} />
             <Input label="Duration (min)" type="number" value={addonDuration || ''} onChange={e => setAddonDuration(parseInt(e.target.value) || 30)} />
           </div>

@@ -335,7 +335,7 @@ export default function PaymentsPage() {
             <div><label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Job Cart ID (optional)</label>
               <input value={payForm.job_cart_id} onChange={e => setPayForm(p => ({ ...p, job_cart_id: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm" placeholder="Job cart ID" />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div><label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Amount to Pay (₹)</label>
                 <input type="number" value={payForm.amount} onChange={e => setPayForm(p => ({ ...p, amount: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm" placeholder="0.00" />
               </div>

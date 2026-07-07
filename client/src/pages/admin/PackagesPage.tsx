@@ -330,9 +330,9 @@ export default function PackagesPage() {
                 </div>
 
                 {/* ─── V2 Pricing Grid (Basic / Premium) ─── */}
-                <div className="px-4 pb-3 pt-2 border-t border-gray-100">
+                <div className="px-4 pb-3 pt-2 border-t border-gray-100 overflow-x-auto">
                   {pkg.pricing && pkg.pricing.length > 0 ? (
-                    <div>
+                    <div className="min-w-[280px]">
                       <div className="grid grid-cols-6 gap-1 mb-1">
                         <div className="text-[7px] font-bold uppercase tracking-widest text-gray-400"></div>
                         {['S.Hatch','M.Hatch','Sedan','Prem','Large'].map(l => (
@@ -350,7 +350,7 @@ export default function PackagesPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-5 gap-1">
+                    <div className="grid grid-cols-5 gap-1 min-w-[280px]">
                       {CATEGORY_LABELS.map(cat => (
                         <div key={cat.key} className="text-center">
                           <p className="text-[7px] font-bold uppercase tracking-widest text-gray-400 leading-tight">{cat.short}</p>

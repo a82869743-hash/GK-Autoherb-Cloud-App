@@ -360,7 +360,7 @@ export default function ReportsPage() {
         <div className="space-y-6">
           {jobCardLoading ? (
             <div className="space-y-4 animate-pulse">
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="h-20 bg-gray-100 rounded-xl" />
                 <div className="h-20 bg-gray-100 rounded-xl" />
                 <div className="h-20 bg-gray-100 rounded-xl" />
