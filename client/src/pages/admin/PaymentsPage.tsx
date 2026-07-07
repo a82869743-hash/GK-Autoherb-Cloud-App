@@ -98,6 +98,20 @@ export default function PaymentsPage() {
         theme: { color: '#2196F3' }
       };
       
+      if (orderRes.data.id.startsWith('order_mock_')) {
+        const confirmSimulate = window.confirm(
+          "RAZORPAY SANDBOX MODE (Keys Missing)\n\nWould you like to simulate a successful online payment?"
+        );
+        if (confirmSimulate) {
+          await options.handler({
+            razorpay_order_id: orderRes.data.id,
+            razorpay_payment_id: 'pay_mock_' + Date.now(),
+            razorpay_signature: 'sig_mock_' + Date.now()
+          });
+        }
+        return;
+      }
+
       const rzp1 = new (window as any).Razorpay(options);
       rzp1.on('payment.failed', function (response: any) {
         toast.error(`Payment Failed: ${response.error.description}`);

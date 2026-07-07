@@ -33,6 +33,8 @@ exports.list = async (req, res) => {
       params.push(from_date, to_date);
     }
 
+    where += " AND NOT (start_time = '00:00:00' AND end_time = '23:59:59')";
+
     // Filter out blocked slots for guests/customers
     const user = tryParseUser(req);
     if (!user || user.role !== 'admin') {

@@ -13,7 +13,7 @@ import { useAuthStore } from '../../store/authStore';
 import QrPaymentModal from '../../components/shared/QrPaymentModal';
 import Modal from '../../components/ui/Modal';
 
-const STEPS = ['Service', 'Vehicle', 'Date', 'Time', 'Confirm'];
+const STEPS = ['Service & Vehicle', 'Date', 'Time', 'Confirm'];
 
 // ─── Service Priority Sorting ─────────────────
 // Hot services appear first: washes, PPF, coating, polish, ceramic, then the rest
@@ -38,7 +38,7 @@ export default function BookingPage() {
   const createMut = useCreateBooking();
 
   const [step, setStep] = useState(0);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState('sedan');
 
   // QR Payment states
   const [showQrModal, setShowQrModal] = useState(false);
@@ -121,9 +121,12 @@ export default function BookingPage() {
           setRegNo(primary.registration_no || '');
           if (primary.category) {
             setFilter(primary.category);
+          } else {
+            setFilter('sedan');
           }
         } else {
           setManualEntry(true);
+          setFilter('sedan');
         }
 
         // activePkgRes.data.data is a single object or null
@@ -164,10 +167,9 @@ export default function BookingPage() {
 
   const canNext = useMemo(() => {
     switch (step) {
-      case 0: return isPackageBooking ? selectedPackageServiceNames.length > 0 : selectedServices.length > 0;
-      case 1: return brand.trim().length > 0 && model.trim().length > 0;
-      case 2: return selectedDate.length > 0;
-      case 3: return selectedSlot !== null;
+      case 0: return (isPackageBooking ? selectedPackageServiceNames.length > 0 : selectedServices.length > 0) && brand.trim().length > 0 && model.trim().length > 0;
+      case 1: return selectedDate.length > 0;
+      case 2: return selectedSlot !== null;
       default: return true;
     }
   }, [step, selectedServices, selectedPackage, selectedPackageServiceNames, isPackageBooking, brand, model, selectedDate, selectedSlot]);
@@ -310,6 +312,22 @@ export default function BookingPage() {
         },
         theme: { color: '#D32F2F' }
       };
+
+      if (orderData.id.startsWith('order_mock_')) {
+        const confirmSimulate = window.confirm(
+          "RAZORPAY SANDBOX MODE (Keys Missing)\n\nWould you like to simulate a successful online payment?"
+        );
+        if (confirmSimulate) {
+          await options.handler({
+            razorpay_order_id: orderData.id,
+            razorpay_payment_id: 'pay_mock_' + Date.now(),
+            razorpay_signature: 'sig_mock_' + Date.now()
+          });
+        } else {
+          options.modal.ondismiss();
+        }
+        return;
+      }
 
       const rzp = new (window as any).Razorpay(options);
       rzp.open();
@@ -459,6 +477,92 @@ export default function BookingPage() {
       {/* ═══ Step 0: Select Service ═══ */}
       {step === 0 && (
         <div>
+          {/* Vehicle Selector */}
+          <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100 mb-6 space-y-4 text-left">
+            {userVehicles.length > 0 && !manualEntry ? (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2">Select Your Vehicle</p>
+                <select
+                  value={selectedVehicleId || ''}
+                  onChange={(e) => {
+                    const vid = parseInt(e.target.value);
+                    const v = userVehicles.find((veh: any) => veh.id === vid);
+                    if (v) {
+                      setSelectedVehicleId(v.id);
+                      setBrand(v.brand);
+                      setModel(v.model);
+                      setRegNo(v.registration_no || '');
+                      if (v.category) {
+                        setFilter(v.category);
+                      } else {
+                        setFilter('sedan');
+                      }
+                    }
+                  }}
+                  className="w-full px-4 py-3 bg-[#f6f3f2] border border-transparent rounded-lg text-[#1c1b1b] font-bold focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white focus:border-[#D32F2F]/30 transition-all duration-200 cursor-pointer text-sm"
+                >
+                  {userVehicles.map((v: any) => (
+                    <option key={v.id} value={v.id}>
+                      🚗 {v.brand} {v.model} {v.registration_no ? `(${v.registration_no})` : ''} {v.is_primary ? '★ Primary' : ''}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => { setManualEntry(true); setSelectedVehicleId(null); setBrand(''); setModel(''); setRegNo(''); setFilter('hatchback'); }}
+                  className="mt-2 text-xs font-bold text-[#D32F2F] hover:underline"
+                >
+                  + Enter vehicle details manually
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {userVehicles.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualEntry(false);
+                      const primary = userVehicles.find((v: any) => v.is_primary) || userVehicles[0];
+                      setSelectedVehicleId(primary.id);
+                      setBrand(primary.brand);
+                      setModel(primary.model);
+                      setRegNo(primary.registration_no || '');
+                      if (primary.category) {
+                        setFilter(primary.category);
+                      } else {
+                        setFilter('sedan');
+                      }
+                    }}
+                    className="text-xs font-bold text-[#D32F2F] hover:underline mb-2"
+                  >
+                    ← Back to saved vehicles
+                  </button>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <Input label="Car Brand *" placeholder="e.g. Hyundai" value={brand} onChange={(e) => setBrand(e.target.value)} listOptions={brandsRes?.data} />
+                  <Input label="Car Model *" placeholder="e.g. Creta" value={model} onChange={(e) => setModel(e.target.value)} listOptions={modelsRes?.data} />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <Input label="Registration No (Optional)" placeholder="e.g. GJ01AB1234" value={regNo} onChange={(e) => setRegNo(e.target.value.toUpperCase())} />
+                  <div>
+                    <label className="block text-xs font-bold text-[#5f5e5e] mb-1.5 uppercase tracking-wide">Vehicle Category *</label>
+                    <select
+                      value={filter}
+                      onChange={(e) => setFilter(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#f6f3f2] border border-transparent rounded-lg text-sm font-bold text-[#1c1b1b] focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white focus:border-[#D32F2F]/30 transition-all duration-200 cursor-pointer"
+                    >
+                      <option value="hatchback">Hatchback</option>
+                      <option value="medium_hatchback">Medium Hatchback</option>
+                      <option value="sedan">Sedan</option>
+                      <option value="premium_sedan">Premium Sedan</option>
+                      <option value="suv">SUV</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {isPackageBooking ? (
             /* ── PACKAGE BOOKING FLOW ── */
             <div>
@@ -577,18 +681,24 @@ export default function BookingPage() {
             /* ── NORMAL BOOKING FLOW ── */
             <div>
               {/* Vehicle category filter */}
-              <div className="flex flex-wrap gap-2 mb-4">
-                {['all', 'hatchback', 'medium_hatchback', 'sedan', 'premium_sedan', 'suv'].map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setFilter(f)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${
-                      filter === f ? 'bg-[#1c1b1b] text-white' : 'bg-[#f6f3f2] text-[#5f5e5e] hover:bg-[#e5e2e1]'
-                    }`}
-                  >
-                    {f === 'all' ? 'All' : f === 'medium_hatchback' ? 'Med Hatch' : f === 'premium_sedan' ? 'Prem Sedan' : f.charAt(0).toUpperCase() + f.slice(1)}
-                  </button>
-                ))}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  Pricing Category: <span className="text-[#D32F2F] font-extrabold">{filter === 'medium_hatchback' ? 'Medium Hatchback' : filter === 'premium_sedan' ? 'Premium Sedan' : filter.toUpperCase()}</span>
+                </span>
+                <div className="flex flex-wrap gap-1">
+                  {['hatchback', 'medium_hatchback', 'sedan', 'premium_sedan', 'suv'].map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setFilter(f)}
+                      className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                        filter === f ? 'bg-[#D32F2F] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {f === 'medium_hatchback' ? 'Med Hatch' : f === 'premium_sedan' ? 'Prem Sedan' : f.charAt(0).toUpperCase() + f.slice(1, 4)}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {servicesLoading ? (
@@ -672,77 +782,8 @@ export default function BookingPage() {
         </div>
       )}
 
-      {/* ═══ Step 1: Vehicle Details ═══ */}
+      {/* ═══ Step 1: Select Date ═══ */}
       {step === 1 && (
-        <div className="bg-white rounded-lg p-6 shadow-sm space-y-4">
-          {/* Vehicle dropdown — shown when user has saved vehicles */}
-          {userVehicles.length > 0 && !manualEntry && (
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2">Select Your Vehicle</p>
-              <select
-                value={selectedVehicleId || ''}
-                onChange={(e) => {
-                  const vid = parseInt(e.target.value);
-                  const v = userVehicles.find((veh: any) => veh.id === vid);
-                  if (v) {
-                    setSelectedVehicleId(v.id);
-                    setBrand(v.brand);
-                    setModel(v.model);
-                    setRegNo(v.registration_no || '');
-                    if (v.category) {
-                      setFilter(v.category);
-                    }
-                  }
-                }}
-                className="w-full px-4 py-3.5 bg-[#f6f3f2] border border-transparent rounded-lg text-[#1c1b1b] font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white focus:border-[#D32F2F]/30 transition-all duration-200 appearance-none cursor-pointer"
-              >
-                {userVehicles.map((v: any) => (
-                  <option key={v.id} value={v.id}>
-                    🚗 {v.brand} {v.model} {v.registration_no ? `(${v.registration_no})` : ''} {v.is_primary ? '★ Primary' : ''}
-                  </option>
-                ))}
-              </select>
-
-              {/* Link to switch to manual entry */}
-              <button
-                type="button"
-                onClick={() => { setManualEntry(true); setSelectedVehicleId(null); setBrand(''); setModel(''); setRegNo(''); }}
-                className="mt-3 text-xs font-bold text-[#D32F2F] hover:underline"
-              >
-                + Enter vehicle details manually
-              </button>
-            </div>
-          )}
-
-          {/* Manual entry — shown when no saved vehicles or user chose manual */}
-          {(manualEntry || userVehicles.length === 0) && (
-            <div className="space-y-4">
-              {userVehicles.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setManualEntry(false);
-                    const primary = userVehicles.find((v: any) => v.is_primary) || userVehicles[0];
-                    setSelectedVehicleId(primary.id);
-                    setBrand(primary.brand);
-                    setModel(primary.model);
-                    setRegNo(primary.registration_no || '');
-                  }}
-                  className="text-xs font-bold text-[#D32F2F] hover:underline mb-2"
-                >
-                  ← Back to saved vehicles
-                </button>
-              )}
-              <Input label="Car Brand" placeholder="e.g. Hyundai" value={brand} onChange={(e) => setBrand(e.target.value)} listOptions={brandsRes?.data} />
-              <Input label="Car Model" placeholder="e.g. Creta" value={model} onChange={(e) => setModel(e.target.value)} listOptions={modelsRes?.data} />
-              <Input label="Registration No (Optional)" placeholder="e.g. GJ01AB1234" value={regNo} onChange={(e) => setRegNo(e.target.value.toUpperCase())} />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ═══ Step 2: Select Date ═══ */}
-      {step === 2 && (
         <div className="bg-white rounded-lg p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <button onClick={() => setCalMonth(new Date(calMonth.getFullYear(), calMonth.getMonth() - 1))} className="p-2 hover:bg-gray-100 rounded-lg">
@@ -789,8 +830,8 @@ export default function BookingPage() {
         </div>
       )}
 
-      {/* ═══ Step 3: Select Time Slot ═══ */}
-      {step === 3 && (
+      {/* ═══ Step 2: Select Time Slot ═══ */}
+      {step === 2 && (
         <div className="bg-white rounded-lg p-6 shadow-sm">
           <p className="text-xs text-[#5f5e5e] mb-4">
             Available slots for <span className="font-bold text-[#1c1b1b]">{new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
@@ -842,8 +883,8 @@ export default function BookingPage() {
         </div>
       )}
 
-      {/* ═══ Step 4: Confirm ═══ */}
-      {step === 4 && (
+      {/* ═══ Step 3: Confirm ═══ */}
+      {step === 3 && (
         <div className="bg-white rounded-lg p-6 shadow-sm">
           <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-4">Booking Summary</p>
 
@@ -968,7 +1009,7 @@ export default function BookingPage() {
         {step > 0 ? (
           <Button variant="ghost" onClick={() => setStep(step - 1)} icon={<ChevronLeft size={14} />}>Back</Button>
         ) : <div />}
-        {step < 4 && (
+        {step < 3 && (
           <Button onClick={() => setStep(step + 1)} disabled={!canNext}>
             Next <ChevronRight size={14} className="ml-1" />
           </Button>

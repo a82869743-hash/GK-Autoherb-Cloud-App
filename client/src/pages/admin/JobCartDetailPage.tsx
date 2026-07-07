@@ -159,6 +159,13 @@ export default function JobCartDetailPage() {
   const [selectedStaff, setSelectedStaff] = useState('');
   const [deliveryLoading, setDeliveryLoading] = useState(false);
 
+  // ─── Collect Advance Modal ─────────────
+  const [collectAdvanceOpen, setCollectAdvanceOpen] = useState(false);
+  const [advanceAmountInput, setAdvanceAmountInput] = useState('');
+  const [advanceMethod, setAdvanceMethod] = useState('cash');
+  const [advanceNotes, setAdvanceNotes] = useState('');
+  const [submittingAdvance, setSubmittingAdvance] = useState(false);
+
   // ─── Helpers ───────────────────────────
 
   const serviceOptions = [
@@ -383,12 +390,7 @@ export default function JobCartDetailPage() {
     );
   };
 
-  // ─── Collect Advance Modal ─────────────
-  const [collectAdvanceOpen, setCollectAdvanceOpen] = useState(false);
-  const [advanceAmountInput, setAdvanceAmountInput] = useState('');
-  const [advanceMethod, setAdvanceMethod] = useState('cash');
-  const [advanceNotes, setAdvanceNotes] = useState('');
-  const [submittingAdvance, setSubmittingAdvance] = useState(false);
+
 
   const handleCollectAdvance = async () => {
     const amt = parseFloat(advanceAmountInput);
@@ -552,7 +554,11 @@ export default function JobCartDetailPage() {
     <>
       <AdminTopBar
         title={cart.vehicle?.registration_no || `Cart #${cart.id}`}
-        subtitle={`${cart.vehicle?.brand} ${cart.vehicle?.model}${cart.vehicle?.car_year || cart.vehicle?.manufacture_year ? ' (' + (cart.vehicle?.car_year || cart.vehicle?.manufacture_year) + ')' : ''} · Visit #${cart.visit_number}`}
+        subtitle={
+          cart.vehicle
+            ? `${cart.vehicle.brand} ${cart.vehicle.model}${cart.vehicle.car_year || cart.vehicle.manufacture_year ? ' (' + (cart.vehicle.car_year || cart.vehicle.manufacture_year) + ')' : ''} · Visit #${cart.visit_number}`
+            : `Visit #${cart.visit_number}`
+        }
         actions={
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={() => navigate(-1)} icon={<ArrowLeft size={14} />}>
@@ -600,7 +606,9 @@ export default function JobCartDetailPage() {
               ) : (
                 <div className="text-sm text-[#5f5e5e] space-y-0.5">
                   <p><span className="font-semibold">Customer:</span> {(cart as any).customer?.name || 'N/A'} · {(cart as any).customer?.mobile}</p>
-                  <p><span className="font-semibold">Vehicle:</span> {cart.vehicle?.brand} {cart.vehicle?.model}{cart.vehicle?.car_year || cart.vehicle?.manufacture_year ? ' (' + (cart.vehicle?.car_year || cart.vehicle?.manufacture_year) + ')' : ''}</p>
+                  {cart.vehicle && (
+                    <p><span className="font-semibold">Vehicle:</span> {cart.vehicle.brand} {cart.vehicle.model}{cart.vehicle.car_year || cart.vehicle.manufacture_year ? ' (' + (cart.vehicle.car_year || cart.vehicle.manufacture_year) + ')' : ''}</p>
+                  )}
                   <p><span className="font-semibold">Date:</span> {formatDate(cart.visit_date)} · <span className="font-semibold">Visit:</span> #{cart.visit_number}</p>
                   {cart.notes && <p><span className="font-semibold">Notes:</span> {cart.notes}</p>}
                   {cart.invoice_number && <p><span className="font-semibold">Invoice:</span> {cart.invoice_number}</p>}

@@ -25,6 +25,9 @@ export default function QrPaymentModal({
   const [transactionId, setTransactionId] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const upiUrl = `upi://pay?pa=paytm.s2do639@paytm&pn=GK%20AUTO%20HERB&am=${amount}&cu=INR&tn=GK%20Auto%20Herb%20Payment`;
+  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiUrl)}`;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!transactionId.trim()) {
@@ -72,7 +75,7 @@ export default function QrPaymentModal({
           </div>
           <div className="text-right">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">UPI ID / Number</p>
-            <p className="text-sm font-bold text-[#D32F2F]">paytm.s2do639@pty</p>
+            <p className="text-sm font-bold text-[#D32F2F]">paytm.s2do639@paytm</p>
             <p className="text-xs text-gray-500 font-semibold">9408424541</p>
           </div>
         </div>
@@ -84,11 +87,11 @@ export default function QrPaymentModal({
         </div>
 
         {/* QR Code Image */}
-        <div className="relative border-4 border-gray-100 rounded-2xl overflow-hidden bg-white shadow-md p-2 w-64 h-80 flex flex-col items-center justify-center">
+        <div className="relative border-4 border-gray-100 rounded-2xl overflow-hidden bg-white shadow-md p-2 w-64 h-64 flex flex-col items-center justify-center">
           <img
-            src="/qr.jpg"
+            src={qrImageUrl}
             alt="UPI QR Code"
-            className="w-56 h-72 object-contain"
+            className="w-56 h-56 object-contain"
           />
         </div>
 

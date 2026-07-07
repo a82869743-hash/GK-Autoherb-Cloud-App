@@ -55,8 +55,11 @@ exports.forgotPassword = async (req, res) => {
   try {
     const { mobile } = req.body;
 
+    // Clean and normalize mobile number (strip non-digits and take last 10 digits)
+    const cleanMobile = mobile ? mobile.replace(/\D/g, '').slice(-10) : '';
+
     // Validate mobile
-    if (!mobile || !/^[0-9]{10}$/.test(mobile)) {
+    if (!cleanMobile || !/^[0-9]{10}$/.test(cleanMobile)) {
       return res.status(400).json({
         success: false,
         error: 'Please enter a valid 10-digit mobile number',
@@ -66,7 +69,7 @@ exports.forgotPassword = async (req, res) => {
     // Check if user exists
     const [users] = await pool.query(
       'SELECT id, name FROM users WHERE mobile = ?',
-      [mobile]
+      [cleanMobile]
     );
     if (!users.length) {
       return res.status(404).json({
@@ -76,7 +79,7 @@ exports.forgotPassword = async (req, res) => {
     }
 
     // Cooldown check — prevent OTP spam
-    const existing = otpStore.get(mobile);
+    const existing = otpStore.get(cleanMobile);
     if (existing && Date.now() - (existing.expiresAt - OTP_EXPIRY_MS) < COOLDOWN_MS) {
       return res.status(429).json({
         success: false,
@@ -88,7 +91,7 @@ exports.forgotPassword = async (req, res) => {
     const otp = generateOTP();
 
     // Store OTP
-    otpStore.set(mobile, {
+    otpStore.set(cleanMobile, {
       otp,
       expiresAt: Date.now() + OTP_EXPIRY_MS,
       attempts: 0,
@@ -97,9 +100,9 @@ exports.forgotPassword = async (req, res) => {
 
     // Send OTP via 2Factor.in SMS
     const sendOtp = require('../utils/sendOtp');
-    const sent = await sendOtp(mobile, otp);
+    const sent = await sendOtp(cleanMobile, otp);
     if (!sent) {
-      console.error(`[OTP] Failed to send to ${mobile} — OTP is stored, user can retry`);
+      console.error(`[OTP] Failed to send to ${cleanMobile} — OTP is stored, user can retry`);
     }
 
     res.json({
@@ -119,8 +122,11 @@ exports.verifyOtp = async (req, res) => {
   try {
     const { mobile, otp } = req.body;
 
+    // Clean and normalize mobile number
+    const cleanMobile = mobile ? mobile.replace(/\D/g, '').slice(-10) : '';
+
     // Validate input
-    if (!mobile || !otp) {
+    if (!cleanMobile || !otp) {
       return res.status(400).json({
         success: false,
         error: 'Mobile number and OTP are required',
@@ -128,7 +134,7 @@ exports.verifyOtp = async (req, res) => {
     }
 
     // Get stored OTP
-    const stored = otpStore.get(mobile);
+    const stored = otpStore.get(cleanMobile);
     if (!stored) {
       return res.status(400).json({
         success: false,
@@ -138,7 +144,7 @@ exports.verifyOtp = async (req, res) => {
 
     // Check expiry
     if (Date.now() > stored.expiresAt) {
-      otpStore.delete(mobile);
+      otpStore.delete(cleanMobile);
       return res.status(400).json({
         success: false,
         error: 'OTP has expired. Please request a new one.',
@@ -147,7 +153,7 @@ exports.verifyOtp = async (req, res) => {
 
     // Check max attempts
     if (stored.attempts >= MAX_OTP_ATTEMPTS) {
-      otpStore.delete(mobile);
+      otpStore.delete(cleanMobile);
       return res.status(429).json({
         success: false,
         error: 'Too many failed attempts. Please request a new OTP.',
@@ -165,13 +171,13 @@ exports.verifyOtp = async (req, res) => {
 
     // OTP verified — generate reset token
     const resetToken = jwt.sign(
-      { id: stored.userId, mobile, purpose: 'password-reset' },
+      { id: stored.userId, mobile: cleanMobile, purpose: 'password-reset' },
       process.env.JWT_SECRET,
       { expiresIn: RESET_TOKEN_EXPIRY }
     );
 
     // Clear OTP (one-time use)
-    otpStore.delete(mobile);
+    otpStore.delete(cleanMobile);
 
     res.json({
       success: true,

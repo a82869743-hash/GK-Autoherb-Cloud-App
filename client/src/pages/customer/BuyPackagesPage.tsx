@@ -351,6 +351,22 @@ export default function BuyPackagesPage() {
         theme: { color: '#D32F2F' }
       };
 
+      if (orderData.id.startsWith('order_mock_')) {
+        const confirmSimulate = window.confirm(
+          "RAZORPAY SANDBOX MODE (Keys Missing)\n\nWould you like to simulate a successful online payment?"
+        );
+        if (confirmSimulate) {
+          await options.handler({
+            razorpay_order_id: orderData.id,
+            razorpay_payment_id: 'pay_mock_' + Date.now(),
+            razorpay_signature: 'sig_mock_' + Date.now()
+          });
+        } else {
+          options.modal.ondismiss();
+        }
+        return;
+      }
+
       const rzp = new (window as any).Razorpay(options);
       rzp.open();
     } catch (err: any) {
