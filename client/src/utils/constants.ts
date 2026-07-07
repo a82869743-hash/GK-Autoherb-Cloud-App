@@ -22,6 +22,7 @@ export const STATUS_COLORS: Record<string, string> = {
   paid: 'bg-green-50 text-green-900 border-green-200/50',
   new: 'bg-blue-50 text-blue-900 border-blue-200/50',
   followed_up: 'bg-amber-50 text-amber-900 border-amber-200/50',
+  pending_payment: 'bg-yellow-50 text-yellow-900 border-yellow-200/50',
   converted: 'bg-green-50 text-green-900 border-green-200/50',
   sent: 'bg-green-50 text-green-900 border-green-200/50',
   failed: 'bg-red-50 text-red-900 border-red-200/50',

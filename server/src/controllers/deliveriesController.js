@@ -110,7 +110,7 @@ exports.startDelivery = async (req, res) => {
     
     // Check if job cart exists and get customer_id from vehicles join
     const [jobRows] = await pool.query(
-      `SELECT jc.id, v.customer_id 
+      `SELECT jc.id, v.customer_id, v.registration_no, v.brand, v.model 
        FROM job_carts jc 
        JOIN vehicles v ON jc.vehicle_id = v.id
        WHERE jc.id = ?`,
@@ -134,7 +134,32 @@ exports.startDelivery = async (req, res) => {
       VALUES (?, ?, ?, 'in_transit')
     `, [job.id, req.user.id, job.customer_id]);
 
-    res.json({ success: true, data: { id: result.insertId }, message: 'Delivery started' });
+    const deliveryId = result.insertId;
+
+    // Trigger Delivery Started Notification
+    try {
+      const messagingService = require('../services/messagingService');
+      const [staffRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [req.user.id]);
+      const driverName = staffRows[0]?.name || 'Staff';
+      const driverMobile = staffRows[0]?.mobile || '';
+      const baseUrl = process.env.APP_BASE_URL || 'https://gkautobook.cloud';
+      
+      await messagingService.notify(
+        job.customer_id,
+        'DELIVERY_STARTED',
+        {
+          vehicle_number: job.registration_no || `${job.brand} ${job.model}`,
+          driver_name: driverName,
+          driver_mobile: driverMobile,
+          tracking_url: `${baseUrl}/track/delivery/${deliveryId}`
+        },
+        { type: 'delivery', id: deliveryId }
+      );
+    } catch (msgErr) {
+      console.error('[SMS/WA] Delivery start notification failed:', msgErr.message);
+    }
+
+    res.json({ success: true, data: { id: deliveryId }, message: 'Delivery started' });
   } catch (err) {
     console.error('Delivery start error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -163,6 +188,30 @@ exports.completeDelivery = async (req, res) => {
     const io = req.app.get('io');
     if (io) {
       io.to(`delivery_${req.params.id}`).emit('delivery_completed', { delivery_id: parseInt(req.params.id) });
+    }
+
+    // Trigger Delivery Completed Notification
+    try {
+      const messagingService = require('../services/messagingService');
+      const [infoRows] = await pool.query(
+        `SELECT d.customer_id, v.registration_no, v.brand, v.model
+         FROM deliveries d
+         JOIN job_carts jc ON d.job_cart_id = jc.id
+         JOIN vehicles v ON jc.vehicle_id = v.id
+         WHERE d.id = ?`,
+        [req.params.id]
+      );
+      if (infoRows.length) {
+        const info = infoRows[0];
+        await messagingService.notify(
+          info.customer_id,
+          'DELIVERY_COMPLETED',
+          { vehicle_number: info.registration_no || `${info.brand} ${info.model}` },
+          { type: 'delivery', id: req.params.id }
+        );
+      }
+    } catch (msgErr) {
+      console.error('[SMS/WA] Delivery completion notification failed:', msgErr.message);
     }
 
     res.json({ success: true, message: 'Delivery completed' });

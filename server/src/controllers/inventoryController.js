@@ -57,12 +57,14 @@ exports.getOne = async (req, res) => {
 // ─── CREATE ─────────────────────────────────
 exports.create = async (req, res) => {
   try {
-    const { product_name, unit = 'pcs', quantity = 0, low_stock_threshold = 5 } = req.body;
+    const { product_name, unit = 'pcs', quantity = 0, low_stock_threshold = 5, images_json } = req.body;
     if (!product_name) return res.status(400).json({ success: false, error: 'Product name is required' });
 
+    const imagesVal = images_json ? (typeof images_json === 'string' ? images_json : JSON.stringify(images_json)) : null;
+
     const [result] = await pool.query(
-      'INSERT INTO inventory (product_name, unit, quantity, low_stock_threshold) VALUES (?, ?, ?, ?)',
-      [product_name, unit, quantity, low_stock_threshold]
+      'INSERT INTO inventory (product_name, unit, quantity, low_stock_threshold, images_json) VALUES (?, ?, ?, ?, ?)',
+      [product_name, unit, quantity, low_stock_threshold, imagesVal]
     );
     res.status(201).json({ success: true, data: { id: result.insertId }, message: 'Product created' });
   } catch (err) {
@@ -74,7 +76,7 @@ exports.create = async (req, res) => {
 // ─── UPDATE ─────────────────────────────────
 exports.update = async (req, res) => {
   try {
-    const { product_name, unit, low_stock_threshold } = req.body;
+    const { product_name, unit, low_stock_threshold, images_json } = req.body;
     const [existing] = await pool.query('SELECT id FROM inventory WHERE id = ? AND is_deleted = 0', [req.params.id]);
     if (!existing.length) return res.status(404).json({ success: false, error: 'Product not found' });
 
@@ -83,6 +85,7 @@ exports.update = async (req, res) => {
     if (product_name !== undefined) { updates.push('product_name = ?'); params.push(product_name); }
     if (unit !== undefined) { updates.push('unit = ?'); params.push(unit); }
     if (low_stock_threshold !== undefined) { updates.push('low_stock_threshold = ?'); params.push(low_stock_threshold); }
+    if (images_json !== undefined) { updates.push('images_json = ?'); params.push(images_json ? (typeof images_json === 'string' ? images_json : JSON.stringify(images_json)) : null); }
 
     if (!updates.length) return res.status(400).json({ success: false, error: 'No fields to update' });
 
@@ -179,5 +182,32 @@ exports.bulkUpload = async (req, res) => {
     res.status(500).json({ success: false, error: 'Server error processing file' });
   } finally {
     conn.release();
+  }
+};
+
+const cloudinary = require('../config/cloudinary');
+
+exports.uploadImage = async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+
+    // Upload to Cloudinary
+    const result = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: `gk-autoherb/inventory-photos`, resource_type: 'image' },
+        (err, result) => { if (err) reject(err); else resolve(result); }
+      );
+      stream.end(req.file.buffer);
+    });
+
+    res.status(201).json({
+      success: true,
+      url: result.secure_url,
+      public_id: result.public_id,
+      message: 'Photo uploaded successfully'
+    });
+  } catch (err) {
+    console.error('Inventory photo upload error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 };

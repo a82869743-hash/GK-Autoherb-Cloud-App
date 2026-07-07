@@ -34,4 +34,7 @@ router.delete('/:id',        auth, role(['admin']), ctrl.delete);
 // Admin assigns a package to a customer
 router.post('/assign', auth, role(['admin']), userPkgCtrl.assignPackage);
 
+// Admin creates and assigns a custom package
+router.post('/custom-assign', auth, role(['admin']), ctrl.customAssign);
+
 module.exports = router;

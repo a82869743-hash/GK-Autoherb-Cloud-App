@@ -570,12 +570,16 @@ async function generateInvoicePDF(jobCartId) {
             <span class="amount-value">₹ ${formatINR(finalTotal)}</span>
           </div>
           <div class="amount-row">
-            <span class="amount-label">Received Amount</span>
-            <span class="amount-value">₹ ${formatINR(finalTotal)}</span>
+            <span class="amount-label">Advance Paid</span>
+            <span class="amount-value">₹ ${formatINR(cart.advance_paid || 0)}</span>
           </div>
           <div class="amount-row">
-            <span class="amount-label">Balance</span>
-            <span class="amount-value">₹ 0</span>
+            <span class="amount-label">Received Amount</span>
+            <span class="amount-value">₹ ${formatINR(finalTotal - (cart.advance_paid || 0))}</span>
+          </div>
+          <div class="amount-row">
+            <span class="amount-label">Balance Due</span>
+            <span class="amount-value">₹ ${formatINR(cart.balance_due || 0)}</span>
           </div>
         </div>
       </div>
@@ -863,8 +867,8 @@ async function generateManualBillPDF(billId) {
       logoHtml,
       partyName: bill.customer_name || 'Walk-in Customer',
       partyMobile: bill.customer_mobile || '-',
-      rightLabel: 'Payment Method',
-      rightValue: (bill.payment_method || 'cash').toUpperCase(),
+      rightLabel: 'Vehicle / Payment',
+      rightValue: `${bill.vehicle_reg_no ? (bill.vehicle_brand + ' ' + bill.vehicle_model + ' [' + bill.vehicle_reg_no + ']').toUpperCase() + ' / ' : ''}${(bill.payment_method || 'cash').toUpperCase()}`,
       serviceRowsHtml,
       emptyRows,
       totalQty: itemRows.length,

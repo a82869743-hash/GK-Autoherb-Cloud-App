@@ -40,6 +40,7 @@ export default function CustomerDashboardPage() {
   // Primary car: prefer explicit primary_car from API, fallback to first vehicle
   const primaryCar = data?.primary_car || (vehicles.length > 0 ? vehicles[0] : null);
   const activePackage = data?.active_package || null;
+  const activePackages = data?.active_packages || (activePackage ? [activePackage] : []);
 
   return (
     <div className="pt-4 space-y-6">
@@ -65,7 +66,7 @@ export default function CustomerDashboardPage() {
                   </p>
                 </div>
                 <Link
-                  to="/customer/packages"
+                  to="/customer/buy-packages"
                   className={`flex-shrink-0 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-colors ${
                     isExpired ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-amber-600 text-white hover:bg-amber-700'
                   }`}
@@ -174,66 +175,88 @@ export default function CustomerDashboardPage() {
           )}
         </div>
 
-        {/* Active Package Card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 to-purple-400" />
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-50 to-purple-100 flex items-center justify-center text-purple-600">
-                <Package size={20} />
-              </div>
-              <div>
-                <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Your Package</p>
-                {activePackage ? (
-                  <div>
-                    <p className="font-bold text-[#1c1b1b] text-sm">{activePackage.package_name}</p>
-                    {activePackage.end_date && (() => {
-                      const daysLeft = Math.ceil((new Date(activePackage.end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-                      if (daysLeft > 0 && daysLeft <= 30) {
-                        return <p className="text-[10px] font-bold text-orange-600 mt-0.5">⚠️ Expires in {daysLeft} days!</p>;
-                      } else if (daysLeft <= 0) {
-                        return <p className="text-[10px] font-bold text-red-600 mt-0.5">⚠️ Expired</p>;
-                      }
-                      return null;
-                    })()}
+        {/* Active Package Card(s) */}
+        <div className="space-y-4">
+          {activePackages.length > 0 ? (
+            activePackages.map((pkg: any, index: number) => (
+              <div key={pkg.id || index} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 relative overflow-hidden">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 to-purple-400" />
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-50 to-purple-100 flex items-center justify-center text-purple-600">
+                      <Package size={20} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Active Package</span>
+                        {pkg.vehicle_reg_no ? (
+                          <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-[9px] font-extrabold uppercase tracking-wider rounded-md">
+                            🚗 {pkg.vehicle_brand} {pkg.vehicle_model} ({pkg.vehicle_reg_no})
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 bg-gray-50 text-gray-600 text-[9px] font-extrabold uppercase tracking-wider rounded-md">
+                            Standard (All Cars)
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-bold text-[#1c1b1b] text-sm mt-0.5">{pkg.package_name}</p>
+                      {pkg.end_date && (() => {
+                        const daysLeft = Math.ceil((new Date(pkg.end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                        if (daysLeft > 0 && daysLeft <= 30) {
+                          return <p className="text-[10px] font-bold text-orange-600 mt-0.5">⚠️ Expires in {daysLeft} days!</p>;
+                        } else if (daysLeft <= 0) {
+                          return <p className="text-[10px] font-bold text-red-600 mt-0.5">⚠️ Expired</p>;
+                        }
+                        return null;
+                      })()}
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-gray-400 text-sm">No active package</p>
+                  <button
+                    onClick={() => navigate(`/customer/bookings/new?from_package=1&vehicle_id=${pkg.vehicle_id || ''}`)}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    Book from Package
+                  </button>
+                </div>
+                
+                {pkg.start_date && pkg.end_date && (
+                  <div className="ml-12 mb-3 flex items-center gap-4 text-[10px] text-gray-500 font-medium">
+                    <div>
+                      <span className="text-gray-400 block mb-0.5">Purchased On</span>
+                      {new Date(pkg.start_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block mb-0.5">Valid Till</span>
+                      {new Date(pkg.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </div>
+                  </div>
+                )}
+
+                {pkg.usage && pkg.usage.length > 0 && (
+                  <div className="mt-2 ml-12 space-y-1">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-1">Remaining Services:</p>
+                    {pkg.usage.map((u: any) => (
+                      <div key={u.service_name} className="flex items-center justify-between text-xs">
+                        <span className="text-gray-600">{u.service_name}</span>
+                        <span className={`font-bold ${u.remaining > 0 ? 'text-emerald-600' : 'text-red-500'}`}>{u.remaining} / {u.total_count}</span>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
-            </div>
-            {activePackage && (
-              <button
-                onClick={() => navigate('/customer/bookings/new?from_package=1')}
-                className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg hover:bg-purple-700 transition-colors"
-              >
-                Book from Package
-              </button>
-            )}
-          </div>
-          
-          {activePackage && activePackage.start_date && activePackage.end_date && (
-            <div className="ml-12 mb-3 flex items-center gap-4 text-[10px] text-gray-500 font-medium">
-              <div>
-                <span className="text-gray-400 block mb-0.5">Purchased On</span>
-                {new Date(activePackage.start_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-              </div>
-              <div>
-                <span className="text-gray-400 block mb-0.5">Valid Till</span>
-                {new Date(activePackage.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-              </div>
-            </div>
-          )}
-
-          {activePackage?.usage && activePackage.usage.length > 0 && (
-            <div className="mt-2 ml-12 space-y-1">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-1">Remaining:</p>
-              {activePackage.usage.map((u: any) => (
-                <div key={u.service_name} className="flex items-center justify-between text-xs">
-                  <span className="text-gray-600">{u.service_name}</span>
-                  <span className={`font-bold ${u.remaining > 0 ? 'text-emerald-600' : 'text-red-500'}`}>{u.remaining} / {u.total_count}</span>
+            ))
+          ) : (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 relative overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 to-purple-400" />
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-50 to-purple-100 flex items-center justify-center text-purple-600">
+                  <Package size={20} />
                 </div>
-              ))}
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Your Package</p>
+                  <p className="text-gray-400 text-sm">No active package</p>
+                </div>
+              </div>
             </div>
           )}
         </div>

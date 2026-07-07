@@ -51,6 +51,7 @@ import ManualRegistrationPage from './pages/admin/ManualRegistrationPage';
 import PackageApprovalsPage from './pages/admin/PackageApprovalsPage';
 import StaffJobCartsPage from './pages/staff/StaffJobCartsPage';
 import StaffBenefitsPage from './pages/staff/StaffBenefitsPage';
+import CheckInOutPage from './pages/staff/CheckInOutPage';
 
 // Messages, Inquiries & Import pages
 import MessagesPage from './pages/admin/MessagesPage';
@@ -73,6 +74,7 @@ import QuickWashPage from './pages/admin/QuickWashPage';
 import LoyaltySettingsPage from './pages/admin/LoyaltySettingsPage';
 import PremiumServicesPage from './pages/admin/PremiumServicesPage';
 import AdminDeliveriesPage from './pages/admin/DeliveriesPage';
+import PickupsPage from './pages/admin/PickupsPage';
 
 // Phase 2 Extended pages
 import PaymentsPage from './pages/admin/PaymentsPage';
@@ -88,9 +90,14 @@ import PackageTrackingPage from './pages/admin/PackageTrackingPage';
 import QuotationsListPage from './pages/admin/QuotationsListPage';
 import QuotationCreatePage from './pages/admin/QuotationCreatePage';
 
+// Phase 5 pages
+import RoleManagementPage from './pages/admin/RoleManagementPage';
+import FeedbackFormPage from './pages/customer/FeedbackFormPage';
+
 // Delivery pages
 import DeliveryPage from './pages/staff/DeliveryPage';
 import TrackingPage from './pages/customer/TrackingPage';
+import JobTrackingPage from './pages/customer/JobTrackingPage';
 
 // ─── Placeholder pages (replaced in later phases) ────────
 const Placeholder = ({ title }: { title: string }) => (
@@ -319,6 +326,7 @@ export default function App() {
         <Route path="loyalty" element={<LoyaltySettingsPage />} />
         <Route path="premium-services" element={<PremiumServicesPage />} />
         <Route path="deliveries" element={<AdminDeliveriesPage />} />
+        <Route path="pickups" element={<PickupsPage />} />
         {/* ─── Phase 2 Extended Routes ─── */}
         <Route path="payments" element={<PaymentsPage />} />
         <Route path="feedback" element={<FeedbackPage />} />
@@ -327,6 +335,7 @@ export default function App() {
         <Route path="staff-hr" element={<StaffHRPage />} />
         <Route path="whatsapp" element={<WhatsAppPage />} />
         <Route path="customer-rewards" element={<CustomerRewardsPage />} />
+        <Route path="roles" element={<RoleManagementPage />} />
         {/* ─── Quotations Routes ─── */}
         <Route path="quotations" element={<QuotationsListPage />} />
         <Route path="quotations/new" element={<QuotationCreatePage />} />
@@ -355,11 +364,19 @@ export default function App() {
       }>
         <Route index element={<Navigate to="job-carts" replace />} />
         <Route path="job-carts" element={<StaffJobCartsPage />} />
+        <Route path="job-carts/new" element={<JobCartCreatePage />} />
+        <Route path="job-carts/:id" element={<JobCartDetailPage />} />
         <Route path="inventory" element={<StaffInventoryPage />} />
         <Route path="benefits" element={<StaffBenefitsPage />} />
         <Route path="inquiry" element={<StaffInquiryPage />} />
         <Route path="delivery" element={<DeliveryPage />} />
+        <Route path="check-in" element={<CheckInOutPage />} />
+        <Route path="quick-wash" element={<QuickWashPage />} />
       </Route>
+
+      {/* Public Tracking Page */}
+      <Route path="/job/:id" element={<JobTrackingPage />} />
+      <Route path="/feedback/:token" element={<FeedbackFormPage />} />
 
       {/* Redirects */}
       <Route path="/" element={<Navigate to={getDefaultRedirect()} replace />} />

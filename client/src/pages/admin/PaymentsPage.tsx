@@ -9,9 +9,11 @@ import { toast } from 'react-hot-toast';
 
 const STATUS_BADGES: Record<string, string> = {
   completed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  captured: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   pending: 'bg-amber-50 text-amber-700 border-amber-200',
   failed: 'bg-red-50 text-red-700 border-red-200',
   refunded: 'bg-purple-50 text-purple-700 border-purple-200',
+  partial_refund: 'bg-indigo-50 text-indigo-700 border-indigo-200',
 };
 
 export default function PaymentsPage() {
@@ -20,6 +22,11 @@ export default function PaymentsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [showPayModal, setShowPayModal] = useState(false);
   const [payForm, setPayForm] = useState({ customer_id: '', job_cart_id: '', amount: '', wallet_spend: '', payment_method: 'cash', notes: '' });
+  
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [selectedPaymentForRefund, setSelectedPaymentForRefund] = useState<any>(null);
+  const [refundForm, setRefundForm] = useState({ amount: '', reason: '' });
+  const createRefund = useCreateRefund();
 
   const { data: paymentsData, isLoading: loadingPayments } = usePayments({ status: statusFilter });
   const { data: advanceData, isLoading: loadingAdvances } = useAdvancePayments('advance_paid');
@@ -131,6 +138,41 @@ export default function PaymentsPage() {
     );
   };
 
+  const handleOpenRefundModal = (payment: any) => {
+    setSelectedPaymentForRefund(payment);
+    setRefundForm({ amount: payment.amount.toString(), reason: '' });
+    setShowRefundModal(true);
+  };
+
+  const handleCreateRefund = () => {
+    if (!selectedPaymentForRefund) return;
+    const refundAmt = parseFloat(refundForm.amount) || 0;
+    if (refundAmt <= 0) {
+      toast.error('Enter a valid refund amount');
+      return;
+    }
+    if (refundAmt > parseFloat(selectedPaymentForRefund.amount)) {
+      toast.error('Refund amount cannot exceed payment amount');
+      return;
+    }
+
+    createRefund.mutate({
+      payment_id: selectedPaymentForRefund.id,
+      amount: refundAmt,
+      reason: refundForm.reason
+    }, {
+      onSuccess: () => {
+        toast.success('Refund processed successfully');
+        setShowRefundModal(false);
+        setSelectedPaymentForRefund(null);
+        setRefundForm({ amount: '', reason: '' });
+      },
+      onError: (err: any) => {
+        toast.error(err.response?.data?.error || 'Failed to process refund');
+      }
+    });
+  };
+
   const handleDownloadInvoice = (paymentId: number) => {
     const token = localStorage.getItem('token');
     window.open(`/api/payments/${paymentId}/invoice?token=${token}`, '_blank');
@@ -237,10 +279,19 @@ export default function PaymentsPage() {
                     <td className="py-3 px-4 text-center"><span className={`text-xs px-2 py-0.5 rounded-full border font-medium capitalize ${STATUS_BADGES[p.payment_status] || 'bg-gray-50'}`}>{p.payment_status}</span></td>
                     <td className="py-3 px-4 text-gray-500 text-xs">{p.paid_at ? new Date(p.paid_at).toLocaleDateString('en-IN') : '—'}</td>
                     <td className="py-3 px-4 text-right">
-                      <div title="Download Receipt" className="inline-block">
-                        <RippleButton variant="ghost" className="text-blue-600 hover:bg-blue-50 p-2" onClick={() => handleDownloadInvoice(p.id)}>
-                          <Download size={16} />
-                        </RippleButton>
+                      <div className="flex justify-end gap-1">
+                        {(p.payment_status === 'captured' || p.payment_status === 'completed' || p.payment_status === 'partial_refund') && (
+                          <div title="Initiate Refund" className="inline-block">
+                            <RippleButton variant="ghost" className="text-red-600 hover:bg-red-50 p-2" onClick={() => handleOpenRefundModal(p)}>
+                              <RefreshCw size={16} />
+                            </RippleButton>
+                          </div>
+                        )}
+                        <div title="Download Receipt" className="inline-block">
+                          <RippleButton variant="ghost" className="text-blue-600 hover:bg-blue-50 p-2" onClick={() => handleDownloadInvoice(p.id)}>
+                            <Download size={16} />
+                          </RippleButton>
+                        </div>
                       </div>
                     </td>
                   </motion.tr>
@@ -328,6 +379,34 @@ export default function PaymentsPage() {
               <RippleButton variant="ghost" onClick={() => setShowPayModal(false)}>Cancel</RippleButton>
               <RippleButton variant="ghost" onClick={handleRazorpayPayment} className="border border-blue-500 text-blue-600 hover:bg-blue-50">Pay via Razorpay</RippleButton>
               <RippleButton variant="primary" onClick={handleCreatePayment}>Record Manual Payment</RippleButton>
+            </div>
+          </div>
+        </div>
+      </AnimatedModal>
+
+      {/* Refund Modal */}
+      <AnimatedModal isOpen={showRefundModal} onClose={() => setShowRefundModal(false)}>
+        <div className="p-6">
+          <h3 className="text-xl font-bold text-[#1c1b1b] mb-6">Initiate Refund</h3>
+          <div className="space-y-4">
+            {selectedPaymentForRefund && (
+              <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 text-xs space-y-1">
+                <div><span className="font-semibold text-gray-500">Customer:</span> {selectedPaymentForRefund.customer_name}</div>
+                <div><span className="font-semibold text-gray-500">Method:</span> <span className="uppercase">{selectedPaymentForRefund.payment_method}</span></div>
+                <div><span className="font-semibold text-gray-500">Original Amount:</span> ₹{parseFloat(selectedPaymentForRefund.amount).toLocaleString('en-IN')}</div>
+              </div>
+            )}
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Refund Amount (₹)</label>
+              <input type="number" value={refundForm.amount} onChange={e => setRefundForm(p => ({ ...p, amount: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm" placeholder="0.00" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Reason for Refund</label>
+              <textarea value={refundForm.reason} onChange={e => setRefundForm(p => ({ ...p, reason: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm" rows={3} placeholder="Enter reason..." />
+            </div>
+            <div className="flex justify-end gap-3 pt-4">
+              <RippleButton variant="ghost" onClick={() => setShowRefundModal(false)}>Cancel</RippleButton>
+              <RippleButton variant="primary" onClick={handleCreateRefund} disabled={createRefund.isPending} className="bg-red-600 hover:bg-red-700 text-white">Confirm Refund</RippleButton>
             </div>
           </div>
         </div>

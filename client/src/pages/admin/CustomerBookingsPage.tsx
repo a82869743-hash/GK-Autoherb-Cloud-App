@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Calendar, Clock, Car, Phone, User, FileText,
-  ChevronLeft, ChevronRight, Loader2, X, Eye, History
+  ChevronLeft, ChevronRight, Loader2, X, Eye, History, Plus
 } from 'lucide-react';
-import { useBookings, useVehicleHistory } from '../../api/hooks/useBookings';
+import { useBookings, useVehicleHistory, useCreateManualBooking } from '../../api/hooks/useBookings';
+import { useServices } from '../../api/hooks/useServices';
 import AdminTopBar from '../../components/layout/AdminTopBar';
 import Button from '../../components/ui/Button';
 import StatusBadge from '../../components/ui/StatusBadge';
@@ -41,6 +42,26 @@ export default function CustomerBookingsPage() {
   const [confirmType, setConfirmType] = useState<'approve' | 'reject' | null>(null);
   const [confirmTargetId, setConfirmTargetId] = useState<number | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
+
+  // Manual booking states
+  const [manualBookingOpen, setManualBookingOpen] = useState(false);
+  const [searchCustomerQuery, setSearchCustomerQuery] = useState('');
+  const [customersList, setCustomersList] = useState<any[]>([]);
+  const [customerVehicles, setCustomerVehicles] = useState<any[]>([]);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [availableSlots, setAvailableSlots] = useState<any[]>([]);
+
+  const [manualForm, setManualForm] = useState({
+    customer_id: '',
+    vehicle_id: '',
+    slot_id: '',
+    service_id: '',
+    notes: '',
+    booking_notes: ''
+  });
+
+  const { data: servicesRes } = useServices();
+  const createManualBooking = useCreateManualBooking();
 
   // Debounce search
   useEffect(() => {
@@ -100,6 +121,86 @@ export default function CustomerBookingsPage() {
     }
   };
 
+  // Fetch customers for manual booking modal
+  useEffect(() => {
+    if (manualBookingOpen) {
+      api.get('/customers?limit=250').then((res) => {
+        setCustomersList(res.data.data || []);
+      }).catch(() => {});
+    }
+  }, [manualBookingOpen]);
+
+  // Fetch customer vehicles when customer selection changes
+  useEffect(() => {
+    if (manualForm.customer_id) {
+      api.get(`/vehicles/by-customer/${manualForm.customer_id}`).then((res) => {
+        setCustomerVehicles(res.data.data || []);
+        // Auto-select first vehicle if available
+        const vehicles = res.data.data || [];
+        if (vehicles.length > 0) {
+          setManualForm(prev => ({ ...prev, vehicle_id: String(vehicles[0].id) }));
+        } else {
+          setManualForm(prev => ({ ...prev, vehicle_id: '' }));
+        }
+      }).catch(() => {
+        setCustomerVehicles([]);
+      });
+    } else {
+      setCustomerVehicles([]);
+    }
+  }, [manualForm.customer_id]);
+
+  // Fetch slots for selected date
+  useEffect(() => {
+    if (manualBookingOpen) {
+      api.get(`/slots?date=${selectedDate}`).then((res) => {
+        setAvailableSlots(res.data.data || []);
+      }).catch(() => {
+        setAvailableSlots([]);
+      });
+    }
+  }, [selectedDate, manualBookingOpen]);
+
+  const handleCreateManualBookingSubmit = () => {
+    if (!manualForm.customer_id) { toast.error('Select a customer'); return; }
+    if (!manualForm.slot_id) { toast.error('Select a slot'); return; }
+    if (!manualForm.service_id) { toast.error('Select a service'); return; }
+
+    const selectedCust = customersList.find(c => String(c.id) === manualForm.customer_id);
+    const selectedVeh = customerVehicles.find(v => String(v.id) === manualForm.vehicle_id);
+
+    createManualBooking.mutate({
+      customer_id: parseInt(manualForm.customer_id),
+      slot_id: parseInt(manualForm.slot_id),
+      service_id: parseInt(manualForm.service_id),
+      vehicle_id: manualForm.vehicle_id ? parseInt(manualForm.vehicle_id) : undefined,
+      vehicle_brand: selectedVeh?.brand || undefined,
+      vehicle_model: selectedVeh?.model || undefined,
+      vehicle_reg_no: selectedVeh?.registration_no || undefined,
+      vehicle_category: selectedVeh?.category || undefined,
+      notes: manualForm.notes || undefined,
+      booking_notes: manualForm.booking_notes || undefined,
+    }, {
+      onSuccess: (res: any) => {
+        toast.success('Manual booking created and confirmed successfully!');
+        setManualBookingOpen(false);
+        setManualForm({
+          customer_id: '',
+          vehicle_id: '',
+          slot_id: '',
+          service_id: '',
+          notes: '',
+          booking_notes: ''
+        });
+        setSearchCustomerQuery('');
+        refetch();
+      },
+      onError: (err: any) => {
+        toast.error(err.response?.data?.error || 'Failed to create manual booking');
+      }
+    });
+  };
+
   const handleCreateJobCart = (booking: any) => {
     navigate('/admin/job-carts/new', {
       state: {
@@ -123,6 +224,11 @@ export default function CustomerBookingsPage() {
       <AdminTopBar
         title="Customer Bookings"
         subtitle="Manage incoming customer slot bookings"
+        actions={
+          <Button onClick={() => setManualBookingOpen(true)} icon={<Plus size={16} />}>
+            New Manual Booking
+          </Button>
+        }
       />
 
       {/* Tabs + Search Row */}
@@ -451,6 +557,256 @@ export default function CustomerBookingsPage() {
             )}
           </div>
         )}
+      </Modal>
+
+      {/* Create Manual Booking Modal */}
+      <Modal
+        open={manualBookingOpen}
+        onClose={() => {
+          setManualBookingOpen(false);
+          setManualForm({
+            customer_id: '',
+            vehicle_id: '',
+            slot_id: '',
+            service_id: '',
+            notes: '',
+            booking_notes: ''
+          });
+          setSearchCustomerQuery('');
+        }}
+        title="Create Manual Booking"
+        size="md"
+      >
+        <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+          {/* Step 1: Customer Selection */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-widest text-[#5f5e5e] mb-1.5">
+              Select Customer
+            </label>
+            {!manualForm.customer_id ? (
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by name or mobile..."
+                    value={searchCustomerQuery}
+                    onChange={(e) => setSearchCustomerQuery(e.target.value)}
+                    className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-gray-200 text-sm font-medium bg-white focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F] outline-none transition-all"
+                  />
+                  {searchCustomerQuery && (
+                    <button onClick={() => setSearchCustomerQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+                {searchCustomerQuery.trim().length > 0 && (
+                  <div className="border border-gray-100 rounded-xl max-h-40 overflow-y-auto divide-y divide-gray-50 bg-white">
+                    {customersList
+                      .filter(c =>
+                        c.name.toLowerCase().includes(searchCustomerQuery.toLowerCase()) ||
+                        c.mobile.includes(searchCustomerQuery)
+                      )
+                      .slice(0, 5)
+                      .map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            setManualForm(prev => ({ ...prev, customer_id: String(c.id) }));
+                            setSearchCustomerQuery('');
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-gray-50 text-sm font-medium text-[#1c1b1b] flex items-center justify-between"
+                        >
+                          <div>
+                            <p className="font-bold">{c.name}</p>
+                            <p className="text-xs text-[#5f5e5e]">{c.mobile}</p>
+                          </div>
+                          <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded font-black text-[#5f5e5e] uppercase">Select</span>
+                        </button>
+                      ))}
+                    {customersList.filter(c =>
+                      c.name.toLowerCase().includes(searchCustomerQuery.toLowerCase()) ||
+                      c.mobile.includes(searchCustomerQuery)
+                    ).length === 0 && (
+                      <p className="text-xs text-[#5f5e5e] p-3 text-center">No customers found matching search.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center justify-between p-3 bg-green-50 rounded-xl border border-green-100">
+                <div>
+                  <p className="text-sm font-bold text-green-900">
+                    {customersList.find(c => String(c.id) === manualForm.customer_id)?.name}
+                  </p>
+                  <p className="text-xs text-green-700">
+                    {customersList.find(c => String(c.id) === manualForm.customer_id)?.mobile}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setManualForm(prev => ({ ...prev, customer_id: '', vehicle_id: '' }))}
+                  className="text-xs font-black text-[#D32F2F] hover:underline"
+                >
+                  Change
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Step 2: Vehicle Selection */}
+          {manualForm.customer_id && (
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-widest text-[#5f5e5e] mb-1.5">
+                Select Vehicle
+              </label>
+              {customerVehicles.length > 0 ? (
+                <select
+                  value={manualForm.vehicle_id}
+                  onChange={(e) => setManualForm(prev => ({ ...prev, vehicle_id: e.target.value }))}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F] outline-none transition-all animate-fadeIn"
+                >
+                  {customerVehicles.map(v => (
+                    <option key={v.id} value={v.id}>
+                      {v.brand} {v.model} ({v.registration_no})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-xs text-amber-600 bg-amber-50 p-3 rounded-xl border border-amber-100 font-medium">
+                  No vehicles registered for this customer. Go to Customers page to add a vehicle, or proceed with manual details.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Step 3: Date & Slot */}
+          {manualForm.customer_id && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-widest text-[#5f5e5e] mb-1.5">
+                  Select Date
+                </label>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  min={new Date().toISOString().split('T')[0]}
+                  onChange={(e) => {
+                    setSelectedDate(e.target.value);
+                    setManualForm(prev => ({ ...prev, slot_id: '' }));
+                  }}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F] outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-widest text-[#5f5e5e] mb-1.5">
+                  Select Slot
+                </label>
+                <select
+                  value={manualForm.slot_id}
+                  onChange={(e) => setManualForm(prev => ({ ...prev, slot_id: e.target.value }))}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F] outline-none transition-all"
+                >
+                  <option value="">-- Choose Slot --</option>
+                  {availableSlots
+                    .filter(s => !s.is_blocked)
+                    .map(s => (
+                      <option key={s.id} value={s.id} disabled={s.booked_count >= s.max_capacity}>
+                        {formatTime(s.start_time)} - {formatTime(s.end_time)} ({s.booked_count}/{s.max_capacity} booked)
+                      </option>
+                    ))}
+                </select>
+                {availableSlots.filter(s => !s.is_blocked).length === 0 && (
+                  <p className="text-[10px] text-red-500 mt-1 font-bold">No slots generated or available on this day</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Service selection */}
+          {manualForm.customer_id && (
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-widest text-[#5f5e5e] mb-1.5">
+                Select Service
+              </label>
+              <select
+                value={manualForm.service_id}
+                onChange={(e) => setManualForm(prev => ({ ...prev, service_id: e.target.value }))}
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F] outline-none transition-all"
+              >
+                <option value="">-- Choose Service --</option>
+                {(servicesRes?.data || [])
+                  .filter((s: any) => s.is_active !== 0)
+                  .map((s: any) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} (Duration: {s.duration_minutes}m)
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
+
+          {/* Step 5: Notes & Booking Notes */}
+          {manualForm.customer_id && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-widest text-[#5f5e5e] mb-1.5">
+                  Customer Notes (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={manualForm.notes}
+                  onChange={(e) => setManualForm(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="e.g. Customer requests extra interior cleaning..."
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F] outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-widest text-[#5f5e5e] mb-1.5">
+                  Admin Internal Notes (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={manualForm.booking_notes}
+                  onChange={(e) => setManualForm(prev => ({ ...prev, booking_notes: e.target.value }))}
+                  placeholder="e.g. Confirmed on phone with customer..."
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F] outline-none transition-all"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setManualBookingOpen(false);
+              setManualForm({
+                customer_id: '',
+                vehicle_id: '',
+                slot_id: '',
+                service_id: '',
+                notes: '',
+                booking_notes: ''
+              });
+              setSearchCustomerQuery('');
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreateManualBookingSubmit}
+            loading={createManualBooking.isPending}
+            disabled={!manualForm.customer_id || !manualForm.slot_id || !manualForm.service_id}
+          >
+            Create & Confirm
+          </Button>
+        </div>
       </Modal>
 
       <ConfirmModal

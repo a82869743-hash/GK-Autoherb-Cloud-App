@@ -322,3 +322,85 @@ exports.getInvoice = async (req, res) => {
     res.status(500).json({ success: false, error: err.message || 'Failed to generate invoice' });
   }
 };
+
+// ─── UPDATE WASH PHASE ─────────────────────
+exports.updatePhase = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const { id } = req.params;
+    const { phase } = req.body;
+
+    const validPhases = ['pre_wash', 'foam_apply', 'pressure_rinse', 'interior_clean', 'dry_polish', 'complete'];
+    if (!validPhases.includes(phase)) {
+      await conn.rollback();
+      return res.status(400).json({ success: false, error: `Invalid phase. Must be: ${validPhases.join(', ')}` });
+    }
+
+    const [existing] = await conn.query(
+      "SELECT id FROM bookings WHERE id = ? AND job_type = 'quick_wash'", [id]
+    );
+    if (!existing.length) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, error: 'Quick wash booking not found' });
+    }
+
+    const updates = {
+      current_phase: phase,
+      phase_updated_at: new Date(),
+    };
+
+    if (phase === 'complete') {
+      updates.wash_status = 'completed';
+      updates.status = 'completed';
+    } else {
+      updates.wash_status = 'washing';
+    }
+
+    const setClauses = Object.entries(updates).map(([k]) => `${k} = ?`).join(', ');
+    const values = Object.values(updates);
+
+    await conn.query(
+      `UPDATE bookings SET ${setClauses} WHERE id = ?`,
+      [...values, id]
+    );
+
+    await conn.commit();
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('wash:phase_updated', { bookingId: parseInt(id), phase, timestamp: updates.phase_updated_at });
+      if (phase === 'complete') {
+        io.emit('quick_wash_updated', { bookingId: parseInt(id), wash_status: 'completed' });
+      } else {
+        io.emit('quick_wash_updated', { bookingId: parseInt(id), wash_status: 'washing' });
+      }
+    }
+
+    res.json({ success: true, message: `Wash phase updated to ${phase}` });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Quick wash phase update error:', err);
+    res.status(500).json({ success: false, error: 'Failed to update phase' });
+  } finally {
+    conn.release();
+  }
+};
+
+// ─── GET WASH PHASE ────────────────────────
+exports.getPhase = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [rows] = await pool.query(
+      "SELECT id, current_phase, phase_updated_at, wash_status FROM bookings WHERE id = ? AND job_type = 'quick_wash'",
+      [id]
+    );
+    if (!rows.length) {
+      return res.status(404).json({ success: false, error: 'Quick wash booking not found' });
+    }
+    res.json({ success: true, data: rows[0] });
+  } catch (err) {
+    console.error('Get quick wash phase error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};

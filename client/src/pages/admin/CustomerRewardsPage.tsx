@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Gift, CheckCircle, Clock, Plus, Search, Star } from 'lucide-react';
 import { useCustomerRewards, useAwardWelcomeReward, useRedeemReward } from '../../api/hooks/useCustomerRewards';
+import api from '../../api/axiosInstance';
 import PremiumPageHeader from '../../components/shared/PremiumPageHeader';
 import { PageTransition, AnimatedCard, RippleButton, AnimatedModal } from '../../components/ui/Animations';
 
@@ -11,6 +12,22 @@ export default function CustomerRewardsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [showAwardModal, setShowAwardModal] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
+
+  useEffect(() => {
+    if (showAwardModal) {
+      setLoadingCustomers(true);
+      api.get('/customers')
+        .then(res => {
+          if (res.data.success) {
+            setCustomers(res.data.data);
+          }
+        })
+        .catch(err => console.error(err))
+        .finally(() => setLoadingCustomers(false));
+    }
+  }, [showAwardModal]);
 
   const { data: rewardsData, isLoading } = useCustomerRewards(statusFilter ? { redeemed: statusFilter === 'redeemed' } : undefined);
 
@@ -166,7 +183,15 @@ export default function CustomerRewardsPage() {
                 className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500"
               >
                 <option value="">-- Choose Customer --</option>
-                <option value="1">Guest User (ID: 1)</option>
+                {loadingCustomers ? (
+                  <option disabled>Loading customers...</option>
+                ) : (
+                  customers.map((c: any) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.mobile})
+                    </option>
+                  ))
+                )}
               </select>
             </div>
             <div className="bg-pink-50 border border-pink-100 p-4 rounded-xl flex items-start gap-3">

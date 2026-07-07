@@ -16,14 +16,24 @@ export default function ProfilePage() {
     name: user?.name || '',
     email: user?.email || '',
     mobile: user?.mobile || '',
-    address: ''
+    address: '',
+    opt_out_promotional: user?.opt_out_promotional === 1
   });
 
   const handleSave = async () => {
     try {
-      await updateProfileMut.mutateAsync({ name: form.name, email: form.email, address: form.address });
+      await updateProfileMut.mutateAsync({ 
+        name: form.name, 
+        email: form.email, 
+        address: form.address,
+        opt_out_promotional: form.opt_out_promotional ? 1 : 0
+      });
       if (user) {
-        updateUser({ name: form.name, email: form.email });
+        updateUser({ 
+          name: form.name, 
+          email: form.email,
+          opt_out_promotional: form.opt_out_promotional ? 1 : 0
+        });
       }
       toast('success', 'Profile updated successfully');
     } catch (err: any) {
@@ -53,7 +63,7 @@ export default function ProfilePage() {
           </div>
 
           <form onSubmit={e => { e.preventDefault(); handleSave(); }}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <Input 
                 label="Full Name" 
                 value={form.name} 
@@ -76,6 +86,21 @@ export default function ProfilePage() {
                 value={form.address} 
                 onChange={e => setForm({...form, address: e.target.value})} 
               />
+            </div>
+
+            <div className="mb-8 border-t border-gray-100 pt-6">
+              <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3">Notification Preferences</h3>
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <input 
+                  type="checkbox" 
+                  checked={form.opt_out_promotional} 
+                  onChange={e => setForm({...form, opt_out_promotional: e.target.checked})}
+                  className="rounded text-[#D32F2F] focus:ring-[#D32F2F] border-gray-300 w-4 h-4 cursor-pointer mt-0.5"
+                />
+                <span className="text-sm font-medium text-[#1c1b1b] group-hover:text-gray-900 select-none">
+                  Opt out of promotional alerts, reminders, and marketing campaigns (essential booking and service updates will still be sent)
+                </span>
+              </label>
             </div>
 
             <div className="flex justify-end pt-4 border-t border-gray-100">

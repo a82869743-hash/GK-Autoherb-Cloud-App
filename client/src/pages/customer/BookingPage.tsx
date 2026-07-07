@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Check, Calendar, Clock, Car, Sparkles, Loader2, ArrowLeft } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, Calendar, Clock, Car, Sparkles, Loader2, ArrowLeft, CreditCard, QrCode } from 'lucide-react';
 import { useSlots } from '../../api/hooks/useSlots';
 import { useCreateBooking } from '../../api/hooks/useBookings';
 import Button from '../../components/ui/Button';
@@ -9,6 +9,9 @@ import { useUIStore } from '../../store/uiStore';
 import { formatTime } from '../../utils/formatters';
 import { useBrands, useModels } from '../../api/hooks/useVehicles';
 import api from '../../api/axiosInstance';
+import { useAuthStore } from '../../store/authStore';
+import QrPaymentModal from '../../components/shared/QrPaymentModal';
+import Modal from '../../components/ui/Modal';
 
 const STEPS = ['Service', 'Vehicle', 'Date', 'Time', 'Confirm'];
 
@@ -36,6 +39,12 @@ export default function BookingPage() {
 
   const [step, setStep] = useState(0);
   const [filter, setFilter] = useState('all');
+
+  // QR Payment states
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [qrAmount, setQrAmount] = useState(0);
+  const [activeBookingId, setActiveBookingId] = useState<number | undefined>(undefined);
+  const [choiceBookingData, setChoiceBookingData] = useState<any | null>(null);
 
   // Detect if this is a package-booking flow
   const isPackageBooking = searchParams.get('from_package') === '1';
@@ -69,6 +78,13 @@ export default function BookingPage() {
   // Step 5: Confirm
   const [selectedSlot, setSelectedSlot] = useState<any>(null);
   const [bookingResult, setBookingResult] = useState<any>(null);
+  const [settings, setSettings] = useState<Record<string, string>>({});
+  const [submittingOnline, setSubmittingOnline] = useState(false);
+
+  // Pickup options
+  const [requestPickup, setRequestPickup] = useState(false);
+  const [pickupAddress, setPickupAddress] = useState('');
+  const [pickupTime, setPickupTime] = useState('');
 
   // Autocomplete data
   const { data: brandsRes } = useBrands();
@@ -78,11 +94,14 @@ export default function BookingPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [svcRes, pkgRes, myVehiclesRes, activePkgRes] = await Promise.all([
+        const initialVehicleId = new URLSearchParams(window.location.search).get('vehicle_id');
+        const activePkgUrl = initialVehicleId ? `/user-packages/active?vehicle_id=${initialVehicleId}` : '/user-packages/active';
+        const [svcRes, pkgRes, myVehiclesRes, activePkgRes, settingsRes] = await Promise.all([
           api.get('/services').catch(() => ({ data: { data: [] } })),
           api.get('/packages').catch(() => ({ data: { data: [] } })),
           api.get('/vehicles/my-vehicles').catch(() => ({ data: { data: [] } })),
-          api.get('/user-packages/active').catch(() => ({ data: { data: [] } })),
+          api.get(activePkgUrl).catch(() => ({ data: { data: [] } })),
+          api.get('/settings').catch(() => ({ data: { data: {} } })),
         ]);
         setServices(svcRes.data.data || []);
         setPackages(pkgRes.data.data || []);
@@ -92,11 +111,17 @@ export default function BookingPage() {
         
         // Auto-select primary car (or only car) if available
         if (fetchedVehicles.length > 0) {
-          const primary = fetchedVehicles.find((v: any) => v.is_primary) || fetchedVehicles[0];
+          const initialVehicleId = searchParams.get('vehicle_id');
+          const primary = initialVehicleId
+            ? (fetchedVehicles.find((v: any) => v.id.toString() === initialVehicleId) || fetchedVehicles.find((v: any) => v.is_primary) || fetchedVehicles[0])
+            : (fetchedVehicles.find((v: any) => v.is_primary) || fetchedVehicles[0]);
           setSelectedVehicleId(primary.id);
           setBrand(primary.brand);
           setModel(primary.model);
           setRegNo(primary.registration_no || '');
+          if (primary.category) {
+            setFilter(primary.category);
+          }
         } else {
           setManualEntry(true);
         }
@@ -104,6 +129,10 @@ export default function BookingPage() {
         // activePkgRes.data.data is a single object or null
         const actPkg = activePkgRes.data.data;
         setActivePackages(actPkg ? [actPkg] : []);
+
+        if (settingsRes.data.success) {
+          setSettings(settingsRes.data.data || {});
+        }
       } catch {} finally { setServicesLoading(false); }
     })();
   }, []);
@@ -121,6 +150,17 @@ export default function BookingPage() {
       setSelectedPackageServiceNames([]);
     }
   }, [searchParams, activePackages, isPackageBooking]);
+
+  useEffect(() => {
+    if (!selectedVehicleId) return;
+    (async () => {
+      try {
+        const res = await api.get(`/user-packages/active?vehicle_id=${selectedVehicleId}`);
+        const actPkg = res.data.data;
+        setActivePackages(actPkg ? [actPkg] : []);
+      } catch {}
+    })();
+  }, [selectedVehicleId]);
 
   const canNext = useMemo(() => {
     switch (step) {
@@ -155,8 +195,135 @@ export default function BookingPage() {
     return days;
   }, [calMonth]);
 
+  const totalBookingDuration = useMemo(() => {
+    if (isPackageBooking) {
+      let sum = 0;
+      for (const name of selectedPackageServiceNames) {
+        const matched = services.find((s) => {
+          const sName = s.name.toLowerCase();
+          const uName = name.toLowerCase();
+          if (sName === uName) return true;
+          if ((uName === 'foam wash' || uName === 'car foam wash') && (sName.includes('foam wash') || sName.includes('car wash'))) return true;
+          if ((uName === 'wax coat' || uName === 'body wax coat') && (sName.includes('teflon') || sName.includes('wax') || sName.includes('ceramic'))) return true;
+          if (uName === 'deep cleaning' && sName.includes('interior cleaning')) return true;
+          if (uName === 'two wheeler wash' && sName.includes('bike wash')) return true;
+          if (uName.includes('two wheeler') && sName.includes('two wheeler')) return true;
+          return false;
+        });
+        if (matched) sum += Number(matched.duration_minutes) || 0;
+      }
+      return sum;
+    } else {
+      return selectedServicesObjs.reduce((sum, s) => sum + (Number(s.duration_minutes) || 0), 0);
+    }
+  }, [isPackageBooking, selectedPackageServiceNames, selectedServicesObjs, services]);
+
+  const estimatedTotal = useMemo(() => {
+    if (isPackageBooking) return 0;
+    const cat = filter !== 'all' ? filter : 'sedan';
+    return selectedServicesObjs.reduce((sum, s) => {
+      const priceKey = `price_${cat}`;
+      return sum + (Number(s[priceKey]) || Number(s.price_sedan) || 0);
+    }, 0);
+  }, [isPackageBooking, filter, selectedServicesObjs]);
+
+  const requiredAdvance = useMemo(() => {
+    if (isPackageBooking) return 0;
+    const advType = settings.advance_type || 'none';
+    const advVal = parseFloat(settings.advance_value || '0');
+    if (advType === 'fixed') {
+      return Math.min(estimatedTotal, advVal);
+    } else if (advType === 'percentage') {
+      return (estimatedTotal * advVal) / 100;
+    }
+    return 0;
+  }, [isPackageBooking, settings, estimatedTotal]);
+
+
+  const loadRazorpayScript = () => {
+    return new Promise<boolean>((resolve) => {
+      if ((window as any).Razorpay) return resolve(true);
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handlePayOnline = async (bookingId: number, advanceAmt: number, fullBookingResponse: any) => {
+    setSubmittingOnline(true);
+    try {
+      const sdkLoaded = await loadRazorpayScript();
+      if (!sdkLoaded) {
+        toast('error', 'Razorpay SDK failed to load. Are you online?');
+        setSubmittingOnline(false);
+        return;
+      }
+
+      const resOrder = await api.post('/payments/razorpay/order', {
+        amount: advanceAmt,
+        booking_id: bookingId
+      });
+
+      if (!resOrder.data.success) {
+        throw new Error(resOrder.data.error || 'Failed to create payment order');
+      }
+
+      const orderData = resOrder.data.data;
+
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_123',
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: 'GK AutoHerb',
+        description: `Booking Advance Payment (Booking #${bookingId})`,
+        order_id: orderData.id,
+        prefill: {
+          name: useAuthStore.getState().user?.name || '',
+          email: useAuthStore.getState().user?.email || '',
+          contact: useAuthStore.getState().user?.mobile || ''
+        },
+        handler: async function (response: any) {
+          try {
+            const resVerify = await api.post('/payments/razorpay/verify', {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature
+            });
+
+            if (resVerify.data.success) {
+              toast('success', 'Payment successful! Your booking is registered.');
+              setBookingResult(fullBookingResponse);
+              setChoiceBookingData(null);
+            } else {
+              throw new Error('Payment verification failed');
+            }
+          } catch (err: any) {
+            toast('error', err.response?.data?.error || 'Payment verification failed. Please contact support.');
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            toast('warning', 'Payment cancelled. Your booking slot is reserved for 10 minutes. You can pay from bookings list.');
+          }
+        },
+        theme: { color: '#D32F2F' }
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
+    } catch (err: any) {
+      console.error('RAZORPAY ERROR:', err);
+      toast('error', err.message || 'An error occurred during Razorpay checkout.');
+    } finally {
+      setSubmittingOnline(false);
+    }
+  };
+
   const handleBook = async () => {
     try {
+      setSubmittingOnline(true);
       const res = await createMut.mutateAsync({
         slot_id: selectedSlot.id,
         service_ids: !isPackageBooking && selectedServices.length > 0 ? selectedServices : undefined,
@@ -169,10 +336,27 @@ export default function BookingPage() {
         vehicle_category: filter !== 'all' ? filter : undefined,
         use_package: isPackageBooking ? true : undefined,
       });
-      setBookingResult(res);
+
+      const bookingData = res.data;
+
+      if (bookingData && bookingData.id && requestPickup) {
+        await api.post('/pickup-requests', {
+          booking_id: bookingData.id,
+          address: pickupAddress,
+          scheduled_time: pickupTime || undefined
+        });
+      }
+
+      if (bookingData && bookingData.status === 'pending_payment' && bookingData.advance_amount > 0) {
+        setChoiceBookingData({ bookingData, fullRes: res });
+      } else {
+        setBookingResult(res);
+      }
     } catch (err: any) {
       console.error('BOOKING ERROR:', err);
       toast('error', err?.response?.data?.error || 'Booking failed');
+    } finally {
+      setSubmittingOnline(false);
     }
   };
 
@@ -217,6 +401,26 @@ export default function BookingPage() {
             Book Another
           </Button>
         </div>
+      </div>
+    );
+  }
+
+  if (settings.bookings_paused === '1') {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center max-w-md mx-auto">
+        <div className="w-20 h-20 rounded-full bg-red-50 flex items-center justify-center mb-6 border border-red-100">
+          <Calendar className="w-10 h-10 text-[#D32F2F]" />
+        </div>
+        <h2 className="text-2xl font-extrabold text-gray-900 mb-3">Bookings Paused</h2>
+        <p className="text-gray-600 text-sm mb-6 leading-relaxed">
+          We are temporarily not accepting new online bookings. Please check back later or contact the studio directly for urgent assistance.
+        </p>
+        <button
+          onClick={() => navigate('/customer/bookings')}
+          className="w-full bg-[#1c1b1b] text-white py-3 px-4 rounded-xl font-bold uppercase tracking-wider text-xs hover:bg-black transition-colors"
+        >
+          View My Bookings
+        </button>
       </div>
     );
   }
@@ -326,7 +530,7 @@ export default function BookingPage() {
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
                                 <Sparkles size={14} className="text-purple-500" />
-                                <p className="font-bold text-[#1c1b1b]">{usage.service_name}</p>
+                                <p className="font-bold text-[#1c1b1b]">{usage.service_name}{matchedService?.duration_minutes ? ` · ~${matchedService.duration_minutes} min` : ''}</p>
                               </div>
                               <div className="flex items-center gap-3">
                                 <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${
@@ -356,8 +560,8 @@ export default function BookingPage() {
                 /* No active package */
                 <div className="text-center py-12 bg-white rounded-xl border border-gray-100">
                   <Sparkles size={48} className="text-gray-300 mx-auto mb-3" />
-                  <h3 className="text-lg font-bold text-[#1c1b1b] mb-2">No Active Package</h3>
-                  <p className="text-sm text-[#5f5e5e] mb-4">You do not have any active packages to book from.</p>
+                  <h3 className="text-lg font-bold text-[#1c1b1b] mb-2">No Active or Valid Package</h3>
+                  <p className="text-sm text-[#5f5e5e] mb-4">You do not have an active package. Your previous package may have expired or ran out of credits. Please purchase a new package or book a regular service.</p>
                   <div className="flex justify-center gap-3">
                     <button
                       onClick={() => navigate('/customer/bookings/new')}
@@ -410,7 +614,7 @@ export default function BookingPage() {
                               }`}
                             >
                               <div className="flex items-center justify-between">
-                                <p className="font-bold text-[#1c1b1b]">{svc.name}</p>
+                                <p className="font-bold text-[#1c1b1b]">{svc.name}{svc.duration_minutes ? ` · ~${svc.duration_minutes} min` : ''}</p>
                                 <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-[#D32F2F] border-[#D32F2F]' : 'border-gray-300'}`}>
                                   {isSelected && <Check size={12} className="text-white" />}
                                 </div>
@@ -485,6 +689,9 @@ export default function BookingPage() {
                     setBrand(v.brand);
                     setModel(v.model);
                     setRegNo(v.registration_no || '');
+                    if (v.category) {
+                      setFilter(v.category);
+                    }
                   }
                 }}
                 className="w-full px-4 py-3.5 bg-[#f6f3f2] border border-transparent rounded-lg text-[#1c1b1b] font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white focus:border-[#D32F2F]/30 transition-all duration-200 appearance-none cursor-pointer"
@@ -658,11 +865,38 @@ export default function BookingPage() {
               <span className="text-[#5f5e5e]">Date</span>
               <span className="ml-auto font-bold text-[#1c1b1b]">{new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
             </div>
-            <div className="flex items-center gap-3 py-2">
+            <div className="flex items-center gap-3 py-2 border-b border-gray-50">
               <Clock size={16} className="text-[#D32F2F] shrink-0" />
               <span className="text-[#5f5e5e]">Time</span>
               <span className="ml-auto font-bold text-[#1c1b1b]">{formatTime(selectedSlot?.start_time)} – {formatTime(selectedSlot?.end_time)}</span>
             </div>
+            {totalBookingDuration > 0 && (
+              <div className="flex items-center gap-3 py-2 border-b border-gray-50">
+                <Clock size={16} className="text-[#D32F2F] shrink-0" />
+                <span className="text-[#5f5e5e]">Est. Duration</span>
+                <span className="ml-auto font-bold text-[#1c1b1b]">~{totalBookingDuration} mins</span>
+              </div>
+            )}
+            {!isPackageBooking && (
+              <>
+                <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-gray-700">
+                  <span className="text-[#5f5e5e] font-normal">Total Price</span>
+                  <span className="ml-auto">₹{estimatedTotal}</span>
+                </div>
+                {requiredAdvance > 0 && (
+                  <>
+                    <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-base text-[#D32F2F]">
+                      <span className="text-[#5f5e5e] font-normal text-sm">Advance Required</span>
+                      <span className="ml-auto">₹{requiredAdvance}</span>
+                    </div>
+                    <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-gray-700">
+                      <span className="text-[#5f5e5e] font-normal">Balance Due at Studio</span>
+                      <span className="ml-auto">₹{estimatedTotal - requiredAdvance}</span>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
             {isPackageBooking && (
               <div className="py-2 bg-purple-50 rounded-lg px-3 mt-2 space-y-1">
                 <div className="flex items-center gap-3">
@@ -673,10 +907,58 @@ export default function BookingPage() {
                 <p className="text-[10px] text-purple-600 ml-[28px]">Credit will be deducted only after admin approves this booking. If rejected or cancelled, your balance is restored.</p>
               </div>
             )}
+
+            {/* Pickup Request Section */}
+            <div className="mt-4 p-4 rounded-xl border border-gray-100 bg-gray-50/50 space-y-3">
+              <label className="flex items-center justify-between cursor-pointer">
+                <div>
+                  <span className="font-bold text-[#1c1b1b] text-sm">Request Vehicle Pickup</span>
+                  <p className="text-[11px] text-[#5f5e5e] mt-0.5">
+                    We will pick up the vehicle from your location. {parseFloat(settings.pickup_charge_amount || '0') > 0 ? `Charge: ₹${settings.pickup_charge_amount}` : 'Free of charge'}
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={requestPickup}
+                  onChange={(e) => setRequestPickup(e.target.checked)}
+                  className="accent-[#D32F2F] h-4.5 w-4.5 rounded border-gray-300 text-[#D32F2F] focus:ring-[#D32F2F]"
+                />
+              </label>
+
+              {requestPickup && (
+                <div className="space-y-3 pt-2 border-t border-gray-200/50 animate-fade-in-up">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Pickup Address *</label>
+                    <textarea
+                      rows={2}
+                      value={pickupAddress}
+                      onChange={(e) => setPickupAddress(e.target.value)}
+                      placeholder="Enter full address..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Preferred Pickup Time (Optional)</label>
+                    <input
+                      type="datetime-local"
+                      value={pickupTime}
+                      onChange={(e) => setPickupTime(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          <Button className="w-full" onClick={handleBook} loading={createMut.isPending}>
-            Confirm Booking
+          <Button 
+            className="w-full" 
+            onClick={handleBook} 
+            loading={createMut.isPending || submittingOnline}
+            disabled={requestPickup && !pickupAddress.trim()}
+          >
+            {requiredAdvance > 0 ? `Pay Advance (₹${requiredAdvance})` : 'Confirm Booking'}
           </Button>
         </div>
       )}
@@ -692,6 +974,64 @@ export default function BookingPage() {
           </Button>
         )}
       </div>
+
+      {showQrModal && (
+        <QrPaymentModal
+          open={showQrModal}
+          onClose={() => {
+            setShowQrModal(false);
+            toast('warning', 'Payment cancelled. Your booking slot is reserved for 10 minutes. You can pay from bookings list.');
+            navigate('/customer/bookings');
+          }}
+          amount={qrAmount}
+          bookingId={activeBookingId}
+          onSuccess={() => {
+            setShowQrModal(false);
+            toast('success', 'Your QR Payment confirmation request has been submitted for admin verification.');
+            navigate('/customer/bookings');
+          }}
+        />
+      )}
+
+      {choiceBookingData && (
+        <Modal 
+          open={!!choiceBookingData} 
+          onClose={() => setChoiceBookingData(null)} 
+          title="Choose Advance Payment Method"
+          size="sm"
+        >
+          <div className="flex flex-col gap-3 py-2 text-center">
+            <p className="text-sm text-gray-600 mb-2">
+              An advance payment of <span className="font-extrabold text-[#D32F2F]">₹{choiceBookingData.bookingData.advance_amount}</span> is required to reserve your slot.
+            </p>
+            <button
+              onClick={() => handlePayOnline(choiceBookingData.bookingData.id, choiceBookingData.bookingData.advance_amount, choiceBookingData.fullRes)}
+              className="w-full py-3 px-4 bg-[#D32F2F] text-white rounded-xl font-extrabold text-sm hover:bg-[#b71c1c] shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+            >
+              <CreditCard size={16} />
+              Pay Online (Razorpay)
+            </button>
+            <button
+              onClick={() => {
+                setQrAmount(choiceBookingData.bookingData.advance_amount);
+                setActiveBookingId(choiceBookingData.bookingData.id);
+                setShowQrModal(true);
+                setChoiceBookingData(null);
+              }}
+              className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-extrabold text-sm hover:from-emerald-700 hover:to-teal-700 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+            >
+              <QrCode size={16} />
+              Scan & Pay (UPI QR)
+            </button>
+            <button
+              onClick={() => setChoiceBookingData(null)}
+              className="w-full py-2.5 bg-gray-100 text-gray-700 rounded-xl font-semibold text-sm hover:bg-gray-200 transition-all"
+            >
+              Cancel
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

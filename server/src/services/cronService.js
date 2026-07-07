@@ -165,27 +165,35 @@ exports.initCronJobs = () => {
     }
   });
   
-  // 6. PACKAGE RENEWAL REMINDERS — Send WhatsApp for packages expiring in 7 days
+  // 6. PACKAGE RENEWAL REMINDERS — Send package renewal reminders via notify
   // Runs at 11:00 AM every day
   cron.schedule('0 11 * * *', async () => {
     console.log('[CRON] Running package renewal reminders');
     try {
       const [expiringPackages] = await pool.query(`
-        SELECT up.id, up.end_date, p.name AS package_name, u.name, u.mobile, v.brand, v.model, v.registration_no
+        SELECT up.id, up.user_id, up.end_date, p.name AS package_name, u.name, u.mobile, v.brand, v.model, v.registration_no
         FROM user_packages up
         JOIN packages p ON up.package_id = p.id
         JOIN users u ON up.user_id = u.id
         LEFT JOIN vehicles v ON up.vehicle_id = v.id
         WHERE up.package_status = 'active'
-          AND DATE(up.end_date) = DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+          AND (DATE(up.end_date) = DATE_ADD(CURDATE(), INTERVAL 7 DAY) OR DATE(up.end_date) = DATE_ADD(CURDATE(), INTERVAL 1 DAY))
           AND u.mobile IS NOT NULL
       `);
 
       for (const pkg of expiringPackages) {
         if (pkg.mobile) {
-          const vehicleStr = pkg.brand ? ` for your ${pkg.brand} ${pkg.model} (${pkg.registration_no})` : '';
-          const body = `⚠️ *Package Expiring Soon*\n\nHi ${pkg.name},\nYour *${pkg.package_name}*${vehicleStr} is expiring in 7 days (${new Date(pkg.end_date).toLocaleDateString()}). Please renew to continue enjoying premium services! 💎`;
-          await messagingService.sendWhatsApp(`91${pkg.mobile}`, null, { body }).catch(() => {});
+          const baseUrl = process.env.APP_BASE_URL || 'https://gkautobook.cloud';
+          await messagingService.notify(
+            pkg.user_id,
+            'PACKAGE_EXPIRY_REMINDER',
+            {
+              package_name: pkg.package_name,
+              expiry_date: new Date(pkg.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+              renewal_url: `${baseUrl}/packages/renew`
+            },
+            { type: 'package', id: pkg.id }
+          ).catch(() => {});
         }
       }
       console.log(`[CRON] Sent ${expiringPackages.length} package renewal reminders`);
@@ -193,6 +201,38 @@ exports.initCronJobs = () => {
       if (err.code !== 'ER_BAD_FIELD_ERROR' && err.code !== 'ER_NO_SUCH_TABLE') {
         console.error('[CRON] Error in package renewal reminder task:', err);
       }
+    }
+  });
+
+  // 7. RETRY FAILED NOTIFICATIONS — Checks for failed SMS notifications to retry
+  // Runs every 30 minutes
+  cron.schedule('*/30 * * * *', async () => {
+    console.log('[CRON] Running failed notifications retry check');
+    try {
+      const [failedLogs] = await pool.query(`
+        SELECT * FROM v2_notification_logs 
+        WHERE status = 'failed' AND attempts < 3 AND channel = 'sms'
+      `);
+
+      for (const log of failedLogs) {
+        console.log(`[CRON] Retrying failed SMS notification #${log.id} (Attempt ${log.attempts + 1})`);
+        
+        // Mark as retry / pending during attempt
+        await pool.query('UPDATE v2_notification_logs SET status = "retry", attempts = attempts + 1, last_attempt_at = NOW() WHERE id = ?', [log.id]);
+
+        // Attempt SMS send
+        const smsResult = await messagingService.sendSMS(log.mobile, process.env.MSG91_PROMO_TEMPLATE_ID || 'PROMO123', null, {
+          content: log.message_body
+        });
+
+        if (smsResult.success) {
+          await pool.query('UPDATE v2_notification_logs SET status = "sent", response_data = ? WHERE id = ?', [JSON.stringify(smsResult), log.id]);
+        } else {
+          await pool.query('UPDATE v2_notification_logs SET status = "failed", response_data = ? WHERE id = ?', [JSON.stringify(smsResult), log.id]);
+        }
+      }
+    } catch (err) {
+      console.error('[CRON] Error in failed notification retry task:', err);
     }
   });
   

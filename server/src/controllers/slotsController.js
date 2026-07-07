@@ -1,4 +1,22 @@
 const pool = require('../config/db');
+const jwt = require('jsonwebtoken');
+
+const tryParseUser = (req) => {
+  let token = null;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  }
+  if (!token && req.query.token) {
+    token = req.query.token;
+  }
+  if (!token) return null;
+  try {
+    return jwt.verify(token, process.env.JWT_SECRET);
+  } catch (err) {
+    return null;
+  }
+};
 
 // ─── LIST SLOTS ─────────────────────────────
 exports.list = async (req, res) => {
@@ -15,12 +33,33 @@ exports.list = async (req, res) => {
       params.push(from_date, to_date);
     }
 
-    const [rows] = await pool.query(
-      `SELECT *, DATE_FORMAT(slot_date, '%Y-%m-%d') as slot_date, (booked_count < max_capacity AND is_blocked = 0) AS is_available
-       FROM slots WHERE ${where}
-       ORDER BY slot_date ASC, start_time ASC`,
-      params
-    );
+    // Filter out blocked slots for guests/customers
+    const user = tryParseUser(req);
+    if (!user || user.role !== 'admin') {
+      where += ' AND is_blocked = 0';
+    }
+
+    let sql = '';
+    if (user && user.role === 'admin') {
+      sql = `
+        SELECT s.*, DATE_FORMAT(s.slot_date, '%Y-%m-%d') as slot_date, 
+               (s.booked_count < s.max_capacity AND s.is_blocked = 0) AS is_available,
+               bs.reason AS blocked_reason
+        FROM slots s
+        LEFT JOIN v2_blocked_slots bs ON bs.blocked_date = s.slot_date AND bs.slot_time = s.start_time
+        WHERE ${where}
+        ORDER BY s.slot_date ASC, s.start_time ASC
+      `;
+    } else {
+      sql = `
+        SELECT *, DATE_FORMAT(slot_date, '%Y-%m-%d') as slot_date, 
+               (booked_count < max_capacity AND is_blocked = 0) AS is_available
+        FROM slots WHERE ${where}
+        ORDER BY slot_date ASC, start_time ASC
+      `;
+    }
+
+    const [rows] = await pool.query(sql, params);
 
     res.json({
       success: true,
@@ -137,28 +176,60 @@ exports.bulkCreate = async (req, res) => {
 
 // ─── UPDATE SLOT ────────────────────────────
 exports.update = async (req, res) => {
+  const conn = await pool.getConnection();
+  await conn.beginTransaction();
   try {
     const { id } = req.params;
-    const { max_capacity, is_blocked } = req.body;
+    const { max_capacity, is_blocked, reason } = req.body;
 
-    const [existing] = await pool.query('SELECT id FROM slots WHERE id = ?', [id]);
-    if (!existing.length) return res.status(404).json({ success: false, error: 'Slot not found' });
+    const [existing] = await conn.query('SELECT * FROM slots WHERE id = ?', [id]);
+    if (!existing.length) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, error: 'Slot not found' });
+    }
 
     const updates = [];
     const params = [];
     if (max_capacity !== undefined) { updates.push('max_capacity = ?'); params.push(max_capacity); }
     if (is_blocked !== undefined) { updates.push('is_blocked = ?'); params.push(is_blocked ? 1 : 0); }
 
-    if (!updates.length) return res.status(400).json({ success: false, error: 'No fields to update' });
+    if (!updates.length) {
+      await conn.rollback();
+      return res.status(400).json({ success: false, error: 'No fields to update' });
+    }
 
     params.push(id);
-    await pool.query(`UPDATE slots SET ${updates.join(', ')} WHERE id = ?`, params);
-    res.json({ success: true, message: 'Slot updated' });
+    await conn.query(`UPDATE slots SET ${updates.join(', ')} WHERE id = ?`, params);
+
+    // Sync is_blocked to v2_blocked_slots
+    if (is_blocked !== undefined) {
+      const slot = existing[0];
+      const slotDate = typeof slot.slot_date === 'string' ? slot.slot_date : slot.slot_date.toISOString().split('T')[0];
+      
+      // Delete old block records
+      await conn.query('DELETE FROM v2_blocked_slots WHERE blocked_date = ? AND slot_time = ?', [slotDate, slot.start_time]);
+
+      if (is_blocked) {
+        await conn.query(
+          `INSERT INTO v2_blocked_slots (blocked_date, slot_time, reason, blocked_by)
+           VALUES (?, ?, ?, ?)`,
+          [slotDate, slot.start_time, reason || 'Walk-in Reserved', req.user ? req.user.id : null]
+        );
+      }
+    }
+
+    await conn.commit();
+    res.json({ success: true, message: 'Slot updated successfully' });
   } catch (err) {
+    await conn.rollback();
     console.error('Slot update error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
+  } finally {
+    conn.release();
   }
 };
+
+exports.toggleBlock = exports.update;
 
 // ─── DELETE SLOT ────────────────────────────
 exports.delete = async (req, res) => {

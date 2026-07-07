@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Calendar, Clock, ArrowRight, CalendarPlus, Car, Sparkles, X, Loader2 } from 'lucide-react';
 import AdminTopBar from '../../components/layout/AdminTopBar';
 import EmptyState from '../../components/shared/EmptyState';
 import Button from '../../components/ui/Button';
-import { useBookings, useCancelBooking } from '../../api/hooks/useBookings';
+import { useBookings, useCancelBooking, useChangeBookingServices } from '../../api/hooks/useBookings';
+import { useServices } from '../../api/hooks/useServices';
 import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '../../store/uiStore';
 import { formatTime } from '../../utils/formatters';
@@ -14,9 +15,23 @@ export default function BookingsPage() {
   const [page, setPage] = useState(1);
   const { data, isLoading, refetch } = useBookings({ page, limit: 20 });
   const cancelMut = useCancelBooking();
+  const changeServicesMut = useChangeBookingServices();
+  const { data: servicesRes } = useServices({ active_only: true });
+
+  const [changeTargetBooking, setChangeTargetBooking] = useState<any>(null);
+  const [selectedServiceIds, setSelectedServiceIds] = useState<number[]>([]);
+
+  useEffect(() => {
+    if (changeTargetBooking) {
+      setSelectedServiceIds(changeTargetBooking.service_ids || (changeTargetBooking.service_id ? [changeTargetBooking.service_id] : []));
+    } else {
+      setSelectedServiceIds([]);
+    }
+  }, [changeTargetBooking]);
 
   const bookings = data?.data || [];
   const pagination = data?.pagination;
+  const services = servicesRes?.data || [];
 
   const handleCancel = async (id: number) => {
     if (!confirm('Are you sure you want to cancel this booking?')) return;
@@ -26,6 +41,24 @@ export default function BookingsPage() {
       refetch();
     } catch (err: any) {
       toast('error', err?.response?.data?.error || 'Failed to cancel');
+    }
+  };
+
+  const handleUpdateServices = async () => {
+    if (selectedServiceIds.length === 0) {
+      toast('error', 'Select at least one service');
+      return;
+    }
+    try {
+      await changeServicesMut.mutateAsync({
+        id: changeTargetBooking.id,
+        service_ids: selectedServiceIds,
+      });
+      toast('success', 'Booking services updated');
+      setChangeTargetBooking(null);
+      refetch();
+    } catch (err: any) {
+      toast('error', err?.response?.data?.error || 'Failed to update services');
     }
   };
 
@@ -60,6 +93,18 @@ export default function BookingsPage() {
               {bookings.map((b: any, idx: number) => {
                 const dateObj = b.slot_date ? new Date(b.slot_date) : null;
                 const isPast = dateObj ? dateObj < new Date(new Date().toISOString().split('T')[0]) : false;
+
+                // Calculate if can change service (must be >= 24h away)
+                let canChange = false;
+                let hoursRemaining = 0;
+                if (dateObj && b.start_time && !isPast) {
+                  const slotDateStr = dateObj.toISOString().split('T')[0];
+                  const slotDateTime = new Date(`${slotDateStr}T${b.start_time}`);
+                  const now = new Date();
+                  const diffMs = slotDateTime.getTime() - now.getTime();
+                  hoursRemaining = diffMs / (1000 * 60 * 60);
+                  canChange = hoursRemaining >= 24;
+                }
 
                 return (
                   <div
@@ -106,6 +151,16 @@ export default function BookingsPage() {
                       </div>
                     </div>
                     <div className="flex items-center justify-between md:justify-end gap-3 w-full md:w-auto mt-4 md:mt-0 pt-4 md:pt-0 border-t md:border-0 border-gray-100">
+                      {b.pickup_status && (
+                        <span className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider border ${
+                          b.pickup_status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                          b.pickup_status === 'assigned' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          b.pickup_status === 'picked_up' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          'bg-gray-50 text-gray-700 border-gray-200'
+                        }`}>
+                          📍 Pickup: {b.pickup_status === 'picked_up' ? 'Picked Up' : b.pickup_status}
+                        </span>
+                      )}
                       <span className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider border ${
                         b.status === 'confirmed' ? 'bg-green-50 text-green-700 border-green-200' :
                         b.status === 'completed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
@@ -113,6 +168,14 @@ export default function BookingsPage() {
                       }`}>
                         {b.status}
                       </span>
+                      {['confirmed', 'pending_approval'].includes(b.status) && canChange && (
+                        <button
+                          onClick={() => setChangeTargetBooking(b)}
+                          className="px-3 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 font-bold rounded-lg text-xs hover:bg-blue-100 transition-all"
+                        >
+                          Change Service
+                        </button>
+                      )}
                       {b.status === 'confirmed' && !isPast && (
                         <button
                           onClick={() => handleCancel(b.id)}
@@ -155,6 +218,83 @@ export default function BookingsPage() {
           </>
         )}
       </div>
+
+      {/* Service Update Modal */}
+      {changeTargetBooking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setChangeTargetBooking(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in-up">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#D32F2F] to-[#af101a] flex items-center justify-center text-white">
+                  <Sparkles size={16} />
+                </div>
+                <h3 className="font-bold text-[#1c1b1b]">Change Booking Services</h3>
+              </div>
+              <button onClick={() => setChangeTargetBooking(null)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 max-h-[60vh] overflow-y-auto space-y-3">
+              <p className="text-xs text-[#5f5e5e] font-medium mb-4">
+                Choose the services you would like to swap for Booking #{changeTargetBooking.id}.
+              </p>
+              {services.map((s: any) => {
+                const isChecked = selectedServiceIds.includes(s.id);
+                return (
+                  <label
+                    key={s.id}
+                    className={`flex items-center justify-between p-3.5 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                      isChecked
+                        ? 'border-[#D32F2F] bg-red-50/5'
+                        : 'border-gray-100 hover:border-gray-200 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {
+                          if (isChecked) {
+                            setSelectedServiceIds(selectedServiceIds.filter(id => id !== s.id));
+                          } else {
+                            setSelectedServiceIds([...selectedServiceIds, s.id]);
+                          }
+                        }}
+                        className="mt-1 accent-[#D32F2F] h-4 w-4 rounded text-[#D32F2F] border-gray-300 focus:ring-[#D32F2F]"
+                      />
+                      <div>
+                        <div className="font-bold text-[#1c1b1b] text-sm">{s.name}</div>
+                        <div className="text-xs text-[#5f5e5e] mt-0.5">{s.duration_minutes} min</div>
+                      </div>
+                    </div>
+                    <div className="font-black text-sm text-[#1c1b1b]">
+                      ₹{s.price_sedan || s.price_hatchback || s.price_suv}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+              <Button variant="ghost" onClick={() => setChangeTargetBooking(null)}>
+                Cancel
+              </Button>
+              <Button
+                loading={changeServicesMut.isPending}
+                onClick={handleUpdateServices}
+                disabled={selectedServiceIds.length === 0}
+              >
+                Update Services
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

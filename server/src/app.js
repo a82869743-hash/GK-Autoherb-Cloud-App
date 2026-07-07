@@ -34,6 +34,11 @@ app.use(cors({
   origin: allowedOrigins,
   credentials: true,
 }));
+// Razorpay Webhook raw body endpoint (Update 1)
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), (req, res, next) => {
+  // Let it be handled by payments controller
+  require('./controllers/paymentsController').webhook(req, res, next);
+});
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -111,24 +116,34 @@ app.use('/api/payments',      require('./routes/payments'));
 app.use('/api/feedback',      require('./routes/feedback'));
 app.use('/api/balance-sheet', require('./routes/balanceSheet'));
 app.use('/api/audit',         require('./routes/audit'));
+app.use('/api/staff',         require('./routes/staff'));
 app.use('/api/staff-hr',      require('./routes/staffHR'));
 app.use('/api/whatsapp',      require('./routes/whatsapp'));
+app.use('/api/admin/roles',   require('./routes/roles'));
 app.use('/api/shared-files',  require('./routes/sharedFiles'));
+app.get('/api/shared/:token', require('./controllers/fileSharingController').getSharedFile);
+app.use('/api/purchase-bills', require('./routes/purchaseBills'));
+app.use('/api/gst-reports',    require('./routes/gstReports'));
 app.use('/api/customer-rewards', require('./routes/customerRewards'));
 app.use('/api/referrals',     require('./routes/referrals'));
+app.use('/api/pickup-requests', require('./routes/pickup'));
 
 // ─── Socket.io Auth + GPS ───────────────────────────
 const jwt = require('jsonwebtoken');
 
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
-  if (!token) return next(new Error('Authentication required'));
+  if (!token) {
+    socket.user = { id: -1, role: 'guest' };
+    return next();
+  }
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     socket.user = decoded;
     next();
   } catch {
-    next(new Error('Invalid token'));
+    socket.user = { id: -1, role: 'guest' };
+    next();
   }
 });
 

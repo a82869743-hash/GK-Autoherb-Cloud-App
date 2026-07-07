@@ -40,7 +40,7 @@ export const useBulkCreateSlots = () => {
 export const useUpdateSlot = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...body }: { id: number; max_capacity?: number; is_blocked?: boolean }) => {
+    mutationFn: async ({ id, ...body }: { id: number; max_capacity?: number; is_blocked?: boolean; reason?: string }) => {
       const res = await api.patch(`/slots/${id}`, body);
       return res.data;
     },

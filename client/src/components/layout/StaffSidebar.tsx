@@ -1,14 +1,13 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
-import { ClipboardList, Package, Gift, HelpCircle, Truck, LogOut, X, Menu } from 'lucide-react';
+import { ClipboardList, PlusCircle, Sparkles, Clock, LogOut, X, Menu } from 'lucide-react';
 
 const navItems = [
-  { to: '/staff/job-carts', icon: ClipboardList, label: 'Job Carts' },
-  { to: '/staff/inventory', icon: Package, label: 'Inventory' },
-  { to: '/staff/benefits', icon: Gift, label: 'Benefits' },
-  { to: '/staff/inquiry', icon: HelpCircle, label: 'Inquiry' },
-  { to: '/staff/delivery', icon: Truck, label: 'Delivery' },
+  { to: '/staff/job-carts', icon: ClipboardList, label: "Today's Jobs" },
+  { to: '/staff/job-carts/new', icon: PlusCircle, label: 'New Job Cart' },
+  { to: '/staff/quick-wash', icon: Sparkles, label: 'Quick Wash Queue' },
+  { to: '/staff/check-in', icon: Clock, label: 'Check In/Out' },
 ];
 
 export default function StaffSidebar() {

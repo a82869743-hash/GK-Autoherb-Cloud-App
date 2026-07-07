@@ -72,3 +72,16 @@ export function useApplyReferral() {
     },
   });
 }
+
+export function useFeedbackFormContext(token: string | undefined) {
+  return useQuery({
+    queryKey: ['feedback-form-context', token],
+    queryFn: async () => {
+      if (!token) return null;
+      const { data } = await api.get(`/feedback/form/${token}`);
+      return data.data;
+    },
+    enabled: !!token,
+    retry: false
+  });
+}

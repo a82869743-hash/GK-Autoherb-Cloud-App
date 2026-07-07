@@ -30,7 +30,7 @@ exports.list = async (req, res) => {
     const { published_only } = req.query;
     const userRole = req.user?.role || null;
 
-    let where = '1=1';
+    let where = 'is_custom = 0';
 
     // Customer or unauthenticated: only show active + visible packages
     if (userRole !== 'admin') {
@@ -71,7 +71,7 @@ exports.create = async (req, res) => {
       name, description,
       price_hatchback = 0, price_medium_hatchback = 0, price_sedan = 0, price_premium_sedan = 0, price_suv = 0,
       wash_count = 0, wax_count = 0, is_published = false,
-      visible_to_customer = true,
+      visible_to_customer = true, is_custom = false,
       service_ids = [],       // Legacy format: array of service IDs (no count)
       services = [],          // New format: array of { service_id, total_count }
       products = []
@@ -106,9 +106,9 @@ exports.create = async (req, res) => {
 
     // ── Insert package ──────────────────────────────
     const [result] = await conn.query(
-      `INSERT INTO packages (name, description, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, wash_count, wax_count, is_published, visible_to_customer)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name.trim(), description || null, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, wash_count, wax_count, is_published ? 1 : 0, visible_to_customer ? 1 : 0]
+      `INSERT INTO packages (name, description, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, wash_count, wax_count, is_published, visible_to_customer, is_custom)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name.trim(), description || null, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, wash_count, wax_count, is_published ? 1 : 0, visible_to_customer ? 1 : 0, is_custom ? 1 : 0]
     );
     const pkgId = result.insertId;
 
@@ -156,7 +156,7 @@ exports.update = async (req, res) => {
     const { id } = req.params;
     const {
       name, description, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv,
-      wash_count, wax_count, is_published, visible_to_customer,
+      wash_count, wax_count, is_published, visible_to_customer, is_custom,
       service_ids, services, products
     } = req.body;
 
@@ -184,6 +184,7 @@ exports.update = async (req, res) => {
     if (wax_count !== undefined) { updates.push('wax_count = ?'); params.push(wax_count); }
     if (is_published !== undefined) { updates.push('is_published = ?'); params.push(is_published ? 1 : 0); }
     if (visible_to_customer !== undefined) { updates.push('visible_to_customer = ?'); params.push(visible_to_customer ? 1 : 0); }
+    if (is_custom !== undefined) { updates.push('is_custom = ?'); params.push(is_custom ? 1 : 0); }
 
     if (updates.length) {
       params.push(id);
@@ -280,7 +281,7 @@ exports.createRequest = async (req, res) => {
       [customerId, vehicle_id, package_id, price, pricing_type, car_type || null]
     );
 
-    res.status(201).json({ success: true, message: 'Package request submitted to admin for approval' });
+    res.status(201).json({ success: true, requestId: result.insertId, message: 'Package request submitted to admin for approval' });
   } catch (err) {
     console.error('Package request create error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -328,6 +329,122 @@ exports.listRequests = async (req, res) => {
   }
 };
 
+// Helper function for request approval (can be called by verify payment or webhook)
+exports._approveRequestInternal = async (conn, id, paymentId = null) => {
+  // 1. Get request details
+  const [rows] = await conn.query("SELECT * FROM package_requests WHERE id = ? AND status = 'pending'", [id]);
+  if (!rows.length) {
+    return { success: false, error: 'Pending request not found' };
+  }
+  const reqData = rows[0];
+
+  // 2. Mark approved
+  await conn.query("UPDATE package_requests SET status = 'approved', approved_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
+
+  // 3. Add to user_packages with pricing_type, car_type, price_paid, vehicle_id
+  const [result] = await conn.query(
+    `INSERT INTO user_packages 
+     (user_id, package_id, start_date, end_date, payment_status, package_status, price_paid, vehicle_segment, vehicle_id, pricing_type, car_type) 
+     VALUES (?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 'paid', 'active', ?, ?, ?, ?, ?)`,
+    [
+      reqData.customer_id, reqData.package_id,
+      reqData.price || 0, reqData.car_type || null, reqData.vehicle_id,
+      reqData.pricing_type || 'basic', reqData.car_type || null
+    ]
+  );
+  const userPackageId = result.insertId;
+
+  // Create package_usage rows
+  const [packages] = await conn.query('SELECT name FROM packages WHERE id = ?', [reqData.package_id]);
+  const packageName = packages.length ? packages[0].name : '';
+
+  // Get service breakdown based on tier or DB fallback
+  let serviceBreakdown = [];
+  let baseTier = '';
+  const lowerName = (packageName || '').toLowerCase();
+  if (lowerName.includes('bronze')) baseTier = 'Bronze Package';
+  else if (lowerName.includes('silver')) baseTier = 'Silver Package';
+  else if (lowerName.includes('gold')) baseTier = 'Gold Package';
+  else if (lowerName.includes('diamond')) baseTier = 'Diamond Package';
+  else if (lowerName.includes('platinum')) baseTier = 'Platinum Package';
+
+  const PACKAGE_SERVICE_MAP = {
+    'Bronze Package':   [{ service_name: 'Car Foam Wash', total_count: 3 }, { service_name: 'Body Wax Coat', total_count: 1 }],
+    'Silver Package':   [{ service_name: 'Car Foam Wash', total_count: 5 }, { service_name: 'Body Wax Coat', total_count: 2 }, { service_name: 'Two Wheeler Wash', total_count: 1 }],
+    'Gold Package':     [{ service_name: 'Car Foam Wash', total_count: 8 }, { service_name: 'Body Wax Coat', total_count: 3 }, { service_name: 'Two Wheeler Wash', total_count: 1 }, { service_name: 'Two Wheeler Wax Coat', total_count: 1 }],
+    'Diamond Package':  [{ service_name: 'Car Foam Wash', total_count: 10 }, { service_name: 'Body Wax Coat', total_count: 2 }, { service_name: 'Two Wheeler Wash', total_count: 2 }, { service_name: 'Two Wheeler Wax Coat', total_count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1 }],
+    'Platinum Package': [{ service_name: 'Car Foam Wash', total_count: 12 }, { service_name: 'Body Wax Coat', total_count: 3 }, { service_name: 'Two Wheeler Wash', total_count: 2 }, { service_name: 'Two Wheeler Wax Coat', total_count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1 }, { service_name: 'Deep Cleaning', total_count: 1 }],
+  };
+
+  if (baseTier && PACKAGE_SERVICE_MAP[baseTier]) {
+    serviceBreakdown = PACKAGE_SERVICE_MAP[baseTier];
+  } else if (PACKAGE_SERVICE_MAP[packageName]) {
+    serviceBreakdown = PACKAGE_SERVICE_MAP[packageName];
+  } else {
+    // Fallback to database
+    const [dbServices] = await conn.query(
+      `SELECT s.name AS service_name, ps.total_count
+       FROM package_services ps
+       JOIN services s ON ps.service_id = s.id
+       WHERE ps.package_id = ?`,
+      [reqData.package_id]
+    );
+    if (dbServices.length > 0) {
+      serviceBreakdown = dbServices.map(s => ({ service_name: s.service_name, total_count: s.total_count }));
+    } else {
+      const [pkgDetails] = await conn.query(
+        'SELECT wash_count, wax_count FROM packages WHERE id = ?',
+        [reqData.package_id]
+      );
+      if (pkgDetails.length) {
+        if (pkgDetails[0].wash_count > 0) {
+          serviceBreakdown.push({ service_name: 'Foam Wash', total_count: pkgDetails[0].wash_count });
+        }
+        if (pkgDetails[0].wax_count > 0) {
+          serviceBreakdown.push({ service_name: 'Wax Coat', total_count: pkgDetails[0].wax_count });
+        }
+      }
+    }
+  }
+
+  for (const svc of serviceBreakdown) {
+    await conn.query(
+      'INSERT INTO package_usage (user_package_id, service_name, used_count, usage_status) VALUES (?, ?, 0, ?)',
+      [userPackageId, svc.service_name, 'available']
+    );
+  }
+
+  // Log to v2_package_renewals as initial purchase
+  try {
+    await conn.query(
+      `INSERT INTO v2_package_renewals
+       (customer_id, package_id, customer_package_id, renewal_date, amount_paid, payment_id, renewed_by, notes)
+       VALUES (?, ?, ?, CURDATE(), ?, ?, 'customer', 'Initial package purchase')`,
+      [reqData.customer_id, reqData.package_id, userPackageId, reqData.price || 0, paymentId]
+    );
+  } catch (dbErr) {
+    console.warn('Failed to write initial purchase log:', dbErr.message);
+  }
+
+  // Fire-and-forget approval SMS & WhatsApp
+  try {
+    const messagingService = require('../services/messagingService');
+    const [custRows] = await conn.query('SELECT name, mobile FROM users WHERE id = ?', [reqData.customer_id]);
+    if (custRows.length && custRows[0].mobile) {
+      const msg = `GK AutoHerb: Hi ${custRows[0].name}, your package request has been approved. You can now use your package services.`;
+      messagingService.sendSMS(custRows[0].mobile, null, null, { content: msg }).catch(() => {});
+      
+      const vehicleStr = reqData.car_type ? ` for vehicle segment ${reqData.car_type.replace(/_/g, ' ')}` : '';
+      const body = `🎉 *Package Approved!*\n\nHi ${custRows[0].name},\nYour request for the *${packageName}* package${vehicleStr} has been approved and activated!\n\nThank you for choosing GK AutoHerb! 💎`;
+      messagingService.sendWhatsApp(`91${custRows[0].mobile}`, null, { body }).catch(() => {});
+    }
+  } catch (err) {
+    console.warn('SMS/WhatsApp error:', err.message);
+  }
+
+  return { success: true, userPackageId };
+};
+
 // ─── ADMIN: APPROVE PACKAGE REQUEST ─────────
 exports.approveRequest = async (req, res) => {
   const conn = await pool.getConnection();
@@ -335,35 +452,13 @@ exports.approveRequest = async (req, res) => {
     await conn.beginTransaction();
     const { id } = req.params;
 
-    // 1. Get request details
-    const [rows] = await conn.query("SELECT * FROM package_requests WHERE id = ? AND status = 'pending'", [id]);
-    if (!rows.length) {
+    const result = await exports._approveRequestInternal(conn, id, null);
+    if (!result.success) {
       await conn.rollback();
-      return res.status(404).json({ success: false, error: 'Pending request not found' });
+      return res.status(404).json(result);
     }
-    const reqData = rows[0];
-
-    // 2. Mark approved
-    await conn.query("UPDATE package_requests SET status = 'approved', approved_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
-
-    // 3. Add to user_packages with pricing_type and car_type
-    await conn.query(
-      "INSERT INTO user_packages (user_id, package_id, pricing_type, car_type, end_date) VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 1 YEAR))",
-      [reqData.customer_id, reqData.package_id, reqData.pricing_type || 'basic', reqData.car_type || null]
-    );
 
     await conn.commit();
-
-    // 4. Fire-and-forget approval SMS
-    try {
-      const messagingService = require('../services/messagingService');
-      const [custRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [reqData.customer_id]);
-      if (custRows.length && custRows[0].mobile) {
-        const msg = `GK AutoHerb: Hi ${custRows[0].name}, your package request has been approved. You can now use your package services.`;
-        messagingService.sendSMS(custRows[0].mobile, null, null, { content: msg }).catch(() => {});
-      }
-    } catch { /* non-blocking */ }
-
     res.json({ success: true, message: 'Package request approved successfully' });
   } catch (err) {
     await conn.rollback();
@@ -493,6 +588,92 @@ exports.getPackageServices = async (req, res) => {
   } catch (err) {
     console.error('Package services list error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+exports.customAssign = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const { user_id, vehicle_id, name, price_paid, duration_months = 12, services = [] } = req.body;
+
+    if (!user_id || !name || !services.length) {
+      await conn.rollback();
+      return res.status(400).json({ success: false, error: 'user_id, name, and services are required' });
+    }
+
+    // 1. Resolve vehicle segment
+    let vehicleSegment = 'sedan';
+    if (vehicle_id) {
+      const [vRows] = await conn.query('SELECT category FROM vehicles WHERE id = ?', [vehicle_id]);
+      if (vRows.length && vRows[0].category) {
+        vehicleSegment = vRows[0].category;
+      }
+    }
+
+    // 2. Create the custom package catalog record
+    const [pkgResult] = await conn.query(
+      `INSERT INTO packages (name, description, is_custom, is_active, visible_to_customer, is_published, price_sedan)
+       VALUES (?, 'Custom Package for Customer', 1, 1, 0, 0, 0)`,
+      [name.trim()]
+    );
+    const packageId = pkgResult.insertId;
+
+    // 3. Insert service linkages
+    for (const svc of services) {
+      await conn.query(
+        'INSERT INTO package_services (package_id, service_id, total_count) VALUES (?, ?, ?)',
+        [packageId, svc.service_id, svc.total_count]
+      );
+    }
+
+    // 4. Check for existing active package (prevent duplicates)
+    const [activeExisting] = await conn.query(
+      `SELECT id FROM user_packages
+       WHERE user_id = ? AND package_status = 'active'
+       AND (end_date IS NULL OR end_date > NOW())`,
+      [user_id]
+    );
+    if (activeExisting.length) {
+      await conn.rollback();
+      return res.status(409).json({
+        success: false,
+        error: 'User already has an active package. Renew/cancel instead.',
+      });
+    }
+
+    // 5. Assign user_package
+    const [upResult] = await conn.query(
+      `INSERT INTO user_packages
+       (user_id, package_id, end_date, payment_status, package_status, price_paid, vehicle_segment, vehicle_id)
+       VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? MONTH), 'paid', 'active', ?, ?, ?)`,
+      [user_id, packageId, duration_months, price_paid || null, vehicleSegment, vehicle_id || null]
+    );
+    const userPackageId = upResult.insertId;
+
+    // 6. Create package_usage rows
+    for (const svc of services) {
+      const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [svc.service_id]);
+      const sName = svcRows.length ? svcRows[0].name : `Service #${svc.service_id}`;
+      await conn.query(
+        'INSERT INTO package_usage (user_package_id, service_name, used_count, usage_status) VALUES (?, ?, 0, ?)',
+        [userPackageId, sName, 'available']
+      );
+    }
+
+    await conn.commit();
+    res.status(201).json({
+      success: true,
+      data: { user_package_id: userPackageId, package_id: packageId },
+      message: `Custom package '${name}' created and assigned successfully`
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Custom assign error:', err);
+    res.status(500).json({ success: false, error: 'Failed to create and assign custom package' });
+  } finally {
+    conn.release();
   }
 };
 

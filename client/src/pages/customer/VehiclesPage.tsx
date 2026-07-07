@@ -13,6 +13,7 @@ export default function VehiclesPage() {
   const { data, isLoading } = useCustomerVehicles();
   const vehicles = data?.data || [];
   const [showAddCar, setShowAddCar] = useState(false);
+  const [editingVehicle, setEditingVehicle] = useState<any>(null);
   const queryClient = useQueryClient();
 
   const handleSetPrimary = async (id: number) => {
@@ -88,7 +89,9 @@ export default function VehiclesPage() {
                 <div className="w-14 h-14 bg-gradient-to-br from-gray-100 to-gray-50 text-gray-500 rounded-2xl flex items-center justify-center mb-4 group-hover:from-[#D32F2F] group-hover:to-[#af101a] group-hover:text-white group-hover:shadow-glow-red transition-all duration-300">
                   <Car size={26} />
                 </div>
-                <h3 className="text-xl font-black text-[#1c1b1b] mb-1 tracking-tight">{v.brand} {v.model}</h3>
+                <h3 className="text-xl font-black text-[#1c1b1b] mb-1 tracking-tight">
+                  {v.brand} {v.model} {v.car_year ? `(${v.car_year})` : ''}
+                </h3>
                 {v.registration_no && (
                   <p className="text-[#5f5e5e] font-medium text-sm">{v.registration_no}</p>
                 )}
@@ -104,12 +107,20 @@ export default function VehiclesPage() {
                   ) : (
                     <span className="text-xs text-gray-400 font-medium">Active car</span>
                   )}
-                  <button
-                    onClick={() => handleDelete(v.id)}
-                    className="flex items-center gap-1 text-xs font-bold text-red-400 hover:text-red-600 transition-colors"
-                  >
-                    <Trash2 size={12} /> Remove
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setEditingVehicle(v)}
+                      className="text-xs font-bold text-gray-500 hover:text-gray-700 transition-colors"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(v.id)}
+                      className="flex items-center gap-1 text-xs font-bold text-red-400 hover:text-red-600 transition-colors"
+                    >
+                      <Trash2 size={12} /> Remove
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -117,7 +128,7 @@ export default function VehiclesPage() {
         )}
       </div>
 
-      <AddCarModal isOpen={showAddCar} onClose={() => setShowAddCar(false)} />
+      <AddCarModal isOpen={showAddCar || !!editingVehicle} onClose={() => { setShowAddCar(false); setEditingVehicle(null); }} editVehicle={editingVehicle} />
     </>
   );
 }

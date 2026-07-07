@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════
 // AUTH
 // ═══════════════════════════════════════════
-export type UserRole = 'admin' | 'customer' | 'staff';
+export type UserRole = 'admin' | 'customer' | 'staff' | 'super_admin';
 
 export interface User {
   id: number;
@@ -11,6 +11,10 @@ export interface User {
   role: UserRole;
   is_active: boolean;
   created_at?: string;
+  opt_out_promotional?: number;
+  custom_role_id?: number | null;
+  base_salary?: number;
+  permissions?: string[];
 }
 
 // ═══════════════════════════════════════════
@@ -24,6 +28,8 @@ export interface Vehicle {
   model: string;
   is_primary?: number;
   customer?: User;
+  car_year?: number;
+  manufacture_year?: number;
 }
 
 // ═══════════════════════════════════════════
@@ -104,6 +110,11 @@ export interface JobCart {
   completed_at?: string;
   invoice_number?: string;
   total_amount?: number;
+  advance_amount?: number;
+  advance_paid?: number;
+  balance_due?: number;
+  booking_id?: number;
+  customer?: { id: number; name: string; mobile?: string; email?: string; };
 }
 
 export interface JobCartCreatePayload {
@@ -196,7 +207,7 @@ export interface Slot {
   bookings?: Booking[];
 }
 
-export type BookingStatus = 'pending_approval' | 'confirmed' | 'cancelled' | 'completed' | 'expired' | 'rejected';
+export type BookingStatus = 'pending_payment' | 'pending_approval' | 'confirmed' | 'cancelled' | 'completed' | 'expired' | 'rejected';
 
 export interface Booking {
   id: number;
@@ -219,6 +230,9 @@ export interface Booking {
   approved_by_name?: string;
   approved_at?: string;
   linked_services?: { service_id: number; name: string; duration_minutes: number }[];
+  advance_amount?: number;
+  total_amount?: number;
+  advance_payment_id?: number;
   created_at: string;
 }
 
@@ -520,6 +534,8 @@ export interface QuickWashBooking {
   job_type: 'quick_wash';
   status: string;
   wash_status: WashStatus;
+  current_phase?: string;
+  phase_updated_at?: string;
   queue_position: number;
   notes?: string;
   started_at?: string;

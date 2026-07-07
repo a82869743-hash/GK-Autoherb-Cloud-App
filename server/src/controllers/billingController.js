@@ -76,6 +76,28 @@ exports.create = async (req, res) => {
         sendSms(customer_mobile, msg).catch(() => {});
       } catch (e) { /* ignore */ }
     }
+    // GST auto-logging for Manual Bill
+    const [gstSetting] = await conn.query("SELECT value FROM settings WHERE key_name = 'is_gst_applicable'");
+    const isGstEnabled = gstSetting.length && gstSetting[0].value === '1';
+    if (isGstEnabled) {
+      const periodMonth = new Date().getMonth() + 1;
+      const periodYear = new Date().getFullYear();
+      const [gstSettingNo] = await conn.query("SELECT value FROM settings WHERE key_name = 'gstin'");
+      const gstin = gstSettingNo.length ? gstSettingNo[0].value : '';
+
+      const numericAmount = parseFloat(amount);
+      const taxableAmount = numericAmount / 1.18;
+      const totalGst = numericAmount - taxableAmount;
+      const cgst = totalGst / 2;
+      const sgst = totalGst / 2;
+      const igst = 0;
+
+      await conn.query(
+        `INSERT INTO v2_gst_records (record_type, gstin, taxable_amount, cgst, sgst, igst, total_gst, period_month, period_year)
+         VALUES ('sales', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [gstin, taxableAmount, cgst, sgst, igst, totalGst, periodMonth, periodYear]
+      );
+    }
 
     await conn.commit();
     console.log(`[BILLING] Manual bill #${result.insertId} created — ₹${amount}`);
@@ -100,9 +122,9 @@ exports.list = async (req, res) => {
     if (from_date) { where += ' AND mb.created_at >= ?'; params.push(from_date); }
     if (to_date) { where += ' AND mb.created_at <= ?'; params.push(to_date + ' 23:59:59'); }
     if (search) {
-      where += ' AND (mb.customer_name LIKE ? OR mb.customer_mobile LIKE ? OR mb.description LIKE ?)';
+      where += ' AND (mb.customer_name LIKE ? OR mb.customer_mobile LIKE ? OR mb.description LIKE ? OR mb.vehicle_reg_no LIKE ?)';
       const s = `%${search}%`;
-      params.push(s, s, s);
+      params.push(s, s, s, s);
     }
 
     const [countRows] = await pool.query(

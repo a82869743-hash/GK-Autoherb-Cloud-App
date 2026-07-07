@@ -141,10 +141,16 @@ export default function SlotsPage() {
 
   const handleToggleBlock = async (slot: any) => {
     try {
-      await updateMut.mutateAsync({ id: slot.id, is_blocked: !slot.is_blocked });
+      let reason = undefined;
+      if (!slot.is_blocked) {
+        const inputReason = window.prompt('Enter reason for blocking this slot:', 'Walk-in Reserved');
+        if (inputReason === null) return; // User cancelled
+        reason = inputReason || 'Walk-in Reserved';
+      }
+      await updateMut.mutateAsync({ id: slot.id, is_blocked: !slot.is_blocked, reason });
       toast('success', slot.is_blocked ? 'Slot unblocked' : 'Slot blocked');
       refetch();
-      if (selectedSlot?.id === slot.id) setSelectedSlot({ ...slot, is_blocked: !slot.is_blocked });
+      if (selectedSlot?.id === slot.id) setSelectedSlot({ ...slot, is_blocked: !slot.is_blocked, blocked_reason: reason });
     } catch { toast('error', 'Failed to update slot'); }
   };
 
@@ -257,9 +263,12 @@ export default function SlotsPage() {
                               style={{ minHeight: '64px' }}
                             >
                               {slot.is_blocked ? (
-                                <div className="p-2 flex items-center justify-center text-gray-400">
-                                  <Lock size={14} />
-                                  <span className="text-[10px] font-bold ml-1">Blocked</span>
+                                <div className="p-2 flex flex-col items-center justify-center text-gray-400 text-center" title={slot.blocked_reason || 'Blocked'}>
+                                  <Lock size={14} className="shrink-0" />
+                                  <span className="text-[10px] font-bold mt-1">Blocked</span>
+                                  {slot.blocked_reason && (
+                                    <span className="text-[9px] text-gray-400 truncate max-w-full font-medium px-1 mt-0.5">{slot.blocked_reason}</span>
+                                  )}
                                 </div>
                               ) : (
                                 <div className="p-2">
@@ -372,7 +381,7 @@ export default function SlotsPage() {
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e]">Status</p>
                 <p className="font-bold">
                   {selectedSlot.is_blocked ? (
-                    <span className="text-gray-400">Blocked</span>
+                    <span className="text-gray-400">Blocked {selectedSlot.blocked_reason ? `(${selectedSlot.blocked_reason})` : ''}</span>
                   ) : selectedSlot.booked_count >= selectedSlot.max_capacity ? (
                     <span className="text-red-600">Full</span>
                   ) : (

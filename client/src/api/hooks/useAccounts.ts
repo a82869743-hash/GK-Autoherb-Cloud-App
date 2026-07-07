@@ -46,7 +46,52 @@ export const useExportReport = () =>
       link.download = `GKAutoHerb_Report_${params.from_date}_to_${params.to_date}.${ext}`;
       document.body.appendChild(link);
       link.click();
-      link.remove();
+      document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     },
   });
+
+export const usePurchaseBills = (params?: any) =>
+  useQuery({
+    queryKey: ['accounts', 'purchase-bills', params],
+    queryFn: async () => {
+      const res = await api.get('/purchase-bills', { params });
+      return res.data;
+    },
+  });
+
+export const useCreatePurchaseBill = () => {
+  return useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await api.post('/purchase-bills', payload);
+      return res.data;
+    },
+  });
+};
+
+export const useGstReport = (params?: { month?: string; year?: string; format?: string }) =>
+  useQuery({
+    queryKey: ['accounts', 'gst-report', params],
+    queryFn: async () => {
+      const res = await api.get('/gst-reports', { params });
+      return res.data.data;
+    },
+  });
+
+export const useReturns = () =>
+  useQuery({
+    queryKey: ['accounts', 'returns'],
+    queryFn: async () => {
+      const res = await api.get('/accounts/returns');
+      return res.data.data;
+    },
+  });
+
+export const useCreateReturn = () => {
+  return useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await api.post('/accounts/returns', payload);
+      return res.data;
+    },
+  });
+};

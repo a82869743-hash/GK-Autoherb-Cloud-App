@@ -23,6 +23,16 @@ const VEHICLE_CATEGORIES = [
   { value: 'suv', label: 'SUV' },
 ];
 
+const WASH_PHASE_LABELS = {
+  pre_wash: 'Pre-Wash',
+  foam_apply: 'Foam Apply',
+  pressure_rinse: 'Rinse',
+  interior_clean: 'Vacuum',
+  dry_polish: 'Dry/Polish',
+};
+
+const PHASE_ORDER = ['pre_wash', 'foam_apply', 'pressure_rinse', 'interior_clean', 'dry_polish'];
+
 export default function QuickWashPage() {
   const [filter, setFilter] = useState<string>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -155,6 +165,68 @@ export default function QuickWashPage() {
 
                 {wash.notes && (
                   <p className="text-xs text-gray-400 italic mb-3 line-clamp-2">{wash.notes}</p>
+                )}
+
+                {wash.wash_status === 'washing' && (
+                  <div className="mt-4 pt-3 border-t border-gray-100 mb-4">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-2">Wash Progress</p>
+                    <div className="flex items-center justify-between relative mb-4 px-2">
+                      {/* Background Line */}
+                      <div className="absolute top-1/2 left-4 right-4 h-0.5 bg-gray-200 -translate-y-1/2 z-0" />
+                      {/* Active Progress Line */}
+                      <div
+                        className="absolute top-1/2 left-4 h-0.5 bg-[#D32F2F] -translate-y-1/2 z-0 transition-all duration-300"
+                        style={{
+                          width: `${(PHASE_ORDER.indexOf(wash.current_phase || 'pre_wash') / (PHASE_ORDER.length - 1)) * 90}%`,
+                        }}
+                      />
+
+                      {PHASE_ORDER.map((phaseId, pIdx) => {
+                        const currentIdx = PHASE_ORDER.indexOf(wash.current_phase || 'pre_wash');
+                        const isDone = pIdx < currentIdx;
+                        const isCurrent = pIdx === currentIdx;
+
+                        return (
+                          <div key={phaseId} className="flex flex-col items-center z-10 relative">
+                            <div
+                              className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all duration-300 ${
+                                isDone ? 'bg-[#D32F2F] text-white' :
+                                isCurrent ? 'bg-white text-[#D32F2F] border-2 border-[#D32F2F] ring-4 ring-red-100' :
+                                'bg-white text-gray-400 border-2 border-gray-200'
+                              }`}
+                              title={WASH_PHASE_LABELS[phaseId as keyof typeof WASH_PHASE_LABELS]}
+                            >
+                              {isDone ? '✓' : pIdx + 1}
+                            </div>
+                            <span className={`text-[8px] font-bold mt-1 uppercase tracking-wider ${
+                              isCurrent ? 'text-[#D32F2F]' : isDone ? 'text-gray-700' : 'text-gray-400'
+                            }`}>
+                              {WASH_PHASE_LABELS[phaseId as keyof typeof WASH_PHASE_LABELS]}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <button
+                      onClick={async () => {
+                        const currentIdx = PHASE_ORDER.indexOf(wash.current_phase || 'pre_wash');
+                        const nextPhase = currentIdx < PHASE_ORDER.length - 1 ? PHASE_ORDER[currentIdx + 1] : 'complete';
+                        try {
+                          const { default: api } = await import('../../api/axiosInstance');
+                          await api.patch(`/quick-wash/${wash.id}/phase`, { phase: nextPhase });
+                          addToast('success', `Wash phase advanced to ${nextPhase === 'complete' ? 'Completed' : WASH_PHASE_LABELS[nextPhase as keyof typeof WASH_PHASE_LABELS]}`);
+                          refetch();
+                        } catch {
+                          addToast('error', 'Failed to advance wash phase');
+                        }
+                      }}
+                      className="w-full py-1.5 bg-[#D32F2F]/5 hover:bg-[#D32F2F]/10 text-[#D32F2F] border border-[#D32F2F]/10 rounded-lg text-xs font-bold transition-all uppercase tracking-wider flex items-center justify-center gap-1.5"
+                    >
+                      <Clock size={12} />
+                      Advance Phase
+                    </button>
+                  </div>
                 )}
 
                 {/* Action */}

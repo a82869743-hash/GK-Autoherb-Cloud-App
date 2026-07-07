@@ -87,6 +87,96 @@ export default function SettingsPage() {
             </div>
           </section>
 
+          {/* Booking & Advance Payment Settings */}
+          <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+            <div className="flex items-center gap-2 mb-4 text-[#D32F2F] border-b border-gray-100 pb-2">
+              <Settings size={20} />
+              <h2 className="font-bold text-lg text-[#1c1b1b]">Booking & Advance Payment Settings</h2>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="col-span-full flex items-center justify-between bg-red-50/50 p-4 rounded-xl border border-red-100/50">
+                <div>
+                  <h4 className="font-bold text-gray-900 text-sm">Pause All Bookings</h4>
+                  <p className="text-xs text-gray-500 mt-0.5">Globally prevent customers from booking new slots.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleChange('bookings_paused', form.bookings_paused === '1' ? '0' : '1')}
+                  className={`relative w-14 h-7 rounded-full transition-colors duration-200 ${form.bookings_paused === '1' ? 'bg-[#D32F2F]' : 'bg-gray-300'}`}
+                >
+                  <div className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 ${form.bookings_paused === '1' ? 'translate-x-7' : ''}`} />
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Advance Payment Type</label>
+                <select 
+                  value={form.advance_type || 'none'} 
+                  onChange={e => handleChange('advance_type', e.target.value)}
+                  className="w-full px-3.5 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white font-medium"
+                >
+                  <option value="none">None (Disabled)</option>
+                  <option value="fixed">Fixed Amount (₹)</option>
+                  <option value="percentage">Percentage (%)</option>
+                </select>
+              </div>
+
+              {form.advance_type && form.advance_type !== 'none' && (
+                <Input 
+                  label={form.advance_type === 'fixed' ? 'Advance Amount (₹)' : 'Advance Percentage (%)'} 
+                  type="number" 
+                  value={form.advance_value || ''} 
+                  onChange={e => handleChange('advance_value', e.target.value)} 
+                  placeholder={form.advance_type === 'fixed' ? 'e.g. 500' : 'e.g. 10'} 
+                />
+              )}
+            </div>
+          </section>
+
+          {/* Referrals & Welcome Rewards Section */}
+          <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+            <div className="flex items-center gap-2 mb-4 text-[#D32F2F] border-b border-gray-100 pb-2">
+              <Settings size={20} />
+              <h2 className="font-bold text-lg text-[#1c1b1b]">Referrals & Welcome Rewards</h2>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input 
+                label="Referrer Points Reward" 
+                type="number" 
+                value={form.referral_referrer_points || ''} 
+                onChange={e => handleChange('referral_referrer_points', e.target.value)} 
+                placeholder="Points awarded to referrer (e.g. 100)" 
+              />
+              <Input 
+                label="New Customer Discount Reward (₹)" 
+                type="number" 
+                value={form.referral_new_customer_discount || ''} 
+                onChange={e => handleChange('referral_new_customer_discount', e.target.value)} 
+                placeholder="Welcome discount amount (e.g. 50)" 
+              />
+              <div className="col-span-1">
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Welcome Reward Type</label>
+                <select 
+                  value={form.welcome_reward_type || 'points'} 
+                  onChange={e => handleChange('welcome_reward_type', e.target.value)}
+                  className="w-full px-3.5 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white font-medium"
+                >
+                  <option value="points">Points</option>
+                  <option value="discount">Discount Amount (₹)</option>
+                </select>
+              </div>
+              <Input 
+                label="Welcome Reward Value" 
+                type="number" 
+                value={form.welcome_reward_value || ''} 
+                onChange={e => handleChange('welcome_reward_value', e.target.value)} 
+                placeholder="Value (e.g. 500 points or ₹50)" 
+              />
+            </div>
+          </section>
+
           <div className="flex justify-end">
             <Button size="lg" onClick={handleSave} loading={updateMut.isPending} icon={<Save size={18} />}>
               Save All Settings

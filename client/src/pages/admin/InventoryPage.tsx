@@ -35,6 +35,9 @@ export default function InventoryPage() {
   const [formUnit, setFormUnit] = useState('pcs');
   const [formQty, setFormQty] = useState(0);
   const [formThreshold, setFormThreshold] = useState(5);
+  const [formImage, setFormImage] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const createMut = useCreateInventory();
   const updateMut = useUpdateInventory();
@@ -85,6 +88,7 @@ export default function InventoryPage() {
     setFormUnit('pcs');
     setFormQty(0);
     setFormThreshold(5);
+    setFormImage('');
     setModalOpen(true);
   };
 
@@ -94,6 +98,18 @@ export default function InventoryPage() {
     setFormUnit(item.unit);
     setFormQty(parseFloat(item.quantity));
     setFormThreshold(parseFloat(item.low_stock_threshold));
+    let imgUrl = '';
+    if (item.images_json) {
+      try {
+        const arr = typeof item.images_json === 'string' ? JSON.parse(item.images_json) : item.images_json;
+        if (Array.isArray(arr) && arr.length > 0) {
+          imgUrl = arr[0];
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    setFormImage(imgUrl);
     setModalOpen(true);
   };
 
@@ -110,7 +126,8 @@ export default function InventoryPage() {
           product_name: formName,
           unit: formUnit,
           low_stock_threshold: formThreshold,
-        });
+          images_json: formImage ? [formImage] : []
+        } as any);
         toast('success', 'Product updated successfully');
       } else {
         await createMut.mutateAsync({
@@ -118,7 +135,8 @@ export default function InventoryPage() {
           unit: formUnit,
           quantity: formQty,
           low_stock_threshold: formThreshold,
-        });
+          images_json: formImage ? [formImage] : []
+        } as any);
         toast('success', 'Product added successfully');
       }
       setModalOpen(false);
@@ -311,7 +329,25 @@ export default function InventoryPage() {
                         #INV-{String(row.id).padStart(4, '0')}
                       </td>
                       <td className="p-4 font-semibold text-gray-900">
-                        {row.product_name}
+                        <div className="flex items-center gap-3">
+                          {(() => {
+                            let imgUrl = '';
+                            if (row.images_json) {
+                              try {
+                                const arr = typeof row.images_json === 'string' ? JSON.parse(row.images_json) : row.images_json;
+                                if (Array.isArray(arr) && arr.length > 0) imgUrl = arr[0];
+                              } catch (e) {}
+                            }
+                            return imgUrl ? (
+                              <img src={imgUrl} alt={row.product_name} className="w-8 h-8 rounded-lg object-contain border border-gray-100 bg-gray-50 shrink-0" />
+                            ) : (
+                              <div className="w-8 h-8 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center shrink-0 text-gray-300">
+                                <Package size={14} />
+                              </div>
+                            );
+                          })()}
+                          <span>{row.product_name}</span>
+                        </div>
                       </td>
                       <td className="p-4 text-gray-500 uppercase font-bold text-xs">
                         {row.unit}
@@ -401,6 +437,65 @@ export default function InventoryPage() {
           <Select label="Unit *" options={unitOptions} value={formUnit} onChange={e => setFormUnit(e.target.value)} />
           {!editItem && <Input label="Initial Quantity *" type="number" value={formQty || ''} onChange={e => setFormQty(parseFloat(e.target.value) || 0)} />}
           <Input label="Low Stock Threshold *" type="number" value={formThreshold || ''} onChange={e => setFormThreshold(parseFloat(e.target.value) || 0)} />
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1">Product Image</label>
+            <div className="flex items-center gap-3">
+              {formImage ? (
+                <div className="relative w-16 h-16 rounded-xl border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center shrink-0">
+                  <img src={formImage} alt="Product" className="w-full h-full object-contain" />
+                  <button
+                    type="button"
+                    onClick={() => setFormImage('')}
+                    className="absolute inset-0 bg-black/50 text-white flex items-center justify-center text-[10px] font-bold opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={uploadingImage}
+                  onClick={() => imageInputRef.current?.click()}
+                  className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-300 hover:border-[#D32F2F] flex flex-col items-center justify-center text-gray-400 hover:text-[#D32F2F] transition-colors shrink-0 cursor-pointer"
+                >
+                  <Upload size={16} />
+                  <span className="text-[9px] font-bold mt-1">{uploadingImage ? '...' : 'Upload'}</span>
+                </button>
+              )}
+              <input
+                type="file"
+                ref={imageInputRef}
+                className="hidden"
+                accept="image/*"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const formData = new FormData();
+                  formData.append('image', file);
+                  setUploadingImage(true);
+                  try {
+                    const res = await api.post('/inventory/upload-image', formData, {
+                      headers: { 'Content-Type': 'multipart/form-data' }
+                    });
+                    if (res.data.success) {
+                      setFormImage(res.data.url);
+                      toast('success', 'Image uploaded successfully');
+                    }
+                  } catch (err: any) {
+                    console.error(err);
+                    toast('error', err.response?.data?.error || 'Failed to upload image');
+                  } finally {
+                    setUploadingImage(false);
+                    if (imageInputRef.current) imageInputRef.current.value = '';
+                  }
+                }}
+              />
+              <div className="text-xs text-gray-400">
+                <p className="font-semibold text-gray-600">Accessory Thumbnail</p>
+                <p>Support JPG, PNG, WEBP. Max 10MB.</p>
+              </div>
+            </div>
+          </div>
         </div>
       </Modal>
 

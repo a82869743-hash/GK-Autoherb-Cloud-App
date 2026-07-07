@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Truck, CheckCircle, Send, Plus, Trash2, X, Save, Loader2, Edit2, Package } from 'lucide-react';
-import { useJobCart, useSubmitJobCart, useCompleteJobCart, useAddService, useUpdateService as useUpdateJobService, useDeleteService as useDeleteJobService } from '../../api/hooks/useJobCarts';
+import { ArrowLeft, Download, Truck, CheckCircle, Send, Plus, Trash2, X, Save, Loader2, Edit2, Package, Mail, Share2 } from 'lucide-react';
+import { useJobCart, useSubmitJobCart, useCompleteJobCart, useAddService, useUpdateService as useUpdateJobService, useDeleteService as useDeleteJobService, useUploadPhoto, useDeletePhoto } from '../../api/hooks/useJobCarts';
+import { useMessagesLog } from '../../api/hooks/useMessages';
 import api from '../../api/axiosInstance';
 import AdminTopBar from '../../components/layout/AdminTopBar';
 import Button from '../../components/ui/Button';
@@ -13,6 +14,7 @@ import ConfirmDialog from '../../components/shared/ConfirmDialog';
 import StatusBadge from '../../components/shared/StatusBadge';
 import ErrorState from '../../components/shared/ErrorState';
 import { SkeletonCard } from '../../components/ui/SkeletonLoader';
+import FileUpload from '../../components/ui/FileUpload';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
 import { formatINR, formatDate } from '../../utils/formatters';
@@ -38,6 +40,44 @@ export default function JobCartDetailPage() {
   const addServiceMut = useAddService();
   const updateServiceMut = useUpdateJobService();
   const deleteServiceMut = useDeleteJobService();
+  const uploadPhotoMut = useUploadPhoto();
+  const deletePhotoMut = useDeletePhoto();
+  const { data: messagesData } = useMessagesLog({ reference_type: 'job_cart', reference_id: id });
+  const messages = messagesData?.data || [];
+  const [beforeFiles, setBeforeFiles] = useState<File[]>([]);
+  const [afterFiles, setAfterFiles] = useState<File[]>([]);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareLink, setShareLink] = useState('');
+  const [shareExpiry, setShareExpiry] = useState('24');
+  const [shareFilePayload, setShareFilePayload] = useState<{ url: string; name: string; type: string } | null>(null);
+
+  const handleShareFile = async (url: string, name: string, type: string) => {
+    setShareFilePayload({ url, name, type });
+    setShareLink('');
+    setShareModalOpen(true);
+  };
+
+  const handleGenerateShareLink = async () => {
+    if (!shareFilePayload) return;
+    try {
+      const response = await api.post('/shared-files/generate-link', {
+        file_name: shareFilePayload.name,
+        file_url: shareFilePayload.url,
+        file_type: shareFilePayload.type,
+        reference_type: shareFilePayload.type === 'pdf' ? 'invoice' : 'job_cart',
+        reference_id: Number(id),
+        expiry_hours: shareExpiry === 'permanent' ? null : parseInt(shareExpiry)
+      });
+      if (response.data.success) {
+        setShareLink(response.data.data.share_url);
+        toast('success', 'Shareable link generated!');
+      } else {
+        toast('error', 'Failed to generate link');
+      }
+    } catch (err: any) {
+      toast('error', err?.response?.data?.error || 'Failed to generate share link');
+    }
+  };
 
   const isAdmin = user?.role === 'admin';
   const isStaff = user?.role === 'staff';
@@ -54,11 +94,22 @@ export default function JobCartDetailPage() {
     if (isAdmin) {
       canEdit = true; // Admin override
     } else if (hoursSinceComplete < 24) {
-      canEdit = true;
+      canEdit = !isStaff; // Staff cannot edit historical complete carts even within 24h
       editTimeRemaining = Math.floor(24 - hoursSinceComplete);
     }
   } else if (cart?.status === 'complete') {
     canEdit = isAdmin;
+  }
+
+  // Staff restriction: only today's carts
+  if (isStaff && cart?.visit_date) {
+    const d = new Date(cart.visit_date);
+    const cartDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    if (cartDateStr !== todayStr) {
+      canEdit = false;
+    }
   }
 
   // ─── Catalog data ──────────────────────
@@ -183,6 +234,47 @@ export default function JobCartDetailPage() {
     setAddSvcOpen(true);
   };
 
+  const handleUploadBefore = async (files: File[]) => {
+    setBeforeFiles(files);
+    if (files.length > 0) {
+      const file = files[files.length - 1];
+      try {
+        await uploadPhotoMut.mutateAsync({ cartId: Number(id), file, type: 'before' });
+        toast('success', 'Before photo uploaded');
+        refetch();
+        setBeforeFiles([]);
+      } catch (err: any) {
+        toast('error', err?.response?.data?.error || 'Failed to upload photo');
+      }
+    }
+  };
+
+  const handleUploadAfter = async (files: File[]) => {
+    setAfterFiles(files);
+    if (files.length > 0) {
+      const file = files[files.length - 1];
+      try {
+        await uploadPhotoMut.mutateAsync({ cartId: Number(id), file, type: 'after' });
+        toast('success', 'After photo uploaded');
+        refetch();
+        setAfterFiles([]);
+      } catch (err: any) {
+        toast('error', err?.response?.data?.error || 'Failed to upload photo');
+      }
+    }
+  };
+
+  const handleDeletePhoto = async (photoId: number) => {
+    if (!confirm('Are you sure you want to remove this photo?')) return;
+    try {
+      await deletePhotoMut.mutateAsync({ cartId: Number(id), photoId });
+      toast('success', 'Photo removed');
+      refetch();
+    } catch (err: any) {
+      toast('error', err?.response?.data?.error || 'Failed to remove photo');
+    }
+  };
+
   const handleAddService = async () => {
     if (!newSvcName.trim()) { toast('error', 'Service name is required'); return; }
     try {
@@ -291,6 +383,42 @@ export default function JobCartDetailPage() {
     );
   };
 
+  // ─── Collect Advance Modal ─────────────
+  const [collectAdvanceOpen, setCollectAdvanceOpen] = useState(false);
+  const [advanceAmountInput, setAdvanceAmountInput] = useState('');
+  const [advanceMethod, setAdvanceMethod] = useState('cash');
+  const [advanceNotes, setAdvanceNotes] = useState('');
+  const [submittingAdvance, setSubmittingAdvance] = useState(false);
+
+  const handleCollectAdvance = async () => {
+    const amt = parseFloat(advanceAmountInput);
+    if (isNaN(amt) || amt <= 0) {
+      toast('error', 'Please enter a valid advance amount');
+      return;
+    }
+    setSubmittingAdvance(true);
+    try {
+      await api.post('/payments/advance', {
+        customer_id: cart.customer?.id,
+        job_cart_id: cart.id,
+        booking_id: cart.booking_id || undefined,
+        advance_amount: amt,
+        total_amount: cart.total_amount,
+        payment_method: advanceMethod,
+        notes: advanceNotes || 'Advance payment collected at counter'
+      });
+      toast('success', 'Advance payment recorded successfully!');
+      setCollectAdvanceOpen(false);
+      setAdvanceAmountInput('');
+      setAdvanceNotes('');
+      refetch();
+    } catch (err: any) {
+      toast('error', err?.response?.data?.error || 'Failed to record advance payment');
+    } finally {
+      setSubmittingAdvance(false);
+    }
+  };
+
   const openDeliveryModal = async () => {
     try {
       const res = await api.get('/staff');
@@ -325,16 +453,34 @@ export default function JobCartDetailPage() {
           <Plus size={12} /> Add Product
         </button>
       </div>
-      {products.map((prod, pIdx) => (
-        <div key={pIdx} className="flex gap-2 items-end mb-2">
-          <div className="flex-1">
-            <Select
-              options={inventoryOptions}
-              value={prod.product_id || ''}
-              onChange={e => handleProductSelect(products, setProducts, pIdx, parseInt(e.target.value))}
-              placeholder="Select product..."
-            />
-          </div>
+      {products.map((prod, pIdx) => {
+        const item = inventory.find((i: any) => i.id === prod.product_id);
+        let imgUrl = '';
+        if (item && item.images_json) {
+          try {
+            const arr = typeof item.images_json === 'string' ? JSON.parse(item.images_json) : item.images_json;
+            if (Array.isArray(arr) && arr.length > 0) imgUrl = arr[0];
+          } catch (e) {}
+        }
+        return (
+          <div key={pIdx} className="flex gap-2 items-end mb-2">
+            <div className="pb-1">
+              {imgUrl ? (
+                <img src={imgUrl} alt="Prod" className="w-9 h-9 rounded-lg object-contain border border-gray-200 bg-gray-50 shrink-0" />
+              ) : (
+                <div className="w-9 h-9 rounded-lg border border-dashed border-gray-200 bg-gray-50 flex items-center justify-center shrink-0 text-gray-300">
+                  <Package size={14} />
+                </div>
+              )}
+            </div>
+            <div className="flex-1">
+              <Select
+                options={inventoryOptions}
+                value={prod.product_id || ''}
+                onChange={e => handleProductSelect(products, setProducts, pIdx, parseInt(e.target.value))}
+                placeholder="Select product..."
+              />
+            </div>
           <div className="w-20">
             <Input
               type="number"
@@ -347,24 +493,27 @@ export default function JobCartDetailPage() {
               placeholder="Qty"
             />
           </div>
-          <div className="w-24">
-            <Input
-              type="number"
-              value={prod.unit_cost || ''}
-              onChange={e => {
-                const updated = [...products];
-                updated[pIdx] = { ...updated[pIdx], unit_cost: parseFloat(e.target.value) || 0 };
-                setProducts(updated);
-              }}
-              placeholder="₹ Cost"
-            />
-          </div>
+          {!isStaff && (
+            <div className="w-24">
+              <Input
+                type="number"
+                value={prod.unit_cost || ''}
+                onChange={e => {
+                  const updated = [...products];
+                  updated[pIdx] = { ...updated[pIdx], unit_cost: parseFloat(e.target.value) || 0 };
+                  setProducts(updated);
+                }}
+                placeholder="₹ Cost"
+              />
+            </div>
+          )}
           <button onClick={() => setProducts(products.filter((_, i) => i !== pIdx))} className="pb-3 text-gray-300 hover:text-red-500">
             <X size={16} />
           </button>
         </div>
-      ))}
-      {products.length === 0 && <p className="text-xs text-gray-400 italic">No products added</p>}
+      );
+    })}
+    {products.length === 0 && <p className="text-xs text-gray-400 italic">No products added</p>}
     </div>
   );
 
@@ -389,10 +538,12 @@ export default function JobCartDetailPage() {
           placeholder="Select service..."
         />
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Input label="Service Price (₹)" type="number" value={svcPrice || ''} onChange={e => setSvcPrice(parseFloat(e.target.value) || 0)} />
-        <Input label="Labor Charges (₹)" type="number" value={svcLabor || ''} onChange={e => setSvcLabor(parseFloat(e.target.value) || 0)} />
-      </div>
+      {!isStaff && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Input label="Service Price (₹)" type="number" value={svcPrice || ''} onChange={e => setSvcPrice(parseFloat(e.target.value) || 0)} />
+          <Input label="Labor Charges (₹)" type="number" value={svcLabor || ''} onChange={e => setSvcLabor(parseFloat(e.target.value) || 0)} />
+        </div>
+      )}
       <ProductEditor products={products} setProducts={setProducts} />
     </div>
   );
@@ -401,7 +552,7 @@ export default function JobCartDetailPage() {
     <>
       <AdminTopBar
         title={cart.vehicle?.registration_no || `Cart #${cart.id}`}
-        subtitle={`${cart.vehicle?.brand} ${cart.vehicle?.model} · Visit #${cart.visit_number}`}
+        subtitle={`${cart.vehicle?.brand} ${cart.vehicle?.model}${cart.vehicle?.car_year || cart.vehicle?.manufacture_year ? ' (' + (cart.vehicle?.car_year || cart.vehicle?.manufacture_year) + ')' : ''} · Visit #${cart.visit_number}`}
         actions={
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={() => navigate(-1)} icon={<ArrowLeft size={14} />}>
@@ -449,7 +600,7 @@ export default function JobCartDetailPage() {
               ) : (
                 <div className="text-sm text-[#5f5e5e] space-y-0.5">
                   <p><span className="font-semibold">Customer:</span> {(cart as any).customer?.name || 'N/A'} · {(cart as any).customer?.mobile}</p>
-                  <p><span className="font-semibold">Vehicle:</span> {cart.vehicle?.brand} {cart.vehicle?.model}</p>
+                  <p><span className="font-semibold">Vehicle:</span> {cart.vehicle?.brand} {cart.vehicle?.model}{cart.vehicle?.car_year || cart.vehicle?.manufacture_year ? ' (' + (cart.vehicle?.car_year || cart.vehicle?.manufacture_year) + ')' : ''}</p>
                   <p><span className="font-semibold">Date:</span> {formatDate(cart.visit_date)} · <span className="font-semibold">Visit:</span> #{cart.visit_number}</p>
                   {cart.notes && <p><span className="font-semibold">Notes:</span> {cart.notes}</p>}
                   {cart.invoice_number && <p><span className="font-semibold">Invoice:</span> {cart.invoice_number}</p>}
@@ -459,9 +610,37 @@ export default function JobCartDetailPage() {
 
             {/* Total */}
             {!isStaff && cart.total_amount !== undefined && (
-              <div className="text-right shrink-0">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e]">Total</p>
-                <p className="text-3xl font-black text-[#1c1b1b] tracking-tight">{formatINR(cart.total_amount)}</p>
+              <div className="text-right shrink-0 space-y-1.5">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e]">Total Amount</p>
+                  <p className="text-3xl font-black text-[#1c1b1b] tracking-tight">{formatINR(cart.total_amount)}</p>
+                </div>
+                {((cart as any).advance_paid || 0) > 0 ? (
+                  <>
+                    <div className="pt-1.5 border-t border-dashed border-gray-200">
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-[#D32F2F]">Advance Paid</p>
+                      <p className="text-sm font-bold text-[#D32F2F]">{formatINR((cart as any).advance_paid)}</p>
+                    </div>
+                    {(cart as any).balance_due !== undefined && (
+                      <div className="pt-0.5">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500">Balance Due</p>
+                        <p className="text-base font-extrabold text-gray-800">{formatINR((cart as any).balance_due)}</p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  cart.status !== 'complete' && (
+                    <button
+                      onClick={() => {
+                        setAdvanceAmountInput(String(Math.round((cart.total_amount || 0) * 0.3)));
+                        setCollectAdvanceOpen(true);
+                      }}
+                      className="mt-2 px-3 py-1.5 bg-[#D32F2F]/10 hover:bg-[#D32F2F]/20 text-[#D32F2F] border border-[#D32F2F]/20 text-xs font-bold rounded-lg transition-all"
+                    >
+                      Collect Advance
+                    </button>
+                  )
+                )}
               </div>
             )}
           </div>
@@ -543,30 +722,90 @@ export default function JobCartDetailPage() {
         </div>
 
         {/* ─── Photos ──────────────────────────── */}
-        {(beforePhotos.length > 0 || afterPhotos.length > 0) && (
+        {(beforePhotos.length > 0 || afterPhotos.length > 0 || canEdit) && (
           <div className="bg-white rounded-lg p-6 shadow-sm">
             <h3 className="text-xs font-extrabold uppercase tracking-widest text-[#5f5e5e] mb-4">Photos</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {beforePhotos.length > 0 && (
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2">Before</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2">Before</p>
+                {beforePhotos.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
                     {beforePhotos.map((p: JobPhoto) => (
-                      <img key={p.id} src={p.url} alt="Before" className="rounded-lg aspect-square object-cover w-full" />
+                      <div key={p.id} className="relative group/photo aspect-square w-full">
+                        <img src={p.url} alt="Before" className="rounded-lg object-cover w-full h-full" />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/photo:opacity-100 flex items-center justify-center gap-2 rounded-lg transition-opacity">
+                          <button
+                            onClick={() => handleShareFile(p.url, `Before Photo - Job #${id}`, 'image')}
+                            className="p-1.5 bg-white/90 hover:bg-white text-gray-800 rounded-md transition-colors shadow"
+                            title="Share photo"
+                          >
+                            <Share2 size={14} />
+                          </button>
+                          {canEdit && (
+                            <button
+                              onClick={() => handleDeletePhoto(p.id)}
+                              className="p-1.5 bg-red-600/90 hover:bg-red-600 text-white rounded-md transition-colors shadow"
+                              title="Delete photo"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     ))}
                   </div>
-                </div>
-              )}
-              {afterPhotos.length > 0 && (
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2">After</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                ) : (
+                  <p className="text-xs text-gray-400 italic mb-4">No before photos</p>
+                )}
+                {canEdit && (
+                  <FileUpload
+                    label="Upload Before Photo"
+                    files={beforeFiles}
+                    onChange={handleUploadBefore}
+                    maxFiles={1}
+                  />
+                )}
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2">After</p>
+                {afterPhotos.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
                     {afterPhotos.map((p: JobPhoto) => (
-                      <img key={p.id} src={p.url} alt="After" className="rounded-lg aspect-square object-cover w-full" />
+                      <div key={p.id} className="relative group/photo aspect-square w-full">
+                        <img src={p.url} alt="After" className="rounded-lg object-cover w-full h-full" />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/photo:opacity-100 flex items-center justify-center gap-2 rounded-lg transition-opacity">
+                          <button
+                            onClick={() => handleShareFile(p.url, `After Photo - Job #${id}`, 'image')}
+                            className="p-1.5 bg-white/90 hover:bg-white text-gray-800 rounded-md transition-colors shadow"
+                            title="Share photo"
+                          >
+                            <Share2 size={14} />
+                          </button>
+                          {canEdit && (
+                            <button
+                              onClick={() => handleDeletePhoto(p.id)}
+                              className="p-1.5 bg-red-600/90 hover:bg-red-600 text-white rounded-md transition-colors shadow"
+                              title="Delete photo"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <p className="text-xs text-gray-400 italic mb-4">No after photos</p>
+                )}
+                {canEdit && (
+                  <FileUpload
+                    label="Upload After Photo"
+                    files={afterFiles}
+                    onChange={handleUploadAfter}
+                    maxFiles={1}
+                  />
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -589,6 +828,9 @@ export default function JobCartDetailPage() {
                 <Button onClick={handleDownloadInvoice} icon={<Download size={14} />}>
                   Download Invoice
                 </Button>
+                <Button variant="secondary" onClick={() => handleShareFile(`/api/job-carts/${cart.id}/invoice`, `Invoice - Job #${cart.invoice_number || cart.id}`, 'pdf')} icon={<Share2 size={14} />}>
+                  Share Invoice
+                </Button>
                 {!isStaff && (
                   <Button variant="secondary" onClick={openDeliveryModal} icon={<Truck size={14} />}>
                     Send for Delivery
@@ -605,6 +847,58 @@ export default function JobCartDetailPage() {
             <Button onClick={handleDownloadInvoice} icon={<Download size={14} />}>
               Download Invoice
             </Button>
+          </div>
+        )}
+
+        {/* ─── Messages Sent Section ──────────────────── */}
+        {!isCustomer && messages.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8 p-6">
+            <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-100">
+              <Mail className="text-[#D32F2F] w-5 h-5" />
+              <h2 className="text-lg font-bold text-[#1c1b1b]">Notification History</h2>
+            </div>
+            <div className="divide-y divide-gray-100 max-h-60 overflow-y-auto">
+              {messages.map((log: any) => {
+                const waLink = log.response_data?.wa_link;
+                return (
+                  <div key={log.id} className="py-3 flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                          log.status === 'sent' ? 'bg-green-100 text-green-700' : 
+                          log.status === 'failed' ? 'bg-red-100 text-red-700' : 
+                          log.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {log.status}
+                        </span>
+                        <span className="text-xs uppercase font-bold text-gray-400 tracking-wider">
+                          {log.channel}
+                        </span>
+                        {log.template_name && (
+                          <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                            {log.template_name}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-[#5f5e5e]">{log.message_body}</p>
+                      {log.channel === 'whatsapp' && waLink && (
+                        <a 
+                          href={waLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 mt-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 transition-colors"
+                        >
+                          💬 Click to send via WhatsApp Web
+                        </a>
+                      )}
+                    </div>
+                    <div className="text-right text-[10px] text-gray-400 ml-4">
+                      {new Date(log.sent_at).toLocaleString()}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
@@ -713,6 +1007,124 @@ export default function JobCartDetailPage() {
             onChange={e => setSelectedStaff(e.target.value)}
             placeholder="Choose staff..."
           />
+        </div>
+      </Modal>
+
+      {/* ─── Collect Advance Modal ───────────────── */}
+      <Modal
+        open={collectAdvanceOpen}
+        onClose={() => setCollectAdvanceOpen(false)}
+        title="Collect Advance Payment"
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setCollectAdvanceOpen(false)} disabled={submittingAdvance}>Cancel</Button>
+            <Button onClick={handleCollectAdvance} loading={submittingAdvance}>
+              Collect Payment
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[#5f5e5e]">
+            Record an advance payment collected from the customer at the counter.
+          </p>
+          <Input
+            label="Advance Amount (₹)"
+            type="number"
+            value={advanceAmountInput}
+            onChange={e => setAdvanceAmountInput(e.target.value)}
+            placeholder="e.g. 500"
+          />
+          <Select
+            label="Payment Method"
+            options={[
+              { value: 'cash', label: '💵 Cash' },
+              { value: 'upi', label: '📱 UPI' },
+              { value: 'card', label: '💳 Card' },
+              { value: 'net_banking', label: '🏦 Net Banking' },
+              { value: 'qr', label: '🔲 QR Code Scan' },
+              { value: 'other', label: '📝 Other' },
+            ]}
+            value={advanceMethod}
+            onChange={e => setAdvanceMethod(e.target.value)}
+          />
+          <Input
+            label="Notes / Reference (Optional)"
+            value={advanceNotes}
+            onChange={e => setAdvanceNotes(e.target.value)}
+            placeholder="e.g. Transaction ID, note"
+          />
+        </div>
+      </Modal>
+
+      {/* ─── Share Link Modal ─────────────────── */}
+      <Modal
+        open={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+        title="Share File Link"
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setShareModalOpen(false)}>Close</Button>
+            {!shareLink && (
+              <Button onClick={handleGenerateShareLink} variant="primary">Generate Link</Button>
+            )}
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {!shareLink ? (
+            <>
+              <p className="text-sm text-[#5f5e5e]">
+                Choose an expiration period for this shared link. Anyone with the link will be able to access the file without logging in.
+              </p>
+              <Select
+                label="Expiry Duration"
+                value={shareExpiry}
+                onChange={e => setShareExpiry(e.target.value)}
+                options={[
+                  { value: '24', label: '24 Hours' },
+                  { value: '168', label: '7 Days' },
+                  { value: 'permanent', label: 'Permanent (No Expiry)' }
+                ]}
+              />
+            </>
+          ) : (
+            <>
+              <p className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded inline-block">
+                ✓ Shareable link ready!
+              </p>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="text"
+                  readOnly
+                  value={shareLink}
+                  className="flex-1 text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50 text-gray-700 select-all"
+                  onClick={e => (e.target as HTMLInputElement).select()}
+                />
+                <Button
+                  onClick={() => {
+                    navigator.clipboard.writeText(shareLink);
+                    toast('success', 'Copied to clipboard!');
+                  }}
+                  variant="primary"
+                >
+                  Copy
+                </Button>
+              </div>
+              <div className="pt-2">
+                <a
+                  href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`Here is the shared document: ${shareLink}`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
+                >
+                  💬 Share on WhatsApp
+                </a>
+              </div>
+            </>
+          )}
         </div>
       </Modal>
     </>

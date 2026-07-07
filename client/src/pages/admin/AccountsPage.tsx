@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { IndianRupee, TrendingUp, TrendingDown, Clock, Download, Package, Calendar, Briefcase, RefreshCw, CheckCircle2, ChevronRight, BarChart3, Receipt, FileText } from 'lucide-react';
-import { useAccountSummary, useTransactions, useExportReport, useAccountKPIs } from '../../api/hooks/useAccounts';
+import api from '../../api/axiosInstance';
+import { IndianRupee, TrendingUp, TrendingDown, Clock, Download, Package, Calendar, Briefcase, RefreshCw, CheckCircle2, ChevronRight, BarChart3, Receipt, FileText, Plus, Trash2 } from 'lucide-react';
+import { useAccountSummary, useTransactions, useExportReport, useAccountKPIs, usePurchaseBills, useCreatePurchaseBill, useGstReport, useReturns, useCreateReturn } from '../../api/hooks/useAccounts';
+import { useVendors } from '../../api/hooks/useVendors';
 import { useUIStore } from '../../store/uiStore';
 import PremiumPageHeader from '../../components/shared/PremiumPageHeader';
 import PremiumStatCard from '../../components/shared/PremiumStatCard';
@@ -68,6 +70,132 @@ export default function AccountsPage() {
     }
   };
 
+  // --- NEW FINANCIAL MODULES STATES & HOOKS ---
+  const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
+  const [returnModalOpen, setReturnModalOpen] = useState(false);
+
+  const [gstMonth, setGstMonth] = useState(new Date().getMonth() + 1);
+  const [gstYear, setGstYear] = useState(new Date().getFullYear());
+
+  // Purchase Form State
+  const [purchaseForm, setPurchaseForm] = useState({
+    vendor_id: '',
+    purchase_date: new Date().toISOString().slice(0, 10),
+    invoice_number: '',
+    tax_amount: '0',
+    notes: '',
+    items: [{ item_id: '', quantity: '1', unit_price: '0' }]
+  });
+
+  // Return Form State
+  const [returnForm, setReturnForm] = useState({
+    original_bill_id: '',
+    return_type: 'sales_return',
+    amount: '0',
+    reason: ''
+  });
+
+  // Queries
+  const { data: vendorsList } = useVendors({ active_only: true });
+  const { data: purchaseBills, refetch: refetchPurchases } = usePurchaseBills(dateFilter);
+  const { data: gstReport, refetch: refetchGst } = useGstReport({ month: String(gstMonth), year: String(gstYear) });
+  const { data: returnsList, refetch: refetchReturns } = useReturns();
+
+  // Mutations
+  const createPurchaseMutation = useCreatePurchaseBill();
+  const createReturnMutation = useCreateReturn();
+
+  const handleAddPurchaseItem = () => {
+    setPurchaseForm(prev => ({
+      ...prev,
+      items: [...prev.items, { item_id: '', quantity: '1', unit_price: '0' }]
+    }));
+  };
+
+  const handleRemovePurchaseItem = (index: number) => {
+    setPurchaseForm(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handlePurchaseItemChange = (index: number, field: string, value: string) => {
+    setPurchaseForm(prev => {
+      const updated = [...prev.items];
+      updated[index] = { ...updated[index], [field]: value };
+      return { ...prev, items: updated };
+    });
+  };
+
+  const handlePurchaseSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!purchaseForm.vendor_id || !purchaseForm.purchase_date) {
+      alert('Please fill out all required fields.');
+      return;
+    }
+    try {
+      await createPurchaseMutation.mutateAsync({
+        ...purchaseForm,
+        vendor_id: Number(purchaseForm.vendor_id),
+        tax_amount: parseFloat(purchaseForm.tax_amount) || 0,
+        items: purchaseForm.items.map(i => ({
+          item_id: Number(i.item_id),
+          quantity: parseFloat(i.quantity) || 0,
+          unit_price: parseFloat(i.unit_price) || 0
+        }))
+      });
+      toast('success', 'Purchase bill recorded successfully');
+      setPurchaseModalOpen(false);
+      setPurchaseForm({
+        vendor_id: '',
+        purchase_date: new Date().toISOString().slice(0, 10),
+        invoice_number: '',
+        tax_amount: '0',
+        notes: '',
+        items: [{ item_id: '', quantity: '1', unit_price: '0' }]
+      });
+      refetchPurchases();
+      refetchSummary();
+      refetchKPI();
+    } catch (err: any) {
+      toast('error', err.response?.data?.error || 'Failed to record purchase bill');
+    }
+  };
+
+  const handleReturnSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!returnForm.original_bill_id || !returnForm.amount) {
+      alert('Please fill out all required fields.');
+      return;
+    }
+    try {
+      await createReturnMutation.mutateAsync({
+        original_bill_id: Number(returnForm.original_bill_id),
+        return_type: returnForm.return_type,
+        amount: parseFloat(returnForm.amount) || 0,
+        reason: returnForm.reason
+      });
+      toast('success', 'Return note logged successfully');
+      setReturnModalOpen(false);
+      setReturnForm({
+        original_bill_id: '',
+        return_type: 'sales_return',
+        amount: '0',
+        reason: ''
+      });
+      refetchReturns();
+      refetchSummary();
+      refetchKPI();
+    } catch (err: any) {
+      toast('error', err.response?.data?.error || 'Failed to log return note');
+    }
+  };
+
+  const downloadGstCsv = () => {
+    const url = `${api.defaults.baseURL || ''}/api/gst-reports?month=${gstMonth}&year=${gstYear}&format=csv`;
+    window.open(url, '_blank');
+  };
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 font-sans">
       {/* Page Header */}
@@ -90,6 +218,9 @@ export default function AccountsPage() {
           tabs={[
             { key: 'summary', label: 'Summary Overview' },
             { key: 'transactions', label: 'General Ledger' },
+            { key: 'purchase_bills', label: 'Purchase Bills' },
+            { key: 'gst', label: 'GST Compliance' },
+            { key: 'returns', label: 'Returns Ledger' },
             { key: 'buy_sell', label: 'Buy & Sell Trade' },
             { key: 'job_carts', label: 'Service Job Carts' },
             { key: 'inventory', label: 'Inventory Capital' },
@@ -630,6 +761,261 @@ export default function AccountsPage() {
         </div>
       )}
 
+      {/* Tab Content: Purchase Bills */}
+      {activeTab === 'purchase_bills' && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">Procurements & Invoices</h3>
+              <p className="text-xs text-gray-500">Record and track inventory purchases from certified suppliers.</p>
+            </div>
+            <button
+              onClick={() => setPurchaseModalOpen(true)}
+              className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-emerald-800 text-white text-xs font-bold rounded-xl hover:from-emerald-700 hover:to-emerald-900 transition flex items-center gap-1 shadow-sm shadow-emerald-500/25"
+            >
+              <Plus size={14} /> Record Purchase Bill
+            </button>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-100 text-left text-sm">
+                <thead className="bg-gray-50">
+                  <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                    <th className="p-4">Purchase Date</th>
+                    <th className="p-4">Invoice / ID</th>
+                    <th className="p-4">Vendor Name</th>
+                    <th className="p-4">Total Price (incl. tax)</th>
+                    <th className="p-4">Tax Amount</th>
+                    <th className="p-4">Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {(purchaseBills?.data || []).map((row: any) => (
+                    <tr key={row.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="p-4 text-gray-600 font-medium">
+                        {new Date(row.purchase_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </td>
+                      <td className="p-4 font-mono text-xs text-gray-950 font-bold">
+                        {row.invoice_number || `#PUR-${String(row.id).padStart(4, '0')}`}
+                      </td>
+                      <td className="p-4 font-semibold text-gray-900">{row.vendor_name || '—'}</td>
+                      <td className="p-4 font-black text-gray-900">{formatINR(row.total_amount)}</td>
+                      <td className="p-4 text-gray-600 font-medium">{formatINR(row.tax_amount)}</td>
+                      <td className="p-4 text-gray-500 text-xs">{row.notes || '—'}</td>
+                    </tr>
+                  ))}
+                  {(!purchaseBills?.data || purchaseBills.data.length === 0) && (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-xs text-gray-400 font-bold uppercase">
+                        No purchase bills recorded yet
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab Content: GST Compliance */}
+      {activeTab === 'gst' && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">GST Compliance Ledger</h3>
+              <p className="text-xs text-gray-500">View GSTR-1 & GSTR-2 aggregates and export monthly summaries.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                className="px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
+                value={gstMonth}
+                onChange={e => setGstMonth(Number(e.target.value))}
+              >
+                {Array.from({ length: 12 }, (_, i) => (
+                  <option key={i+1} value={i+1}>
+                    {new Date(2000, i).toLocaleString('default', { month: 'long' })}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
+                value={gstYear}
+                onChange={e => setGstYear(Number(e.target.value))}
+              >
+                {[2025, 2026, 2027, 2028].map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              <button
+                onClick={downloadGstCsv}
+                className="px-3.5 py-1.5 border border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-xs font-bold rounded-xl transition flex items-center gap-1 shadow-sm"
+              >
+                <Download size={13} /> Export CSV
+              </button>
+            </div>
+          </div>
+
+          {/* GST KPI Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <PremiumStatCard
+              title="Sales GST (GSTR-1 Outward)"
+              value={gstReport?.summary?.sales?.gst || 0}
+              prefix="₹"
+              icon={TrendingUp}
+              color="#10B981"
+              gradient="from-emerald-500/10 to-teal-400/5"
+              delay={0.1}
+            />
+            <PremiumStatCard
+              title="Purchase GST (GSTR-2 Inward ITC)"
+              value={gstReport?.summary?.purchases?.gst || 0}
+              prefix="₹"
+              icon={TrendingDown}
+              color="#EF4444"
+              gradient="from-red-500/10 to-rose-400/5"
+              delay={0.2}
+            />
+            <PremiumStatCard
+              title="Net GST Payable"
+              value={gstReport?.summary?.net_gst_payable || 0}
+              prefix="₹"
+              icon={IndianRupee}
+              color={(gstReport?.summary?.net_gst_payable || 0) >= 0 ? '#F59E0B' : '#10B981'}
+              gradient={(gstReport?.summary?.net_gst_payable || 0) >= 0 ? 'from-amber-500/10 to-yellow-400/5' : 'from-emerald-500/10 to-teal-400/5'}
+              delay={0.3}
+            />
+          </div>
+
+          {/* GST Record Table */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+            <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">GST Audit Journal Entries</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-100 text-left text-sm">
+                <thead className="bg-gray-50">
+                  <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                    <th className="p-4">Type</th>
+                    <th className="p-4">Invoice No</th>
+                    <th className="p-4">GSTIN</th>
+                    <th className="p-4">Taxable Value</th>
+                    <th className="p-4">CGST</th>
+                    <th className="p-4">SGST</th>
+                    <th className="p-4">Total GST</th>
+                    <th className="p-4">Created Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {(gstReport?.records || []).map((row: any) => {
+                    const isSales = row.record_type === 'sales';
+                    return (
+                      <tr key={row.id} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="p-4">
+                          <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${
+                            isSales ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'
+                          }`}>
+                            {isSales ? 'SALES' : 'PURCHASE'}
+                          </span>
+                        </td>
+                        <td className="p-4 font-mono text-xs font-bold text-gray-950">
+                          {isSales ? (row.job_invoice || `Job #${row.invoice_id}`) : (row.purchase_invoice || `Purchase #${row.purchase_id}`)}
+                        </td>
+                        <td className="p-4 font-semibold text-gray-700">{row.gstin || '—'}</td>
+                        <td className="p-4 font-medium text-gray-900">{formatINR(row.taxable_amount)}</td>
+                        <td className="p-4 text-gray-600">{formatINR(row.cgst)}</td>
+                        <td className="p-4 text-gray-600">{formatINR(row.sgst)}</td>
+                        <td className="p-4 font-bold text-gray-900">{formatINR(row.total_gst)}</td>
+                        <td className="p-4 text-gray-500 text-xs">
+                          {new Date(row.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {(!gstReport?.records || gstReport.records.length === 0) && (
+                    <tr>
+                      <td colSpan={8} className="p-8 text-center text-xs text-gray-400 font-bold uppercase">
+                        No GST records found for this period
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab Content: Returns Ledger */}
+      {activeTab === 'returns' && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">Returns & Billing Reversals</h3>
+              <p className="text-xs text-gray-500">Record sales returns (refunds/credit notes) and purchase returns (debit notes).</p>
+            </div>
+            <button
+              onClick={() => setReturnModalOpen(true)}
+              className="px-3.5 py-2 bg-gradient-to-r from-red-600 to-red-800 text-white text-xs font-bold rounded-xl hover:from-red-700 hover:to-red-900 transition flex items-center gap-1 shadow-sm shadow-red-500/25"
+            >
+              <Plus size={14} /> Log Return Note
+            </button>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-100 text-left text-sm">
+                <thead className="bg-gray-50">
+                  <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                    <th className="p-4">Return Date</th>
+                    <th className="p-4">Return ID</th>
+                    <th className="p-4">Original Bill ID</th>
+                    <th className="p-4">Return Type</th>
+                    <th className="p-4">Refunded Amount</th>
+                    <th className="p-4">Reason / Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {(returnsList || []).map((row: any) => {
+                    const isSalesReturn = row.return_type === 'sales_return';
+                    return (
+                      <tr key={row.id} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="p-4 text-gray-600 font-medium">
+                          {new Date(row.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </td>
+                        <td className="p-4 font-mono text-xs text-gray-950 font-bold">
+                          #RET-{String(row.id).padStart(4, '0')}
+                        </td>
+                        <td className="p-4 font-mono text-xs font-semibold text-gray-700">
+                          {isSalesReturn ? `Bill #${row.original_bill_id}` : `Purchase #${row.original_bill_id}`}
+                        </td>
+                        <td className="p-4">
+                          <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${
+                            isSalesReturn ? 'text-red-700 bg-red-50 border-red-200' : 'text-blue-700 bg-blue-50 border-blue-200'
+                          }`}>
+                            {isSalesReturn ? 'SALES RETURN' : 'PURCHASE RETURN'}
+                          </span>
+                        </td>
+                        <td className="p-4 font-black text-gray-900">{formatINR(row.amount)}</td>
+                        <td className="p-4 text-gray-500 text-xs font-medium">{row.reason || '—'}</td>
+                      </tr>
+                    );
+                  })}
+                  {(!returnsList || returnsList.length === 0) && (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-xs text-gray-400 font-bold uppercase">
+                        No return notes logged yet
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Export Modal */}
       <Modal open={showExport} onClose={() => setShowExport(false)} title="Export Financial Statement">
         <div className="space-y-4 py-2">
@@ -641,6 +1027,171 @@ export default function AccountsPage() {
             <Button variant="primary" onClick={handleExport} loading={exportMutation.isPending}>Download Document</Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Add Purchase Bill Modal */}
+      <Modal open={purchaseModalOpen} onClose={() => setPurchaseModalOpen(false)} title="Record Purchase Bill">
+        <form onSubmit={handlePurchaseSubmit} className="space-y-4 py-2 max-h-[80vh] overflow-y-auto pr-2">
+          <div className="grid grid-cols-2 gap-3">
+            <Select
+              label="Select Vendor *"
+              value={purchaseForm.vendor_id}
+              onChange={e => setPurchaseForm({ ...purchaseForm, vendor_id: e.target.value })}
+              options={[
+                { value: '', label: 'Select Vendor' },
+                ...(vendorsList?.data || []).map((v: any) => ({ value: String(v.id), label: v.name }))
+              ]}
+              required
+            />
+            <Input
+              type="date"
+              label="Purchase Date *"
+              value={purchaseForm.purchase_date}
+              onChange={e => setPurchaseForm({ ...purchaseForm, purchase_date: e.target.value })}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              type="text"
+              label="Invoice Number"
+              placeholder="e.g. INV-9901"
+              value={purchaseForm.invoice_number}
+              onChange={e => setPurchaseForm({ ...purchaseForm, invoice_number: e.target.value })}
+            />
+            <Input
+              type="number"
+              label="GST / Tax Amount"
+              placeholder="0.00"
+              value={purchaseForm.tax_amount}
+              onChange={e => setPurchaseForm({ ...purchaseForm, tax_amount: e.target.value })}
+            />
+          </div>
+
+          <div className="border-t border-gray-100 pt-3">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Purchase Line Items</span>
+              <button
+                type="button"
+                onClick={handleAddPurchaseItem}
+                className="px-2 py-1 border border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-[10px] font-bold rounded-lg transition flex items-center gap-0.5"
+              >
+                <Plus size={10} /> Add Item
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {purchaseForm.items.map((item, idx) => (
+                <div key={idx} className="flex gap-2 items-end border border-gray-50 p-2 rounded-lg bg-gray-50/50">
+                  <div className="flex-1">
+                    <Select
+                      label="Select Product *"
+                      value={item.item_id}
+                      onChange={e => handlePurchaseItemChange(idx, 'item_id', e.target.value)}
+                      options={[
+                        { value: '', label: 'Select Product' },
+                        ...(inventory?.data || []).map((p: any) => ({ value: String(p.id), label: p.product_name }))
+                      ]}
+                      required
+                    />
+                  </div>
+                  <div className="w-20">
+                    <Input
+                      type="number"
+                      label="Qty *"
+                      placeholder="1"
+                      value={item.quantity}
+                      onChange={e => handlePurchaseItemChange(idx, 'quantity', e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="w-24">
+                    <Input
+                      type="number"
+                      label="Unit Cost *"
+                      placeholder="0.00"
+                      value={item.unit_price}
+                      onChange={e => handlePurchaseItemChange(idx, 'unit_price', e.target.value)}
+                      required
+                    />
+                  </div>
+                  {purchaseForm.items.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePurchaseItem(idx)}
+                      className="p-2 border border-red-100 text-red-600 hover:bg-red-50 rounded-lg transition"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <Input
+            type="text"
+            label="Internal Notes"
+            placeholder="e.g. Raw materials delivery"
+            value={purchaseForm.notes}
+            onChange={e => setPurchaseForm({ ...purchaseForm, notes: e.target.value })}
+          />
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="secondary" onClick={() => setPurchaseModalOpen(false)}>Cancel</Button>
+            <Button variant="primary" type="submit" loading={createPurchaseMutation.isPending}>Record Bill</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Log Return Note Modal */}
+      <Modal open={returnModalOpen} onClose={() => setReturnModalOpen(false)} title="Log Return / Reversal Note">
+        <form onSubmit={handleReturnSubmit} className="space-y-4 py-2">
+          <Select
+            label="Return Type *"
+            value={returnForm.return_type}
+            onChange={e => setReturnForm({ ...returnForm, return_type: e.target.value })}
+            options={[
+              { value: 'sales_return', label: 'Sales Return (Credit Note to Customer)' },
+              { value: 'purchase_return', label: 'Purchase Return (Debit Note to Vendor)' }
+            ]}
+            required
+          />
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              type="number"
+              label="Original Invoice / Bill ID *"
+              placeholder="e.g. 15"
+              value={returnForm.original_bill_id}
+              onChange={e => setReturnForm({ ...returnForm, original_bill_id: e.target.value })}
+              required
+            />
+            <Input
+              type="number"
+              label="Reversal Amount *"
+              placeholder="0.00"
+              value={returnForm.amount}
+              onChange={e => setReturnForm({ ...returnForm, amount: e.target.value })}
+              required
+            />
+          </div>
+
+          <Input
+            type="text"
+            label="Reason for Return *"
+            placeholder="e.g. Defective stock / cancelled service"
+            value={returnForm.reason}
+            onChange={e => setReturnForm({ ...returnForm, reason: e.target.value })}
+            required
+          />
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="secondary" onClick={() => setReturnModalOpen(false)}>Cancel</Button>
+            <Button variant="primary" type="submit" loading={createReturnMutation.isPending}>Log Note</Button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

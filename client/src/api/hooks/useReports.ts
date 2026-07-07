@@ -30,7 +30,7 @@ export function useJobCardReport(params: { from_date?: string; to_date?: string;
   });
 }
 
-export function downloadReport(type: 'sales' | 'inventory' | 'job-cards', params: any, format: 'xlsx' | 'pdf') {
+export function downloadReport(type: 'sales' | 'inventory' | 'job-cards' | 'package-history', params: any, format: 'xlsx' | 'pdf') {
   return api.get(`/api/reports/${type}`, {
     params: { ...params, format },
     responseType: 'blob',
@@ -41,5 +41,12 @@ export function downloadReport(type: 'sales' | 'inventory' | 'job-cards', params
     a.download = `${type}_report.${format}`;
     a.click();
     URL.revokeObjectURL(url);
+  });
+}
+
+export function useWelcomeRewardsReport() {
+  return useQuery({
+    queryKey: ['report-welcome-rewards'],
+    queryFn: () => api.get('/api/reports/welcome-rewards').then(r => r.data),
   });
 }

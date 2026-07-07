@@ -243,3 +243,55 @@ exports.kpis = async (req, res) => {
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };
+
+// ─── CREATE RETURN NOTE (Update 29) ───────────────────
+exports.createReturn = async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const { original_bill_id, return_type, amount, reason } = req.body;
+
+    if (!original_bill_id || !return_type || !amount) {
+      return res.status(400).json({ success: false, error: 'Original Bill ID, return type, and amount are required' });
+    }
+
+    // 1. Insert into return_bills
+    const [result] = await connection.query(
+      `INSERT INTO return_bills (original_bill_id, return_type, amount, reason)
+       VALUES (?, ?, ?, ?)`,
+      [original_bill_id, return_type, amount, reason || '']
+    );
+
+    // 2. Insert into transactions
+    const direction = return_type === 'sales_return' ? 'out' : 'in';
+    const txnType = return_type === 'sales_return' ? 'sales_return' : 'purchase_return';
+    const note = return_type === 'sales_return' 
+      ? `Sales Return credit note for Bill #${original_bill_id}` 
+      : `Purchase Return debit note for Purchase Bill #${original_bill_id}`;
+
+    await connection.query(
+      `INSERT INTO transactions (type, reference_id, amount, direction, note, transaction_date, created_by)
+       VALUES (?, ?, ?, ?, ?, CURDATE(), ?)`,
+      [txnType, original_bill_id, amount, direction, note, req.user.id]
+    );
+
+    await connection.commit();
+    res.status(201).json({ success: true, data: { id: result.insertId }, message: 'Return note created successfully' });
+  } catch (err) {
+    await connection.rollback();
+    console.error('Create return error:', err);
+    res.status(500).json({ success: false, error: 'Failed to create return note' });
+  } finally {
+    connection.release();
+  }
+};
+
+// ─── LIST RETURNS (Update 29) ─────────────────────────
+exports.listReturns = async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM return_bills ORDER BY created_at DESC');
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to fetch returns list' });
+  }
+};

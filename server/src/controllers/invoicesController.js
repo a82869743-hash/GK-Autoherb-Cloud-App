@@ -46,7 +46,7 @@ exports.listAll = async (req, res) => {
       const params = [];
       if (from_date) { where += ' AND DATE(mb.created_at) >= ?'; params.push(from_date); }
       if (to_date)   { where += ' AND DATE(mb.created_at) <= ?'; params.push(to_date); }
-      if (search)    { where += ' AND (mb.customer_name LIKE ? OR mb.customer_mobile LIKE ?)'; const s = `%${search}%`; params.push(s,s); }
+      if (search)    { where += ' AND (mb.customer_name LIKE ? OR mb.customer_mobile LIKE ? OR mb.vehicle_reg_no LIKE ?)'; const s = `%${search}%`; params.push(s,s,s); }
 
       const [rows] = await pool.query(`
         SELECT
@@ -57,7 +57,7 @@ exports.listAll = async (req, res) => {
           mb.customer_mobile AS party_mobile,
           mb.created_at AS date,
           mb.amount,
-          NULL AS registration_no,
+          mb.vehicle_reg_no AS registration_no,
           mb.discount_type,
           mb.discount_value
         FROM manual_bills mb

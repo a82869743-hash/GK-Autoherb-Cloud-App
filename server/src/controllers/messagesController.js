@@ -26,28 +26,39 @@ const getCampaignQuery = (campaign) => {
 // ─── LIST MESSAGES LOG ────────────────────────
 exports.listLogs = async (req, res) => {
   try {
-    const { limit = 50, offset = 0, status, channel } = req.query;
+    const { limit = 50, offset = 0, status, channel, reference_type, reference_id } = req.query;
     let where = '1=1';
     const params = [];
     
     if (status) {
-      where += ' AND m.status = ?';
+      where += ' AND nl.status = ?';
       params.push(status);
     }
     if (channel) {
-      where += ' AND m.channel = ?';
+      where += ' AND nl.channel = ?';
       params.push(channel);
+    }
+    if (reference_type) {
+      where += ' AND nl.reference_type = ?';
+      params.push(reference_type);
+    }
+    if (reference_id) {
+      where += ' AND nl.reference_id = ?';
+      params.push(parseInt(reference_id, 10));
     }
     
     params.push(parseInt(limit, 10));
     params.push(parseInt(offset, 10));
 
     const [rows] = await pool.query(`
-      SELECT m.*, u.name as customer_name 
-      FROM messages_log m
-      LEFT JOIN users u ON m.customer_id = u.id
+      SELECT nl.id, nl.customer_id, nl.mobile, nl.channel, nl.template_name,
+             nl.message_body, nl.message_body AS message_preview, nl.status,
+             nl.attempts, nl.last_attempt_at, nl.response_data, nl.created_at AS sent_at,
+             u.name AS customer_name 
+      FROM v2_notification_logs nl
+      LEFT JOIN users u ON nl.customer_id = u.id
       WHERE ${where}
-      ORDER BY m.sent_at DESC
+      ORDER BY nl.created_at DESC
       LIMIT ? OFFSET ?
     `, params);
     
@@ -108,20 +119,31 @@ exports.sendBulk = async (req, res) => {
     for (const user of users) {
       try {
         let result;
+        let status = 'pending';
+        let waLink = null;
+
         if (channel === 'whatsapp') {
-          // Assume pre-created template like 'bulk_promotion'
           result = await messagingService.sendWhatsApp(user.mobile, 'bulk_promotion', { body: message_content });
+          waLink = result.wa_link;
+          status = 'pending';
+          sent++;
         } else {
           result = await messagingService.sendSMS(user.mobile, process.env.MSG91_PROMO_TEMPLATE_ID || 'PROMO123', '1', {
             name: user.name,
             content: message_content
           });
+          status = result.success ? 'sent' : 'failed';
+          if (result.success) sent++;
+          else failed++;
         }
         
-        const status = result.success ? 'sent' : 'failed';
-        if (result.success) sent++;
-        else failed++;
-        
+        // Log to v2_notification_logs
+        await pool.query(`
+          INSERT INTO v2_notification_logs (customer_id, mobile, channel, template_name, message_body, status, attempts, last_attempt_at, response_data)
+          VALUES (?, ?, ?, ?, ?, ?, 1, NOW(), ?)
+        `, [user.id, user.mobile, channel, 'Bulk Campaign', message_content, status, JSON.stringify({ wa_link: waLink })]);
+
+        // Log to legacy messages_log
         await pool.query(`
           INSERT INTO messages_log (customer_id, mobile, type, channel, status, message_preview)
           VALUES (?, ?, ?, ?, ?, ?)
@@ -161,28 +183,34 @@ exports.sendSingle = async (req, res) => {
 
     const user = users[0];
     let result;
+    let status = 'pending';
+    let waLink = null;
 
     if (channel === 'whatsapp') {
       result = await messagingService.sendWhatsApp(user.mobile, 'manual_message', { body: message_content });
+      waLink = result.wa_link;
+      status = 'pending';
     } else {
       result = await messagingService.sendSMS(user.mobile, process.env.MSG91_PROMO_TEMPLATE_ID || 'PROMO123', '1', {
         name: user.name,
         content: message_content
       });
+      status = result.success ? 'sent' : 'failed';
     }
 
-    const status = result.success ? 'sent' : 'failed';
-    
+    // Log to v2_notification_logs
+    await pool.query(`
+      INSERT INTO v2_notification_logs (customer_id, mobile, channel, template_name, message_body, status, attempts, last_attempt_at, response_data)
+      VALUES (?, ?, ?, ?, ?, ?, 1, NOW(), ?)
+    `, [user.id, user.mobile, channel, 'Single Manual Message', message_content, status, JSON.stringify({ wa_link: waLink })]);
+
+    // Log to legacy messages_log
     await pool.query(`
       INSERT INTO messages_log (customer_id, mobile, type, channel, status, message_preview)
       VALUES (?, ?, ?, ?, ?, ?)
     `, [user.id, user.mobile, message_type || 'manual', channel, status, message_content.substring(0, 100)]);
 
-    if (!result.success) {
-       return res.status(500).json({ success: false, error: 'Failed to send message' });
-    }
-
-    res.json({ success: true, message: 'Message sent successfully' });
+    res.json({ success: true, message: 'Message logged successfully', data: { wa_link: waLink } });
   } catch (err) {
     console.error('Send single message error:', err);
     res.status(500).json({ success: false, error: 'Server error' });

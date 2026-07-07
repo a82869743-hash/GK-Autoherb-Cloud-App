@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import api from '../../api/axiosInstance';
 import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
-import { PackageOpen, Car, CheckCircle, Loader2, ArrowRight, ShieldCheck, X, AlertCircle, Clock, XCircle, Check, Minus, FileSpreadsheet, FileDown } from 'lucide-react';
+import { PackageOpen, Car, CheckCircle, Loader2, ArrowRight, ShieldCheck, X, AlertCircle, Clock, XCircle, Check, Minus, FileSpreadsheet, FileDown, CreditCard, QrCode } from 'lucide-react';
+import QrPaymentModal from '../../components/shared/QrPaymentModal';
 
 interface Vehicle {
   id: number;
@@ -141,6 +142,11 @@ export default function BuyPackagesPage() {
   const [myRequests, setMyRequests] = useState<any[]>([]);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
+  
+  // QR Payment states
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [qrAmount, setQrAmount] = useState(0);
+  const [activePackageRequestId, setActivePackageRequestId] = useState<number | undefined>(undefined);
 
   const handleExport = async (format: 'pdf' | 'excel') => {
     if (format === 'pdf') setExportingPdf(true);
@@ -246,6 +252,147 @@ export default function BuyPackagesPage() {
       setConfirmPkg(null);
     }
   };
+
+  const [submittingOnline, setSubmittingOnline] = useState(false);
+
+  const loadRazorpayScript = () => {
+    return new Promise<boolean>((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handlePayOnline = async () => {
+    if (!confirmPkg || !selectedVehicle) return;
+    setSubmittingOnline(true);
+    try {
+      const price = getPrice(confirmPkg);
+
+      const sdkLoaded = await loadRazorpayScript();
+      if (!sdkLoaded) {
+        addToast('error', 'Razorpay SDK failed to load. Are you online?');
+        setSubmittingOnline(false);
+        return;
+      }
+
+      // 1. Submit the package request first to get requestId
+      const resRequest = await api.post('/packages/requests', {
+        vehicle_id: selectedVehicle.id,
+        package_id: confirmPkg.id,
+        price,
+        pricing_type: pricingType,
+        car_type: filterCarType
+      });
+
+      if (!resRequest.data.success) {
+        throw new Error('Failed to submit package request');
+      }
+
+      const requestId = resRequest.data.requestId;
+
+      // 2. Create Razorpay order on backend
+      const resOrder = await api.post('/payments/razorpay/order', {
+        amount: price,
+        package_id: confirmPkg.id,
+        package_request_id: requestId
+      });
+
+      if (!resOrder.data.success) {
+        throw new Error(resOrder.data.error || 'Failed to create payment order');
+      }
+
+      const orderData = resOrder.data.data;
+
+      // 3. Open Razorpay checkout
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_123',
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: 'GK AutoHerb',
+        description: `Car Care Package: ${confirmPkg.name}`,
+        order_id: orderData.id,
+        prefill: {
+          name: user?.name || '',
+          email: user?.email || '',
+          contact: user?.mobile || ''
+        },
+        handler: async function (response: any) {
+          try {
+            const resVerify = await api.post('/payments/razorpay/verify', {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature
+            });
+
+            if (resVerify.data.success) {
+              addToast('success', 'Payment successful! Your package is now active.');
+              setConfirmPkg(null);
+              window.location.reload();
+            } else {
+              throw new Error('Payment verification failed');
+            }
+          } catch (err: any) {
+            addToast('error', err.response?.data?.error || 'Payment verification failed. Please contact support.');
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            addToast('warning', 'Payment cancelled. You can retry from your package requests list.');
+            setConfirmPkg(null);
+            // Refresh list to show pending request
+            api.get('/packages/requests/my').then(res => {
+              if (res.data.success) setMyRequests(res.data.data || []);
+            }).catch(() => {});
+          }
+        },
+        theme: { color: '#D32F2F' }
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
+    } catch (err: any) {
+      console.error(err);
+      addToast('error', err.message || 'An error occurred during payment checkout.');
+    } finally {
+      setSubmittingOnline(false);
+    }
+  };
+
+  const handlePayQR = async () => {
+    if (!confirmPkg || !selectedVehicle) return;
+    setSubmittingOnline(true);
+    try {
+      const price = getPrice(confirmPkg);
+
+      // 1. Submit the package request first to get requestId
+      const resRequest = await api.post('/packages/requests', {
+        vehicle_id: selectedVehicle.id,
+        package_id: confirmPkg.id,
+        price,
+        pricing_type: pricingType,
+        car_type: filterCarType
+      });
+
+      if (!resRequest.data.success) {
+        throw new Error('Failed to submit package request');
+      }
+
+      const requestId = resRequest.data.requestId;
+      setQrAmount(price);
+      setActivePackageRequestId(requestId);
+      setShowQrModal(true);
+      setConfirmPkg(null);
+    } catch (err: any) {
+      console.error(err);
+      addToast('error', err.message || 'An error occurred during payment checkout.');
+    } finally {
+      setSubmittingOnline(false);
+    }
+  };
+
 
   if (loading) {
     return (
@@ -602,32 +749,83 @@ export default function BuyPackagesPage() {
                 </div>
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex flex-col gap-2">
                 <button
-                  onClick={() => setConfirmPkg(null)}
-                  disabled={submittingId === confirmPkg.id}
-                  className="flex-1 py-3 px-4 bg-gray-100 text-gray-700 rounded-xl font-semibold text-sm hover:bg-gray-200 transition-all disabled:opacity-50"
+                  onClick={handlePayOnline}
+                  disabled={submittingId !== null || submittingOnline}
+                  className="w-full py-3 px-4 bg-[#D32F2F] text-white rounded-xl font-extrabold text-sm hover:bg-[#b71c1c] shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-75"
                 >
-                  No, Cancel
+                  {submittingOnline ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <CreditCard size={16} />
+                      Pay Online (Razorpay)
+                    </>
+                  )}
                 </button>
+                
+                <button
+                  onClick={handlePayQR}
+                  disabled={submittingId !== null || submittingOnline}
+                  className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-extrabold text-sm hover:from-emerald-700 hover:to-teal-700 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-75"
+                >
+                  {submittingOnline ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <QrCode size={16} />
+                      Scan & Pay (UPI QR)
+                    </>
+                  )}
+                </button>
+
                 <button
                   onClick={handleConfirmPurchase}
-                  disabled={submittingId === confirmPkg.id}
-                  className="flex-1 py-3 px-4 bg-red-600 text-white rounded-xl font-bold text-sm hover:bg-red-700 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+                  disabled={submittingId !== null || submittingOnline}
+                  className="w-full py-3 px-4 bg-gray-800 text-white rounded-xl font-bold text-sm hover:bg-gray-900 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-75"
                 >
                   {submittingId === confirmPkg.id ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <>
                       <CheckCircle size={16} />
-                      Yes, Request
+                      Request Cash/Offline
                     </>
                   )}
+                </button>
+
+                <button
+                  onClick={() => setConfirmPkg(null)}
+                  disabled={submittingId !== null || submittingOnline}
+                  className="w-full py-2.5 bg-gray-100 text-gray-700 rounded-xl font-semibold text-sm hover:bg-gray-200 transition-all disabled:opacity-50"
+                >
+                  Cancel
                 </button>
               </div>
             </div>
           </div>
         </div>
+      )}
+
+      {showQrModal && (
+        <QrPaymentModal
+          open={showQrModal}
+          onClose={() => {
+            setShowQrModal(false);
+            // Refresh list to show pending request
+            api.get('/packages/requests/my').then(res => {
+              if (res.data.success) setMyRequests(res.data.data || []);
+            }).catch(() => {});
+          }}
+          amount={qrAmount}
+          packageRequestId={activePackageRequestId}
+          onSuccess={() => {
+            setShowQrModal(false);
+            addToast('success', 'Your QR Payment confirmation request has been submitted for admin verification.');
+            window.location.reload();
+          }}
+        />
       )}
     </div>
   );

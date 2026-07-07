@@ -113,7 +113,7 @@ exports.getByCustomer = async (req, res) => {
 
 // ─── ADD CAR ────────────────────────────────────────────────
 // POST /vehicles/add
-// Body: { brand, model, registration_no? }
+// Body: { brand, model, registration_no?, car_year?, manufacture_year? }
 // Automatically sets as primary if user has no other cars.
 exports.addCar = async (req, res) => {
   const conn = await pool.getConnection();
@@ -121,7 +121,8 @@ exports.addCar = async (req, res) => {
     await conn.beginTransaction();
 
     const userId = req.user.id;
-    const { brand, model, registration_no } = req.body;
+    const { brand, model, registration_no, car_year, manufacture_year } = req.body;
+    const resolvedYear = car_year || manufacture_year || null;
 
     // Validate required fields
     if (!brand || !model) {
@@ -141,9 +142,9 @@ exports.addCar = async (req, res) => {
 
     // Insert new car — first car is automatically primary
     const [result] = await conn.query(
-      `INSERT INTO vehicles (customer_id, brand, model, registration_no, is_primary)
-       VALUES (?, ?, ?, ?, ?)`,
-      [userId, brand.trim(), model.trim(), registration_no?.toUpperCase().trim() || null, isFirst ? 1 : 0]
+      `INSERT INTO vehicles (customer_id, brand, model, registration_no, car_year, is_primary)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [userId, brand.trim(), model.trim(), registration_no?.toUpperCase().trim() || null, resolvedYear, isFirst ? 1 : 0]
     );
 
     await conn.commit();
@@ -155,6 +156,7 @@ exports.addCar = async (req, res) => {
         brand: brand.trim(),
         model: model.trim(),
         registration_no: registration_no?.toUpperCase().trim() || null,
+        car_year: resolvedYear,
         is_primary: isFirst ? 1 : 0,
       },
       message: 'Car added successfully',
@@ -263,6 +265,69 @@ exports.deleteCar = async (req, res) => {
     await conn.rollback();
     console.error('Delete car error:', err);
     res.status(500).json({ success: false, error: 'Failed to delete car' });
+  } finally {
+    conn.release();
+  }
+};
+
+// ─── UPDATE CAR ─────────────────────────────────────────────
+// PATCH /vehicles/:id
+exports.updateCar = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const userId = req.user.id;
+    const carId = req.params.id;
+    const { brand, model, registration_no, car_year, manufacture_year } = req.body;
+    const resolvedYear = car_year || manufacture_year || null;
+
+    // Verify car exists
+    const [cars] = await conn.query(
+      'SELECT id, customer_id FROM vehicles WHERE id = ?',
+      [carId]
+    );
+    if (!cars.length) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, error: 'Car not found' });
+    }
+
+    // Check authorization: admin or owner
+    if (req.user.role !== 'admin' && cars[0].customer_id !== userId) {
+      await conn.rollback();
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+
+    // Update details
+    await conn.query(
+      `UPDATE vehicles 
+       SET brand = ?, model = ?, registration_no = ?, car_year = ?
+       WHERE id = ?`,
+      [
+        brand ? brand.trim() : null,
+        model ? model.trim() : null,
+        registration_no ? registration_no.toUpperCase().trim() : null,
+        resolvedYear,
+        carId
+      ]
+    );
+
+    await conn.commit();
+    res.json({
+      success: true,
+      message: 'Car updated successfully',
+      data: {
+        id: parseInt(carId),
+        brand: brand?.trim() || null,
+        model: model?.trim() || null,
+        registration_no: registration_no?.toUpperCase().trim() || null,
+        car_year: resolvedYear
+      }
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Update car error:', err);
+    res.status(500).json({ success: false, error: 'Failed to update car' });
   } finally {
     conn.release();
   }

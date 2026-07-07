@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/axiosInstance';
-import { UserCircle, Car, ArrowLeft, Loader2, Send, History, Calendar, ClipboardList, Package, Clock, RefreshCw } from 'lucide-react';
+import { UserCircle, Car, ArrowLeft, Loader2, Send, History, Calendar, ClipboardList, Package, Clock, RefreshCw, Download, Plus, Trash2 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 import Button from '../../components/ui/Button';
+import PackageRenewModal from '../../components/shared/PackageRenewModal';
 
 export default function CustomerDetailPage() {
   const { id } = useParams();
@@ -25,6 +26,118 @@ export default function CustomerDetailPage() {
   const [pricePaid, setPricePaid] = useState('');
   const [packageServices, setPackageServices] = useState<any[]>([]);
   const [assigning, setAssigning] = useState(false);
+
+  // Package renewal states
+  const [renewModalOpen, setRenewModalOpen] = useState(false);
+  const [renewTargetPackage, setRenewTargetPackage] = useState<any>(null);
+  const [renewalsHistory, setRenewalsHistory] = useState<any[]>([]);
+
+  // Adjust credits states
+  const [adjustModalOpen, setAdjustModalOpen] = useState(false);
+  const [adjustService, setAdjustService] = useState('');
+  const [adjustNewCount, setAdjustNewCount] = useState(0);
+  const [adjustTotalCount, setAdjustTotalCount] = useState(0);
+  const [adjusting, setAdjusting] = useState(false);
+
+  const handleAdjustCreditsSubmit = async () => {
+    if (!adjustService) {
+      alert('Please select a service.');
+      return;
+    }
+    setAdjusting(true);
+    try {
+      const res = await api.patch(`/user-packages/${activePackage.id}/adjust-credits`, {
+        service_name: adjustService,
+        new_used_count: Number(adjustNewCount)
+      });
+      if (res.data.success) {
+        alert('Credits adjusted successfully!');
+        setAdjustModalOpen(false);
+        setAdjustService('');
+        setAdjustNewCount(0);
+        fetchDetail();
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.error || 'Failed to adjust credits');
+    } finally {
+      setAdjusting(false);
+    }
+  };
+
+  // Custom package states
+  const [customAssignModalOpen, setCustomAssignModalOpen] = useState(false);
+  const [customPackageName, setCustomPackageName] = useState('');
+  const [customPricePaid, setCustomPricePaid] = useState('');
+  const [customDurationMonths, setCustomDurationMonths] = useState('12');
+  const [customVehicleId, setCustomVehicleId] = useState('');
+  const [customServices, setCustomServices] = useState<{ service_id: number; total_count: number }[]>([]);
+  const [allServicesList, setAllServicesList] = useState<any[]>([]);
+  const [customAssigning, setCustomAssigning] = useState(false);
+
+  useEffect(() => {
+    if (customAssignModalOpen) {
+      api.get('/services').then(res => {
+        if (res.data.success) {
+          setAllServicesList(res.data.data);
+        }
+      }).catch(console.error);
+    }
+  }, [customAssignModalOpen]);
+
+  const handleCustomAssignSubmit = async () => {
+    if (!customPackageName || !customVehicleId || !customServices.length) {
+      alert('Please fill in name, select a vehicle, and add at least one service.');
+      return;
+    }
+    setCustomAssigning(true);
+    try {
+      const res = await api.post('/packages/custom-assign', {
+        user_id: Number(id),
+        vehicle_id: Number(customVehicleId),
+        name: customPackageName,
+        price_paid: Number(customPricePaid) || 0,
+        duration_months: Number(customDurationMonths) || 12,
+        services: customServices
+      });
+      if (res.data.success) {
+        alert('Custom package assigned successfully!');
+        setCustomAssignModalOpen(false);
+        setCustomPackageName('');
+        setCustomPricePaid('');
+        setCustomDurationMonths('12');
+        setCustomVehicleId('');
+        setCustomServices([]);
+        fetchDetail();
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.error || 'Failed to assign custom package');
+    } finally {
+      setCustomAssigning(false);
+    }
+  };
+
+  const handleExportPackageHistory = async (format: 'pdf' | 'xlsx') => {
+    try {
+      const res = await api.get(`/customers/${id}/package-history/export`, {
+        params: { format },
+        responseType: 'blob'
+      });
+      const file = new Blob([res.data], { type: format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const fileURL = URL.createObjectURL(file);
+      const fileLink = document.createElement('a');
+      fileLink.href = fileURL;
+      fileLink.setAttribute('download', `PackageHistory_${data?.name?.replace(/\s+/g, '_') || 'Customer'}.${format === 'pdf' ? 'pdf' : 'xlsx'}`);
+      document.body.appendChild(fileLink);
+      fileLink.click();
+      document.body.removeChild(fileLink);
+      URL.revokeObjectURL(fileURL);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to export package history');
+    }
+  };
 
   // Fetch all packages when modal opens
   useEffect(() => {
@@ -125,10 +238,11 @@ export default function CustomerDetailPage() {
 
   const fetchDetail = async () => {
     try {
-      const [resCust, resPkg, resPkgHistory] = await Promise.all([
+      const [resCust, resPkg, resPkgHistory, resRenewals] = await Promise.all([
         api.get(`/customers/${id}`),
-        api.get(`/packages/active?user_id=${id}`).catch(() => ({ data: { success: false, data: null } })),
+        api.get(`/user-packages/active?user_id=${id}`).catch(() => ({ data: { success: false, data: null } })),
         api.get(`/user-packages/history?user_id=${id}`).catch(() => ({ data: { success: false, data: [] } })),
+        api.get(`/user-packages/renewals?user_id=${id}`).catch(() => ({ data: { success: false, data: [] } })),
       ]);
       if (resCust.data.success) {
         setData(resCust.data.data);
@@ -142,6 +256,7 @@ export default function CustomerDetailPage() {
       const allPkgs = resPkgHistory.data?.data || [];
       const activePkgId = resPkg.data?.data?.id;
       setPackageHistory(allPkgs.filter((p: any) => p.id !== activePkgId));
+      setRenewalsHistory(resRenewals.data?.data || []);
     } catch (err) {
       console.error(err);
       alert('Failed to load customer details.');
@@ -191,13 +306,34 @@ export default function CustomerDetailPage() {
         >
           <ArrowLeft className="w-4 h-4" /> Back to Customers
         </button>
-        <button
-          onClick={() => setAssignModalOpen(true)}
-          className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-800 text-white text-xs font-bold rounded-xl hover:from-red-700 hover:to-red-900 transition flex items-center gap-1.5 shadow-md shadow-red-500/25"
-        >
-          <Package size={14} />
-          Assign Package
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => handleExportPackageHistory('pdf')}
+            className="px-3 py-2 border border-red-200 text-red-700 hover:bg-red-50 text-xs font-bold rounded-xl transition flex items-center gap-1 shadow-sm"
+          >
+            <Download size={13} /> Export PDF
+          </button>
+          <button
+            onClick={() => handleExportPackageHistory('xlsx')}
+            className="px-3 py-2 border border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-xs font-bold rounded-xl transition flex items-center gap-1 shadow-sm"
+          >
+            <Download size={13} /> Export Excel
+          </button>
+          <button
+            onClick={() => setCustomAssignModalOpen(true)}
+            className="px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-800 text-white text-xs font-bold rounded-xl hover:from-purple-700 hover:to-purple-900 transition flex items-center gap-1.5 shadow-md shadow-purple-500/25 animate-pulse-glow"
+          >
+            <Plus size={14} />
+            Assign Custom Package
+          </button>
+          <button
+            onClick={() => setAssignModalOpen(true)}
+            className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-800 text-white text-xs font-bold rounded-xl hover:from-red-700 hover:to-red-900 transition flex items-center gap-1.5 shadow-md shadow-red-500/25"
+          >
+            <Package size={14} />
+            Assign Package
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -236,12 +372,48 @@ export default function CustomerDetailPage() {
           </div>
 
           {/* Active Package */}
-          {activePackage && (
+          {activePackage ? (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden p-6">
-              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
-                <Package className="w-5 h-5 text-purple-600" />
-                Active Package
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <Package className="w-5 h-5 text-purple-600" />
+                  Active Package
+                </h3>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      if (activePackage.usage && activePackage.usage.length > 0) {
+                        const firstSvc = activePackage.usage[0];
+                        setAdjustService(firstSvc.service_name);
+                        setAdjustNewCount(firstSvc.used_count);
+                        setAdjustTotalCount(firstSvc.total_count);
+                      }
+                      setAdjustModalOpen(true);
+                    }}
+                    className="text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-xl shadow-md transition-all flex items-center gap-1.5"
+                  >
+                    Adjust Credits
+                  </button>
+                  <button
+                    onClick={() => {
+                      setRenewTargetPackage({
+                        id: activePackage.id,
+                        package_name: activePackage.package_name,
+                        customer_name: data.name,
+                        customer_id: data.id,
+                        package_id: activePackage.package_id,
+                        expiry_date: activePackage.end_date,
+                        package_status: activePackage.package_status || 'active'
+                      });
+                      setRenewModalOpen(true);
+                    }}
+                    className="text-xs font-bold bg-[#D32F2F] hover:bg-[#B71C1C] text-white px-3 py-2 rounded-xl shadow-md transition-all flex items-center gap-1.5"
+                  >
+                    <RefreshCw size={14} />
+                    Renew Package
+                  </button>
+                </div>
+              </div>
               <div className="p-4 bg-purple-50 border border-purple-100 rounded-xl relative">
                 <div className="font-bold text-gray-900">{activePackage.package_name}</div>
                 {activePackage.start_date && activePackage.end_date && (
@@ -268,6 +440,39 @@ export default function CustomerDetailPage() {
                 )}
               </div>
             </div>
+          ) : (
+            packageHistory.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                      <Package className="w-5 h-5 text-gray-400" />
+                      No Active Package
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-1">Reactivate the most recent package subscription.</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const mostRecent = packageHistory[0];
+                      setRenewTargetPackage({
+                        id: mostRecent.id,
+                        package_name: mostRecent.package_name,
+                        customer_name: data.name,
+                        customer_id: data.id,
+                        package_id: mostRecent.package_id,
+                        expiry_date: mostRecent.end_date,
+                        package_status: mostRecent.package_status || 'expired'
+                      });
+                      setRenewModalOpen(true);
+                    }}
+                    className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl shadow-md transition-all flex items-center gap-1.5"
+                  >
+                    <RefreshCw size={14} />
+                    Reactivate/Renew
+                  </button>
+                </div>
+              </div>
+            )
           )}
 
           {/* Package History */}
@@ -340,7 +545,9 @@ export default function CustomerDetailPage() {
                     {v.is_primary === 1 && (
                       <span className="absolute top-2 right-2 px-2 py-0.5 bg-green-100 text-green-800 text-[10px] font-bold uppercase rounded">Primary</span>
                     )}
-                    <div className="font-bold text-gray-900">{v.brand} {v.model}</div>
+                    <div className="font-bold text-gray-900">
+                      {v.brand} {v.model} {v.car_year ? `(${v.car_year})` : ''}
+                    </div>
                     <div className="text-xs text-gray-500 mt-1 flex items-center gap-2">
                       <span className="bg-white px-2 py-0.5 rounded border border-gray-200">{v.registration_no || 'No Reg'}</span>
                       <span className="uppercase">{v.category ? v.category.replace('_', ' ') : 'UNKNOWN'}</span>
@@ -507,6 +714,247 @@ export default function CustomerDetailPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Create & Assign Custom Package Modal */}
+      <Modal
+        open={customAssignModalOpen}
+        onClose={() => setCustomAssignModalOpen(false)}
+        title="Create & Assign Custom Package"
+        size="md"
+      >
+        <div className="space-y-4 py-2">
+          {/* Package Name */}
+          <Input
+            label="Custom Package Name *"
+            value={customPackageName}
+            onChange={(e) => setCustomPackageName(e.target.value)}
+            placeholder="e.g. Gaurav Special Package"
+          />
+
+          {/* Selected Vehicle */}
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1">Select Vehicle *</label>
+            <select
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+              value={customVehicleId}
+              onChange={(e) => setCustomVehicleId(e.target.value)}
+            >
+              <option value="">Choose a vehicle...</option>
+              {data.vehicles.map((v: any) => (
+                <option key={v.id} value={v.id}>
+                  {v.brand} {v.model} ({v.registration_no || 'No Reg'})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Price Paid */}
+          <Input
+            label="Price Paid (₹) *"
+            type="number"
+            value={customPricePaid}
+            onChange={(e) => setCustomPricePaid(e.target.value)}
+            placeholder="0"
+          />
+
+          {/* Duration Months */}
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1">Duration (Months) *</label>
+            <select
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+              value={customDurationMonths}
+              onChange={(e) => setCustomDurationMonths(e.target.value)}
+            >
+              <option value="1">1 Month</option>
+              <option value="3">3 Months</option>
+              <option value="6">6 Months</option>
+              <option value="12">12 Months (1 Year)</option>
+              <option value="24">24 Months (2 Years)</option>
+            </select>
+          </div>
+
+          {/* Service Builder */}
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-3">
+            <div className="flex justify-between items-center">
+              <p className="text-xs font-bold uppercase tracking-wider text-gray-500">Service Entitlements</p>
+              <button
+                type="button"
+                onClick={() => setCustomServices(prev => [...prev, { service_id: 0, total_count: 1 }])}
+                className="text-xs text-red-600 font-bold hover:underline"
+              >
+                + Add Service
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {customServices.map((row, idx) => (
+                <div key={idx} className="flex gap-2 items-center">
+                  <select
+                    className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
+                    value={row.service_id}
+                    onChange={(e) => {
+                      const updated = [...customServices];
+                      updated[idx].service_id = Number(e.target.value);
+                      setCustomServices(updated);
+                    }}
+                  >
+                    <option value="0">Choose service...</option>
+                    {allServicesList.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    min="1"
+                    className="w-16 px-2 py-1.5 border border-gray-200 rounded-lg text-center text-xs font-bold"
+                    placeholder="Qty"
+                    value={row.total_count}
+                    onChange={(e) => {
+                      const updated = [...customServices];
+                      updated[idx].total_count = Math.max(1, parseInt(e.target.value) || 1);
+                      setCustomServices(updated);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setCustomServices(prev => prev.filter((_, i) => i !== idx))}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+              {customServices.length === 0 && (
+                <p className="text-[11px] text-gray-400 text-center py-2">No services added yet.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="secondary" onClick={() => setCustomAssignModalOpen(false)}>Cancel</Button>
+            <Button variant="primary" onClick={handleCustomAssignSubmit} loading={customAssigning}>Assign Custom Package</Button>
+          </div>
+        </div>
+      </Modal>
+
+
+      {/* Renewal History Timeline */}
+      {renewalsHistory.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden p-6 mt-6">
+          <details className="group">
+            <summary className="flex items-center justify-between cursor-pointer list-none font-bold text-gray-900 text-lg">
+              <div className="flex items-center gap-2">
+                <History className="w-5 h-5 text-indigo-600" />
+                Package Renewal History ({renewalsHistory.length})
+              </div>
+              <span className="text-gray-400 transition-transform group-open:rotate-180">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </span>
+            </summary>
+            
+            <div className="mt-5 border-t border-gray-100 pt-5 space-y-4">
+              {renewalsHistory.map((ren: any) => (
+                <div key={ren.id} className="relative flex gap-4 pl-4 before:absolute before:left-[22px] before:top-6 before:bottom-0 before:w-0.5 before:bg-gray-100 last:before:hidden">
+                  <div className="flex-shrink-0 w-4 h-4 rounded-full bg-indigo-600 border-4 border-indigo-100 flex items-center justify-center mt-1.5 z-10" />
+                  <div className="flex-1 bg-gray-50 border border-gray-100 rounded-xl p-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-bold text-sm text-gray-900">{ren.package_name}</h4>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Renewed By: <span className="capitalize font-semibold text-gray-700">{ren.renewed_by}</span>
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-sm font-extrabold text-gray-900">₹{parseFloat(ren.amount_paid).toLocaleString('en-IN')}</span>
+                        <p className="text-[10px] text-gray-400 mt-1">
+                          {new Date(ren.renewal_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                      </div>
+                    </div>
+                    {ren.notes && (
+                      <p className="text-xs text-gray-600 bg-white border border-gray-100 rounded-lg p-2 mt-2 italic">
+                        {ren.notes}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </details>
+        </div>
+      )}
+
+      {/* Adjust Credits Modal */}
+      {activePackage && (
+        <Modal
+          open={adjustModalOpen}
+          onClose={() => setAdjustModalOpen(false)}
+          title="Adjust Package Credits"
+          size="sm"
+        >
+          <div className="space-y-4 py-2">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1">Select Service</label>
+              <select
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                value={adjustService}
+                onChange={(e) => {
+                  setAdjustService(e.target.value);
+                  const svc = activePackage.usage.find((u: any) => u.service_name === e.target.value);
+                  if (svc) {
+                    setAdjustNewCount(svc.used_count);
+                    setAdjustTotalCount(svc.total_count);
+                  }
+                }}
+              >
+                {activePackage.usage?.map((u: any) => (
+                  <option key={u.service_name} value={u.service_name}>
+                    {u.service_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1">Used Count</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  max={adjustTotalCount}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                  value={adjustNewCount}
+                  onChange={(e) => setAdjustNewCount(Math.max(0, parseInt(e.target.value) || 0))}
+                />
+                <span className="text-sm text-gray-400 font-bold">/ {adjustTotalCount}</span>
+              </div>
+              <p className="text-[10px] text-gray-400 mt-1">
+                Remaining Credits: {Math.max(0, adjustTotalCount - adjustNewCount)}
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <Button variant="secondary" onClick={() => setAdjustModalOpen(false)}>Cancel</Button>
+              <Button variant="primary" onClick={handleAdjustCreditsSubmit} loading={adjusting}>Save Changes</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Package Renewal Modal */}
+      {renewTargetPackage && (
+        <PackageRenewModal
+          isOpen={renewModalOpen}
+          onClose={() => {
+            setRenewModalOpen(false);
+            setRenewTargetPackage(null);
+            fetchDetail();
+          }}
+          userPackage={renewTargetPackage}
+        />
+      )}
     </div>
   );
 }

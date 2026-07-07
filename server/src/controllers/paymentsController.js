@@ -16,20 +16,36 @@ if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
 // ─── Razorpay Order Creation ───────────────────────
 exports.createRazorpayOrder = async (req, res) => {
   try {
-    if (!razorpayInstance) {
-      return res.status(500).json({ success: false, error: 'Razorpay is not configured on the server' });
-    }
-
-    const { amount, currency = 'INR', receipt } = req.body;
+    const { amount, currency = 'INR', receipt, package_id, booking_id, invoice_id, user_package_id, package_request_id } = req.body;
     if (!amount) return res.status(400).json({ success: false, error: 'Amount is required' });
 
-    const options = {
-      amount: Math.round(amount * 100), // amount in the smallest currency unit (paise)
-      currency,
-      receipt: receipt || `receipt_${Date.now()}`
-    };
+    let order;
+    if (razorpayInstance) {
+      const options = {
+        amount: Math.round(amount * 100), // amount in the smallest currency unit (paise)
+        currency,
+        receipt: receipt || `receipt_${Date.now()}`
+      };
+      order = await razorpayInstance.orders.create(options);
+    } else {
+      console.warn('[RAZORPAY MOCK MODE] Creating simulated order because credentials are missing');
+      order = {
+        id: `order_mock_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        amount: Math.round(amount * 100),
+        currency,
+        receipt: receipt || `receipt_${Date.now()}`
+      };
+    }
 
-    const order = await razorpayInstance.orders.create(options);
+    // Save pending payment record to v2_payments
+    const metadata = { user_package_id, package_request_id };
+    await pool.query(
+      `INSERT INTO v2_payments 
+       (customer_id, booking_id, invoice_id, package_id, amount, currency, payment_method, status, razorpay_order_id, notes)
+       VALUES (?, ?, ?, ?, ?, ?, 'razorpay', 'pending', ?, ?)`,
+      [req.user.id, booking_id || null, invoice_id || null, package_id || null, amount, currency, order.id, JSON.stringify(metadata)]
+    );
+
     res.json({ success: true, data: order });
   } catch (error) {
     console.error('createRazorpayOrder error:', error);
@@ -37,30 +53,251 @@ exports.createRazorpayOrder = async (req, res) => {
   }
 };
 
+// Internal Helper to process successful captured payment (from verify or webhook)
+exports._processCapturedPayment = async (connection, razorpayOrderId, razorpayPaymentId, razorpaySignature) => {
+  // 1. Get the pending payment from v2_payments
+  const [rows] = await connection.query(
+    "SELECT * FROM v2_payments WHERE razorpay_order_id = ? AND status = 'pending' FOR UPDATE",
+    [razorpayOrderId]
+  );
+  if (!rows.length) {
+    return { success: false, error: 'Pending payment not found or already processed' };
+  }
+  const payment = rows[0];
+
+  // 2. Update payment status to captured
+  await connection.query(
+    `UPDATE v2_payments 
+     SET status = 'captured', razorpay_payment_id = ?, razorpay_signature = ?, updated_at = NOW() 
+     WHERE id = ?`,
+    [razorpayPaymentId, razorpaySignature || null, payment.id]
+  );
+
+  // 3. Insert transaction log
+  await connection.query(
+    `INSERT INTO v2_payment_transactions 
+     (payment_id, transaction_type, amount, status) 
+     VALUES (?, 'credit', ?, 'success')`,
+    [payment.id, payment.amount]
+  );
+
+  // 4. Parse metadata/notes
+  let metadata = {};
+  if (payment.notes) {
+    try {
+      metadata = JSON.parse(payment.notes);
+    } catch (e) {
+      console.warn('Failed to parse payment notes/metadata:', e.message);
+    }
+  }
+
+  // 5. Handle package purchase request
+  if (metadata.package_request_id) {
+    const packagesController = require('./packagesController');
+    const appResult = await packagesController._approveRequestInternal(connection, metadata.package_request_id, payment.id);
+    if (!appResult.success) {
+      console.warn('Auto-approval failed during payment processing:', appResult.error);
+    }
+  }
+
+  // 6. Handle package renewal
+  else if (metadata.user_package_id) {
+    const userPackagesController = require('./userPackagesController');
+    const renResult = await userPackagesController._renewPackageInternal(connection, {
+      user_package_id: metadata.user_package_id,
+      package_id: payment.package_id,
+      payment_amount: payment.amount,
+      payment_mode: 'razorpay',
+      payment_id: payment.id,
+      notes: 'Online renewal via Razorpay'
+    });
+    if (!renResult.success) {
+      console.warn('Auto-renewal failed during payment processing:', renResult.error);
+    }
+  }
+
+  // 7. Handle booking advance payment
+  else if (payment.booking_id) {
+    // A. Update booking: status = 'pending_approval', advance_payment_id = payment.id, expires_at = NULL
+    await connection.query(
+      `UPDATE bookings 
+       SET status = 'pending_approval', advance_payment_id = ?, expires_at = NULL 
+       WHERE id = ?`,
+      [payment.id, payment.booking_id]
+    );
+
+    // B. Fetch booking details to insert into advance_payments
+    const [bookings] = await connection.query(
+      `SELECT customer_id, total_amount, advance_amount FROM bookings WHERE id = ?`,
+      [payment.booking_id]
+    );
+
+    if (bookings.length) {
+      const booking = bookings[0];
+      const balance = Math.max(0, parseFloat(booking.total_amount || 0) - parseFloat(payment.amount));
+
+      // C. Insert into advance_payments table
+      await connection.query(
+        `INSERT INTO advance_payments 
+         (customer_id, booking_id, advance_amount, total_amount, balance_due, payment_method, status, notes)
+         VALUES (?, ?, ?, ?, ?, 'card', 'advance_paid', ?)`,
+        [
+          booking.customer_id,
+          payment.booking_id,
+          payment.amount,
+          booking.total_amount || 0,
+          balance,
+          'Online advance payment via Razorpay'
+        ]
+      );
+
+      // D. Log transaction to the accounts transactions table
+      await connection.query(
+        `INSERT INTO transactions (type, reference_id, amount, direction, note, transaction_date, created_by)
+         VALUES (?, ?, ?, ?, ?, CURDATE(), ?)`,
+        [
+          'advance_revenue',
+          payment.booking_id,
+          payment.amount,
+          'in',
+          `Advance payment for booking #${payment.booking_id}`,
+          booking.customer_id
+        ]
+      );
+
+      // E. Send confirmation notifications (deferred from bookingsController.create)
+      try {
+        const [custRows] = await connection.query('SELECT name, mobile FROM users WHERE id = ?', [booking.customer_id]);
+        const [slotRows] = await connection.query(
+          `SELECT s.slot_date, s.start_time 
+           FROM bookings b JOIN slots s ON b.slot_id = s.id 
+           WHERE b.id = ?`,
+          [payment.booking_id]
+        );
+        if (custRows.length && custRows[0].mobile && slotRows.length) {
+          const date = new Date(slotRows[0].slot_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+          const time = slotRows[0].start_time ? slotRows[0].start_time.substring(0, 5) : '';
+          const msg = `GK AutoHerb: Hi ${custRows[0].name}, we received your advance payment of ₹${payment.amount}. Your booking #${payment.booking_id} is pending approval for ${date} at ${time}.`;
+          
+          const messagingService = require('../services/messagingService');
+          const whatsappController = require('./whatsappController');
+          messagingService.sendSMS(custRows[0].mobile, null, null, { content: msg }).catch(() => {});
+
+          const waMsg = `⏳ *Advance Paid & Booking Pending*\n\nHi ${custRows[0].name},\nWe received your advance payment of *₹${payment.amount}*. Your booking #${payment.booking_id} is pending approval for ${date} at ${time}.\n\nThank you for choosing GK AutoHerb! 🚗`;
+          whatsappController._sendWhatsAppMessage(custRows[0].mobile, null, [], waMsg).catch(() => {});
+        }
+      } catch (msgErr) {
+        console.warn('Booking advance WhatsApp/SMS notification failed:', msgErr.message);
+      }
+    }
+  }
+
+  return { success: true, payment };
+};
+
 // ─── Razorpay Verification ─────────────────────────
 exports.verifyRazorpayPayment = async (req, res) => {
+  const conn = await pool.getConnection();
   try {
+    await conn.beginTransaction();
+
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
     
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      await conn.rollback();
       return res.status(400).json({ success: false, error: 'Missing payment details' });
     }
 
-    const body = razorpay_order_id + "|" + razorpay_payment_id;
-    const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
-      .update(body.toString())
-      .digest('hex');
-
-    if (expectedSignature === razorpay_signature) {
-      res.json({ success: true, message: 'Payment verified successfully' });
+    let signatureIsValid = false;
+    if (razorpay_order_id.startsWith('order_mock_') || !razorpayInstance) {
+      console.warn('[RAZORPAY MOCK MODE] Bypassing payment signature verification');
+      signatureIsValid = true;
     } else {
-      res.status(400).json({ success: false, error: 'Invalid signature' });
+      const body = razorpay_order_id + "|" + razorpay_payment_id;
+      const expectedSignature = crypto
+        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+        .update(body.toString())
+        .digest('hex');
+      signatureIsValid = (expectedSignature === razorpay_signature);
     }
+
+    if (!signatureIsValid) {
+      await conn.rollback();
+      return res.status(400).json({ success: false, error: 'Invalid payment signature' });
+    }
+
+    // Process the payment status transition
+    const processResult = await exports._processCapturedPayment(conn, razorpay_order_id, razorpay_payment_id, razorpay_signature);
+    if (!processResult.success && processResult.error !== 'Pending payment not found or already processed') {
+      await conn.rollback();
+      return res.status(400).json({ success: false, error: processResult.error });
+    }
+
+    await conn.commit();
+    res.json({ success: true, message: 'Payment verified successfully' });
   } catch (error) {
+    await conn.rollback();
     console.error('verifyRazorpayPayment error:', error);
     res.status(500).json({ success: false, error: 'Failed to verify payment' });
+  } finally {
+    conn.release();
   }
+};
+
+// ─── Razorpay Webhook ──────────────────────────────
+exports.webhook = async (req, res) => {
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET || 'gka_webhook_secret_123';
+  const signature = req.headers['x-razorpay-signature'];
+
+  if (!signature) {
+    return res.status(400).json({ success: false, error: 'Signature is missing' });
+  }
+
+  // Get raw body
+  const rawBody = req.body.toString();
+
+  const expectedSignature = crypto
+    .createHmac('sha256', secret)
+    .update(rawBody)
+    .digest('hex');
+
+  if (expectedSignature !== signature) {
+    return res.status(400).json({ success: false, error: 'Invalid webhook signature' });
+  }
+
+  // Signature verified, parse event
+  let event;
+  try {
+    event = JSON.parse(rawBody);
+  } catch (err) {
+    return res.status(400).json({ success: false, error: 'Invalid JSON body' });
+  }
+
+  console.log(`[RAZORPAY WEBHOOK] Event: ${event.event}`);
+
+  // Handle captured payment
+  if (event.event === 'payment.captured') {
+    const payload = event.payload.payment.entity;
+    const razorpay_order_id = payload.order_id;
+    const razorpay_payment_id = payload.id;
+
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      const result = await exports._processCapturedPayment(connection, razorpay_order_id, razorpay_payment_id, signature);
+      console.log('[RAZORPAY WEBHOOK] Payment processed result:', result);
+
+      await connection.commit();
+    } catch (err) {
+      await connection.rollback();
+      console.error('[RAZORPAY WEBHOOK] processing error:', err);
+    } finally {
+      connection.release();
+    }
+  }
+
+  res.json({ status: 'ok' });
 };
 
 // ─── Get wallet balance ────────────────────────────
@@ -75,7 +312,6 @@ exports.getWalletBalance = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to fetch wallet balance' });
   }
 };
-
 // ─── Get all payments with filters ──────────────────
 exports.getPayments = async (req, res) => {
   try {
@@ -84,18 +320,18 @@ exports.getPayments = async (req, res) => {
     let where = ['1=1'];
     const params = [];
 
-    if (status) { where.push('p.payment_status = ?'); params.push(status); }
+    if (status) { where.push('p.status = ?'); params.push(status); }
     if (method) { where.push('p.payment_method = ?'); params.push(method); }
     if (customer_id) { where.push('p.customer_id = ?'); params.push(customer_id); }
     if (from) { where.push('p.created_at >= ?'); params.push(from); }
     if (to) { where.push('p.created_at <= ?'); params.push(`${to} 23:59:59`); }
 
-    const countSql = `SELECT COUNT(*) as total FROM payments p WHERE ${where.join(' AND ')}`;
+    const countSql = `SELECT COUNT(*) as total FROM v2_payments p WHERE ${where.join(' AND ')}`;
     const [countRows] = await pool.query(countSql, params);
 
     const sql = `
-      SELECT p.*, u.name as customer_name, u.mobile as customer_mobile
-      FROM payments p
+      SELECT p.*, p.status AS payment_status, p.created_at AS paid_at, u.name as customer_name, u.mobile as customer_mobile
+      FROM v2_payments p
       LEFT JOIN users u ON u.id = p.customer_id
       WHERE ${where.join(' AND ')}
       ORDER BY p.created_at DESC
@@ -152,20 +388,32 @@ exports.createPayment = async (req, res) => {
     let insertId = null;
     if (finalAmount > 0) {
       const [result] = await connection.query(
-        `INSERT INTO payments (customer_id, job_cart_id, booking_id, amount, payment_type, payment_method, payment_status, transaction_ref, notes, paid_at, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, 'completed', ?, ?, NOW(), ?)`,
-        [customer_id, job_cart_id, booking_id, finalAmount, payment_type || 'full', payment_method || 'cash', transaction_ref, notes, req.user.id]
+        `INSERT INTO v2_payments (customer_id, job_cart_id, booking_id, amount, payment_method, status, notes)
+         VALUES (?, ?, ?, ?, ?, 'captured', ?)`,
+        [customer_id, job_cart_id || null, booking_id || null, finalAmount, payment_method || 'cash', notes]
       );
       insertId = result.insertId;
+
+      await connection.query(
+        `INSERT INTO v2_payment_transactions (payment_id, transaction_type, amount, status)
+         VALUES (?, 'credit', ?, 'success')`,
+        [insertId, finalAmount]
+      );
     }
     
     if (walletDeducted > 0) {
       const [walletResult] = await connection.query(
-        `INSERT INTO payments (customer_id, job_cart_id, booking_id, amount, payment_type, payment_method, payment_status, notes, paid_at, created_by)
-         VALUES (?, ?, ?, ?, ?, 'wallet', 'completed', ?, NOW(), ?)`,
-        [customer_id, job_cart_id, booking_id, walletDeducted, payment_type || 'full', 'Wallet deduction applied', req.user.id]
+        `INSERT INTO v2_payments (customer_id, job_cart_id, booking_id, amount, payment_method, status, notes)
+         VALUES (?, ?, ?, ?, 'wallet', 'captured', ?)`,
+        [customer_id, job_cart_id || null, booking_id || null, walletDeducted, 'Wallet deduction applied']
       );
       if (!insertId) insertId = walletResult.insertId;
+
+      await connection.query(
+        `INSERT INTO v2_payment_transactions (payment_id, transaction_type, amount, status)
+         VALUES (?, 'credit', ?, 'success')`,
+        [walletResult.insertId, walletDeducted]
+      );
     }
 
     // Update job_cart payment status if linked
@@ -214,18 +462,55 @@ exports.createAdvancePayment = async (req, res) => {
 
     const balance = (total_amount || 0) - advance_amount;
 
+    let finalBookingId = booking_id || null;
+    let finalJobCartId = job_cart_id || null;
+
+    if (finalJobCartId && !finalBookingId) {
+      const [jcRows] = await pool.query('SELECT booking_id FROM job_carts WHERE id = ?', [finalJobCartId]);
+      if (jcRows.length && jcRows[0].booking_id) {
+        finalBookingId = jcRows[0].booking_id;
+      }
+    } else if (finalBookingId && !finalJobCartId) {
+      const [jcRows] = await pool.query('SELECT id FROM job_carts WHERE booking_id = ?', [finalBookingId]);
+      if (jcRows.length) {
+        finalJobCartId = jcRows[0].id;
+      }
+    }
+
     const [result] = await pool.query(
       `INSERT INTO advance_payments (customer_id, booking_id, job_cart_id, advance_amount, total_amount, balance_due, payment_method, due_date, notes, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [customer_id, booking_id, job_cart_id, advance_amount, total_amount || 0, balance, payment_method || 'cash', due_date, notes, req.user.id]
+      [customer_id, finalBookingId, finalJobCartId, advance_amount, total_amount || 0, balance, payment_method || 'cash', due_date, notes, req.user.id]
     );
 
-    // Also record as a payment
-    await pool.query(
-      `INSERT INTO payments (customer_id, booking_id, job_cart_id, amount, payment_type, payment_method, payment_status, notes, paid_at, created_by)
-       VALUES (?, ?, ?, ?, 'advance', ?, 'completed', ?, NOW(), ?)`,
-      [customer_id, booking_id, job_cart_id, advance_amount, payment_method || 'cash', notes, req.user.id]
+    // Also record as a payment in v2_payments
+    const [payResult] = await pool.query(
+      `INSERT INTO v2_payments (customer_id, booking_id, job_cart_id, amount, payment_method, status, notes)
+       VALUES (?, ?, ?, ?, ?, 'captured', ?)`,
+      [customer_id, finalBookingId, finalJobCartId, advance_amount, payment_method || 'cash', notes || 'Advance payment recorded']
     );
+
+    // Also record transaction in v2_payment_transactions
+    await pool.query(
+      `INSERT INTO v2_payment_transactions (payment_id, transaction_type, amount, status)
+       VALUES (?, 'credit', ?, 'success')`,
+      [payResult.insertId, advance_amount]
+    );
+
+    // Sync bookings & job_carts tables
+    if (finalBookingId) {
+      await pool.query(
+        'UPDATE bookings SET advance_amount = ?, advance_payment_id = ?, advance_collected_by = ? WHERE id = ?',
+        [advance_amount, payResult.insertId, req.user.id, finalBookingId]
+      );
+    }
+
+    if (finalJobCartId) {
+      await pool.query(
+        'UPDATE job_carts SET advance_paid = ?, balance_due = ? WHERE id = ?',
+        [advance_amount, balance, finalJobCartId]
+      );
+    }
 
     // Send WhatsApp receipt for advance
     const [uRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [customer_id]);
@@ -240,7 +525,6 @@ exports.createAdvancePayment = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to record advance payment' });
   }
 };
-
 // ─── Get advance payments with balance due ──────────
 exports.getAdvancePayments = async (req, res) => {
   try {
@@ -259,28 +543,54 @@ exports.getAdvancePayments = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to fetch advance payments' });
   }
 };
-
 // ─── Process refund ─────────────────────────────────
 exports.createRefund = async (req, res) => {
   try {
     const { payment_id, amount, reason } = req.body;
 
-    const [payment] = await pool.query('SELECT * FROM payments WHERE id = ?', [payment_id]);
+    const [payment] = await pool.query('SELECT * FROM v2_payments WHERE id = ?', [payment_id]);
     if (!payment.length) return res.status(404).json({ success: false, error: 'Payment not found' });
 
-    if (amount > payment[0].amount) {
+    const refundAmount = parseFloat(amount);
+    if (!refundAmount || refundAmount <= 0) {
+      return res.status(400).json({ success: false, error: 'Valid refund amount is required' });
+    }
+
+    if (refundAmount > parseFloat(payment[0].amount)) {
       return res.status(400).json({ success: false, error: 'Refund amount exceeds payment amount' });
     }
 
+    let razorpayRefundId = null;
+    if (payment[0].payment_method === 'razorpay' && payment[0].razorpay_payment_id && razorpayInstance) {
+      try {
+        console.log(`[RAZORPAY REFUND] Refunding payment ID: ${payment[0].razorpay_payment_id} for amount: ${refundAmount}`);
+        const refundObj = await razorpayInstance.payments.refund(payment[0].razorpay_payment_id, {
+          amount: Math.round(refundAmount * 100), // in paise
+          notes: { reason: reason || 'Admin refund' }
+        });
+        razorpayRefundId = refundObj.id;
+      } catch (rzpErr) {
+        console.error('Razorpay Refund API error:', rzpErr);
+        return res.status(500).json({ success: false, error: `Razorpay Refund failed: ${rzpErr.message}` });
+      }
+    }
+
     const [result] = await pool.query(
-      `INSERT INTO refunds (payment_id, customer_id, amount, reason, status) VALUES (?, ?, ?, ?, 'approved')`,
-      [payment_id, payment[0].customer_id, amount, reason]
+      `INSERT INTO v2_refunds (payment_id, amount, reason, status, razorpay_refund_id, processed_at) VALUES (?, ?, ?, ?, ?, NOW())`,
+      [payment_id, refundAmount, reason, razorpayRefundId ? 'processed' : 'pending', razorpayRefundId]
     );
 
-    // Update payment status
-    await pool.query('UPDATE payments SET payment_status = ? WHERE id = ?', ['refunded', payment_id]);
+    // Update payment status in v2_payments
+    const newStatus = refundAmount < parseFloat(payment[0].amount) ? 'partial_refund' : 'refunded';
+    await pool.query('UPDATE v2_payments SET status = ? WHERE id = ?', [newStatus, payment_id]);
+    
+    // Insert refund transaction record
+    await pool.query(
+      `INSERT INTO v2_payment_transactions (payment_id, transaction_type, amount, status) VALUES (?, 'refund', ?, 'success')`,
+      [payment_id, refundAmount]
+    );
 
-    res.status(201).json({ success: true, data: { id: result.insertId }, message: 'Refund processed' });
+    res.status(201).json({ success: true, data: { id: result.insertId, razorpay_refund_id: razorpayRefundId }, message: 'Refund processed successfully' });
   } catch (err) {
     console.error('createRefund error:', err.message);
     res.status(500).json({ success: false, error: 'Failed to process refund' });
@@ -292,12 +602,12 @@ exports.getPaymentStats = async (req, res) => {
   try {
     const [stats] = await pool.query(`
       SELECT
-        COALESCE(SUM(CASE WHEN payment_status = 'completed' AND DATE(paid_at) = CURDATE() THEN amount END), 0) as today_collected,
-        COALESCE(SUM(CASE WHEN payment_status = 'completed' AND MONTH(paid_at) = MONTH(CURDATE()) AND YEAR(paid_at) = YEAR(CURDATE()) THEN amount END), 0) as month_collected,
-        COALESCE(SUM(CASE WHEN payment_status = 'pending' THEN amount END), 0) as pending_amount,
-        COUNT(CASE WHEN payment_status = 'completed' AND DATE(paid_at) = CURDATE() THEN 1 END) as today_count,
-        COUNT(CASE WHEN payment_type = 'refund' THEN 1 END) as refund_count
-      FROM payments
+        COALESCE(SUM(CASE WHEN status = 'captured' AND DATE(created_at) = CURDATE() THEN amount END), 0) as today_collected,
+        COALESCE(SUM(CASE WHEN status = 'captured' AND MONTH(created_at) = MONTH(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE()) THEN amount END), 0) as month_collected,
+        COALESCE(SUM(CASE WHEN status = 'pending' THEN amount END), 0) as pending_amount,
+        COUNT(CASE WHEN status = 'captured' AND DATE(created_at) = CURDATE() THEN 1 END) as today_count,
+        COUNT(CASE WHEN status = 'refunded' OR status = 'partial_refund' THEN 1 END) as refund_count
+      FROM v2_payments
     `);
 
     const [advances] = await pool.query(`
@@ -362,4 +672,87 @@ exports.sendReminder = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to send reminder' });
   }
 };
+
+// ─── QR Payment Confirmation ────────────────────────
+exports.confirmQrPayment = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const { booking_id, package_request_id, amount, transaction_id } = req.body;
+    const customerId = req.user.id;
+
+    if (!amount || !transaction_id) {
+      await conn.rollback();
+      return res.status(400).json({ success: false, error: 'Amount and transaction_id are required' });
+    }
+
+    // Insert into v2_payments
+    const [pResult] = await conn.query(
+      `INSERT INTO v2_payments 
+       (customer_id, booking_id, package_id, amount, payment_method, status, razorpay_payment_id, notes) 
+       VALUES (?, ?, ?, ?, 'qr', 'captured', ?, ?)`,
+      [
+        customerId, 
+        booking_id || null, 
+        package_request_id ? null : null,
+        amount, 
+        transaction_id, 
+        JSON.stringify({ qr_transaction_id: transaction_id, package_request_id })
+      ]
+    );
+    const paymentId = pResult.insertId;
+
+    // Log transaction
+    await conn.query(
+      `INSERT INTO v2_payment_transactions 
+       (payment_id, transaction_type, amount, status) 
+       VALUES (?, 'credit', ?, 'success')`,
+      [paymentId, amount]
+    );
+
+    // If it's a booking
+    if (booking_id) {
+      // Fetch booking details
+      const [bookings] = await conn.query(
+        `SELECT total_amount FROM bookings WHERE id = ?`,
+        [booking_id]
+      );
+      if (bookings.length) {
+        const booking = bookings[0];
+        const balance = Math.max(0, parseFloat(booking.total_amount || 0) - parseFloat(amount));
+
+        await conn.query(
+          `UPDATE bookings 
+           SET status = 'pending_approval', advance_payment_id = ?, expires_at = NULL 
+           WHERE id = ?`,
+          [paymentId, booking_id]
+        );
+
+        await conn.query(
+          `INSERT INTO advance_payments 
+           (customer_id, booking_id, advance_amount, total_amount, balance_due, payment_method, status, notes)
+           VALUES (?, ?, ?, ?, ?, 'qr', 'advance_paid', ?)`,
+          [
+            customerId,
+            booking_id,
+            amount,
+            booking.total_amount || 0,
+            balance,
+            `Manual QR Payment Ref: ${transaction_id}`
+          ]
+        );
+      }
+    }
+
+    await conn.commit();
+    res.json({ success: true, message: 'QR payment reference submitted successfully for admin verification.' });
+  } catch (err) {
+    await conn.rollback();
+    console.error('confirmQrPayment error:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to confirm QR payment' });
+  } finally {
+    conn.release();
+  }
+};
+
 

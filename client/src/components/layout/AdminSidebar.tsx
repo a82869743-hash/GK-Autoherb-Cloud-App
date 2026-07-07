@@ -6,7 +6,7 @@ import {
   LayoutDashboard, ClipboardList, Package, Calendar, CalendarCheck, Wrench, Users,
   DollarSign, MessageSquare, HelpCircle, Upload, Settings, LogOut, X, ShoppingCart,
   Layers, FileText, Wallet, Archive, PlusCircle, Trash2, ChevronDown, ChevronRight,
-  Droplets, Star, Search, Truck, Sparkles, CreditCard, BarChart3, Shield, CheckSquare, Gift
+  Droplets, Star, Truck, Sparkles, CreditCard, BarChart3, Shield, CheckSquare, Gift, MapPin
 } from 'lucide-react';
 
 // ─── Category-based navigation with collapsible sections ─────
@@ -22,6 +22,7 @@ interface NavItem {
   label: string;
   end?: boolean;
   badge?: string;
+  permission?: string;
 }
 
 const navCategories: NavCategory[] = [
@@ -36,75 +37,77 @@ const navCategories: NavCategory[] = [
     label: 'Operations',
     defaultOpen: true,
     items: [
-      { to: '/admin/job-carts', icon: ClipboardList, label: 'Job Carts' },
-      { to: '/admin/quick-wash', icon: Droplets, label: 'Quick Wash', badge: 'New' },
-      { to: '/admin/slots', icon: Calendar, label: 'Slots & Bookings' },
-      { to: '/admin/customer-bookings', icon: CalendarCheck, label: 'Customer Bookings' },
-      { to: '/admin/deliveries', icon: Truck, label: 'Deliveries' },
+      { to: '/admin/job-carts', icon: ClipboardList, label: 'Job Carts', permission: 'bookings.view' },
+      { to: '/admin/quick-wash', icon: Droplets, label: 'Quick Wash', badge: 'New', permission: 'bookings.view' },
+      { to: '/admin/slots', icon: Calendar, label: 'Slots & Bookings', permission: 'bookings.view' },
+      { to: '/admin/customer-bookings', icon: CalendarCheck, label: 'Customer Bookings', permission: 'bookings.view' },
+      { to: '/admin/pickups', icon: MapPin, label: 'Pickups', badge: 'New', permission: 'bookings.view' },
+      { to: '/admin/deliveries', icon: Truck, label: 'Deliveries', permission: 'bookings.view' },
     ],
   },
   {
     label: 'Customers',
     defaultOpen: true,
     items: [
-      { to: '/admin/customers', icon: Users, label: 'Customers CRM' },
-      { to: '/admin/add-customer', icon: PlusCircle, label: 'Add Customer' },
-      { to: '/admin/packages', icon: Layers, label: 'Packages' },
-      { to: '/admin/package-approvals', icon: Package, label: 'Package Approvals' },
-      { to: '/admin/package-tracking', icon: Layers, label: 'Package Tracking', badge: 'New' },
-      { to: '/admin/loyalty', icon: Star, label: 'Loyalty Points', badge: 'New' },
-      { to: '/admin/customer-rewards', icon: Gift, label: 'Customer Rewards', badge: 'New' },
+      { to: '/admin/customers', icon: Users, label: 'Customers CRM', permission: 'customers.view' },
+      { to: '/admin/add-customer', icon: PlusCircle, label: 'Add Customer', permission: 'customers.create' },
+      { to: '/admin/packages', icon: Layers, label: 'Packages', permission: 'packages.view' },
+      { to: '/admin/package-approvals', icon: Package, label: 'Package Approvals', permission: 'packages.view' },
+      { to: '/admin/package-tracking', icon: Layers, label: 'Package Tracking', badge: 'New', permission: 'packages.view' },
+      { to: '/admin/loyalty', icon: Star, label: 'Loyalty Points', badge: 'New', permission: 'settings.view' },
+      { to: '/admin/customer-rewards', icon: Gift, label: 'Customer Rewards', badge: 'New', permission: 'settings.view' },
     ],
   },
   {
     label: 'Services',
     items: [
-      { to: '/admin/services', icon: Wrench, label: 'All Services' },
-      { to: '/admin/premium-services', icon: Sparkles, label: 'Premium Services', badge: 'New' },
+      { to: '/admin/services', icon: Wrench, label: 'All Services', permission: 'settings.view' },
+      { to: '/admin/premium-services', icon: Sparkles, label: 'Premium Services', badge: 'New', permission: 'settings.view' },
     ],
   },
   {
     label: 'Inventory & Stock',
     items: [
-      { to: '/admin/inventory', icon: Package, label: 'Inventory' },
-      { to: '/admin/buy-sell', icon: ShoppingCart, label: 'Buy & Sell' },
+      { to: '/admin/inventory', icon: Package, label: 'Inventory', permission: 'inventory.view' },
+      { to: '/admin/buy-sell', icon: ShoppingCart, label: 'Buy & Sell', permission: 'inventory.view' },
     ],
   },
   {
     label: 'Finance',
     items: [
-      { to: '/admin/accounts', icon: DollarSign, label: 'Accounts' },
-      { to: '/admin/payments', icon: CreditCard, label: 'Payments', badge: 'New' },
-      { to: '/admin/billing', icon: FileText, label: 'Manual Billing' },
-      { to: '/admin/invoices', icon: Archive, label: 'All Invoices' },
-      { to: '/admin/quotations', icon: ClipboardList, label: 'Quotations', badge: 'New' },
-      { to: '/admin/balance-sheet', icon: BarChart3, label: 'Balance Sheet', badge: 'New' },
+      { to: '/admin/accounts', icon: DollarSign, label: 'Accounts', permission: 'accounts.view' },
+      { to: '/admin/payments', icon: CreditCard, label: 'Payments', badge: 'New', permission: 'payments.view' },
+      { to: '/admin/billing', icon: FileText, label: 'Manual Billing', permission: 'accounts.view' },
+      { to: '/admin/invoices', icon: Archive, label: 'All Invoices', permission: 'accounts.view' },
+      { to: '/admin/quotations', icon: ClipboardList, label: 'Quotations', badge: 'New', permission: 'accounts.view' },
+      { to: '/admin/balance-sheet', icon: BarChart3, label: 'Balance Sheet', badge: 'New', permission: 'accounts.view' },
     ],
   },
   {
     label: 'Staff & HR',
     items: [
-      { to: '/admin/staff', icon: Users, label: 'Staff' },
-      { to: '/admin/salary', icon: Wallet, label: 'Salary' },
-      { to: '/admin/staff-hr', icon: CheckSquare, label: 'Tasks & HR', badge: 'New' },
+      { to: '/admin/staff', icon: Users, label: 'Staff', permission: 'staff.view' },
+      { to: '/admin/salary', icon: Wallet, label: 'Salary', permission: 'payroll.view' },
+      { to: '/admin/staff-hr', icon: CheckSquare, label: 'Tasks & HR', badge: 'New', permission: 'tasks.view' },
     ],
   },
   {
     label: 'Communication',
     items: [
-      { to: '/admin/messages', icon: MessageSquare, label: 'Messages' },
-      { to: '/admin/whatsapp', icon: MessageSquare, label: 'WhatsApp', badge: 'New' },
-      { to: '/admin/inquiries', icon: HelpCircle, label: 'Inquiries' },
-      { to: '/admin/feedback', icon: Star, label: 'Feedback', badge: 'New' },
+      { to: '/admin/messages', icon: MessageSquare, label: 'Messages', permission: 'notifications.send' },
+      { to: '/admin/whatsapp', icon: MessageSquare, label: 'WhatsApp', badge: 'New', permission: 'notifications.send' },
+      { to: '/admin/inquiries', icon: HelpCircle, label: 'Inquiries', permission: 'notifications.send' },
+      { to: '/admin/feedback', icon: Star, label: 'Feedback', badge: 'New', permission: 'feedback.view' },
     ],
   },
   {
     label: 'System',
     items: [
-      { to: '/admin/audit-logs', icon: Shield, label: 'Audit Logs', badge: 'New' },
-      { to: '/admin/import', icon: Upload, label: 'Import' },
-      { to: '/admin/archive', icon: Trash2, label: 'Recycle Bin' },
-      { to: '/admin/settings', icon: Settings, label: 'Settings' },
+      { to: '/admin/roles', icon: Shield, label: 'Roles & RBAC', badge: 'New', permission: 'settings.view' },
+      { to: '/admin/audit-logs', icon: Shield, label: 'Audit Logs', badge: 'New', permission: 'settings.view' },
+      { to: '/admin/import', icon: Upload, label: 'Import', permission: 'settings.view' },
+      { to: '/admin/archive', icon: Trash2, label: 'Recycle Bin', permission: 'settings.view' },
+      { to: '/admin/settings', icon: Settings, label: 'Settings', permission: 'settings.view' },
     ],
   },
 ];
@@ -118,7 +121,6 @@ function CollapsibleCategory({
 }) {
   const [isOpen, setIsOpen] = useState(category.defaultOpen ?? false);
 
-  // Single item categories (like Overview) are always open
   if (category.items.length === 1 && category.label === 'Overview') {
     return (
       <div className="mb-1">
@@ -203,6 +205,18 @@ export default function AdminSidebar() {
     setSidebarOpen(false);
   };
 
+  // Filter categories and items by user permissions
+  const filteredCategories = navCategories
+    .map((category) => {
+      const items = category.items.filter((item) => {
+        if (!item.permission) return true;
+        if (user?.role === 'admin' || user?.role === 'super_admin') return true;
+        return user?.permissions?.includes(item.permission);
+      });
+      return { ...category, items };
+    })
+    .filter((category) => category.items.length > 0);
+
   return (
     <>
       {/* Mobile overlay */}
@@ -239,7 +253,7 @@ export default function AdminSidebar() {
 
         {/* Nav - collapsible categories */}
         <nav className="flex-1 overflow-y-auto dark-scroll pb-4">
-          {navCategories.map((category) => (
+          {filteredCategories.map((category) => (
             <CollapsibleCategory
               key={category.label}
               category={category}

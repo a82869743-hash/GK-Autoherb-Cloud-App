@@ -233,6 +233,28 @@ exports.assignPackage = async (req, res) => {
         );
       }
     }
+    // GST auto-logging for Package Sale
+    const [gstSetting] = await conn.query("SELECT value FROM settings WHERE key_name = 'is_gst_applicable'");
+    const isGstEnabled = gstSetting.length && gstSetting[0].value === '1';
+    if (isGstEnabled && price_paid) {
+      const periodMonth = new Date().getMonth() + 1;
+      const periodYear = new Date().getFullYear();
+      const [gstSettingNo] = await conn.query("SELECT value FROM settings WHERE key_name = 'gstin'");
+      const gstin = gstSettingNo.length ? gstSettingNo[0].value : '';
+
+      const numericPrice = parseFloat(price_paid);
+      const taxableAmount = numericPrice / 1.18;
+      const totalGst = numericPrice - taxableAmount;
+      const cgst = totalGst / 2;
+      const sgst = totalGst / 2;
+      const igst = 0;
+
+      await conn.query(
+        `INSERT INTO v2_gst_records (record_type, gstin, taxable_amount, cgst, sgst, igst, total_gst, period_month, period_year)
+         VALUES ('sales', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [gstin, taxableAmount, cgst, sgst, igst, totalGst, periodMonth, periodYear]
+      );
+    }
 
     await conn.commit();
 
@@ -251,38 +273,30 @@ exports.assignPackage = async (req, res) => {
 };
 
 // ═══════════════════════════════════════════════════════════
-// RENEW PACKAGE
-// POST /user-packages/:id/renew
+// RENEW PACKAGE INTERNAL HELPERS
 // ═══════════════════════════════════════════════════════════
-exports.renewPackage = async (req, res) => {
-  const conn = await pool.getConnection();
+
+// Internal helper for package renewals (called by renewPackage or paymentsController._processCapturedPayment)
+exports._renewPackageInternal = async (conn, { user_package_id, package_id, payment_amount, payment_mode, payment_id, renewed_by = 'customer', notes }) => {
   try {
-    await conn.beginTransaction();
-
-    const { id } = req.params;
-    const { duration_months = 12, price_paid, vehicle_segment, new_package_id } = req.body;
-
-    // Get current package
+    // 1. Get current package
     const [existing] = await conn.query(
-      'SELECT * FROM user_packages WHERE id = ?', [id]
+      'SELECT * FROM user_packages WHERE id = ?', [user_package_id]
     );
     if (!existing.length) {
-      await conn.rollback();
-      return res.status(404).json({ success: false, error: 'Package subscription not found' });
+      return { success: false, error: 'Package subscription not found' };
     }
-
     const currentPkg = existing[0];
 
     // Check if upgrading/downgrading
     let targetPackageId = currentPkg.package_id;
     let packageName = '';
-    if (new_package_id && new_package_id !== currentPkg.package_id) {
-      const [newPkgCheck] = await conn.query('SELECT id, name FROM packages WHERE id = ?', [new_package_id]);
+    if (package_id && package_id !== currentPkg.package_id) {
+      const [newPkgCheck] = await conn.query('SELECT id, name FROM packages WHERE id = ?', [package_id]);
       if (!newPkgCheck.length) {
-        await conn.rollback();
-        return res.status(404).json({ success: false, error: 'New package not found for upgrade/downgrade' });
+        return { success: false, error: 'New package not found for upgrade/downgrade' };
       }
-      targetPackageId = new_package_id;
+      targetPackageId = package_id;
       packageName = newPkgCheck[0].name;
     } else {
       const [pkgInfo] = await conn.query('SELECT name FROM packages WHERE id = ?', [currentPkg.package_id]);
@@ -292,7 +306,7 @@ exports.renewPackage = async (req, res) => {
     // Mark current as renewed
     await conn.query(
       `UPDATE user_packages SET package_status = 'renewed', renewed_at = NOW() WHERE id = ?`,
-      [id]
+      [user_package_id]
     );
 
     // Calculate new end_date: extend from current end_date if still active, else from NOW
@@ -300,15 +314,18 @@ exports.renewPackage = async (req, res) => {
       ? currentPkg.end_date
       : new Date();
 
+    const duration_months = 12;
+
     const [newResult] = await conn.query(
       `INSERT INTO user_packages
-       (user_id, package_id, start_date, end_date, renewed_from_id, payment_status, package_status, price_paid, vehicle_segment, vehicle_id)
-       VALUES (?, ?, NOW(), DATE_ADD(?, INTERVAL ? MONTH), ?, 'paid', 'active', ?, ?, ?)`,
+       (user_id, package_id, start_date, end_date, renewed_from_id, payment_status, package_status, price_paid, vehicle_segment, vehicle_id, pricing_type, car_type)
+       VALUES (?, ?, NOW(), DATE_ADD(?, INTERVAL ? MONTH), ?, 'paid', 'active', ?, ?, ?, ?, ?)`,
       [
         currentPkg.user_id, targetPackageId,
-        baseDate, duration_months, id,
-        price_paid || currentPkg.price_paid, vehicle_segment || currentPkg.vehicle_segment,
-        currentPkg.vehicle_id
+        baseDate, duration_months, user_package_id,
+        payment_amount !== undefined ? payment_amount : currentPkg.price_paid, 
+        currentPkg.vehicle_segment, currentPkg.vehicle_id,
+        currentPkg.pricing_type || 'basic', currentPkg.car_type || null
       ]
     );
     const newUserPackageId = newResult.insertId;
@@ -323,12 +340,111 @@ exports.renewPackage = async (req, res) => {
       );
     }
 
-    await conn.commit();
+    // Log the renewal event in v2_package_renewals
+    await conn.query(
+      `INSERT INTO v2_package_renewals
+       (customer_id, package_id, customer_package_id, renewal_date, amount_paid, payment_id, renewed_by, notes)
+       VALUES (?, ?, ?, CURDATE(), ?, ?, ?, ?)`,
+      [
+        currentPkg.user_id, targetPackageId, newUserPackageId,
+        payment_amount !== undefined ? payment_amount : currentPkg.price_paid,
+        payment_id || null,
+        renewed_by,
+        notes || `Renewed package subscription from ID ${user_package_id}`
+      ]
+    );
 
+    // Trigger non-blocking WhatsApp/SMS confirmations
+    try {
+      const messagingService = require('../services/messagingService');
+      const [custRows] = await conn.query('SELECT name, mobile FROM users WHERE id = ?', [currentPkg.user_id]);
+      if (custRows.length && custRows[0].mobile) {
+        const vehicleStr = currentPkg.vehicle_segment ? ` for your vehicle segment ${currentPkg.vehicle_segment.replace(/_/g, ' ')}` : '';
+        const body = `✅ *Package Renewed Successfully!*\n\nHi ${custRows[0].name},\nYour *${packageName}* package${vehicleStr} has been renewed successfully!\n\nThank you for choosing GK AutoHerb! 💎`;
+        messagingService.sendWhatsApp(`91${custRows[0].mobile}`, null, { body }).catch(() => {});
+      }
+    } catch (msgErr) {
+      console.warn('Failed to send renewal WhatsApp message:', msgErr.message);
+    }
+
+    return {
+      success: true,
+      data: { id: newUserPackageId, renewed_from: user_package_id }
+    };
+  } catch (err) {
+    console.error('_renewPackageInternal error:', err);
+    return { success: false, error: 'Database transaction error in package renewal' };
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+// RENEW PACKAGE (Route Handler)
+// POST /user-packages/:id/renew
+// ═══════════════════════════════════════════════════════════
+exports.renewPackage = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const { id } = req.params;
+    const { duration_months = 12, payment_amount, price_paid, vehicle_segment, new_package_id, payment_mode, payment_id, notes } = req.body;
+
+    const [existing] = await conn.query('SELECT * FROM user_packages WHERE id = ?', [id]);
+    if (!existing.length) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, error: 'Package subscription not found' });
+    }
+    const currentPkg = existing[0];
+
+    // Check if customer is renewing their own package
+    if (req.user.role === 'customer' && currentPkg.user_id !== req.user.id) {
+      await conn.rollback();
+      return res.status(403).json({ success: false, error: 'Forbidden: You do not own this package subscription' });
+    }
+
+    const amount = payment_amount !== undefined ? payment_amount : (price_paid !== undefined ? price_paid : currentPkg.price_paid);
+    const mode = payment_mode || 'cash';
+    let dbPaymentId = payment_id || null;
+
+    // If it's an offline cash/upi payment (not razorpay), let's record a v2_payments row
+    if (mode !== 'razorpay' && amount > 0) {
+      const [pmtResult] = await conn.query(
+        `INSERT INTO v2_payments 
+         (customer_id, booking_id, invoice_id, package_id, amount, payment_method, status, notes)
+         VALUES (?, NULL, NULL, ?, ?, ?, 'captured', ?)`,
+        [currentPkg.user_id, new_package_id || currentPkg.package_id, amount, mode, notes || 'Offline package renewal']
+      );
+      dbPaymentId = pmtResult.insertId;
+      
+      // Log transaction too
+      await conn.query(
+        `INSERT INTO v2_payment_transactions (payment_id, transaction_type, amount, status) VALUES (?, 'credit', ?, 'success')`,
+        [dbPaymentId, amount]
+      );
+    }
+
+    const renewed_by = req.user.role === 'admin' ? 'admin' : 'customer';
+
+    const renResult = await exports._renewPackageInternal(conn, {
+      user_package_id: id,
+      package_id: new_package_id,
+      payment_amount: amount,
+      payment_mode: mode,
+      payment_id: dbPaymentId,
+      renewed_by,
+      notes: notes || `Package renewed via ${mode}`
+    });
+
+    if (!renResult.success) {
+      await conn.rollback();
+      return res.status(400).json(renResult);
+    }
+
+    await conn.commit();
     res.status(201).json({
       success: true,
-      data: { id: newUserPackageId, renewed_from: id },
-      message: 'Package renewed successfully',
+      data: renResult.data,
+      message: 'Package renewed successfully'
     });
   } catch (err) {
     await conn.rollback();
@@ -357,55 +473,39 @@ exports.bulkRenewPackages = async (req, res) => {
 
     const renewedPackages = [];
 
-    for (const id of package_ids) {
-      const [existing] = await conn.query('SELECT * FROM user_packages WHERE id = ?', [id]);
-      if (!existing.length) continue;
-      
-      const currentPkg = existing[0];
-      
-      let targetPackageId = currentPkg.package_id;
-      let packageName = '';
-      if (new_package_id && new_package_id !== currentPkg.package_id) {
-        const [newPkgCheck] = await conn.query('SELECT id, name FROM packages WHERE id = ?', [new_package_id]);
-        if (newPkgCheck.length) {
-          targetPackageId = new_package_id;
-          packageName = newPkgCheck[0].name;
-        }
-      }
-      if (!packageName) {
-        const [pkgInfo] = await conn.query('SELECT name FROM packages WHERE id = ?', [targetPackageId]);
-        packageName = pkgInfo.length ? pkgInfo[0].name : '';
-      }
-
-      await conn.query(`UPDATE user_packages SET package_status = 'renewed', renewed_at = NOW() WHERE id = ?`, [id]);
-
-      const baseDate = currentPkg.end_date && new Date(currentPkg.end_date) > new Date()
-        ? currentPkg.end_date
-        : new Date();
-
-      // If a bulk price_paid is provided, divide it among the packages for record keeping, or you could keep it full or 0.
-      const individualPrice = price_paid ? (price_paid / package_ids.length) : currentPkg.price_paid;
-
-      const [newResult] = await conn.query(
-        `INSERT INTO user_packages
-         (user_id, package_id, start_date, end_date, renewed_from_id, payment_status, package_status, price_paid, vehicle_segment, vehicle_id)
-         VALUES (?, ?, NOW(), DATE_ADD(?, INTERVAL ? MONTH), ?, 'paid', 'active', ?, ?, ?)`,
-        [
-          currentPkg.user_id, targetPackageId,
-          baseDate, duration_months, id,
-          individualPrice, currentPkg.vehicle_segment, currentPkg.vehicle_id
-        ]
+    // Create a shared payment record for bulk offline payment
+    let paymentId = null;
+    const amount = price_paid || 0;
+    if (amount > 0) {
+      const [pmtResult] = await conn.query(
+        `INSERT INTO v2_payments 
+         (customer_id, booking_id, invoice_id, package_id, amount, payment_method, status, notes)
+         VALUES (?, NULL, NULL, NULL, ?, 'cash', 'captured', ?)`,
+        [req.user.id, amount, `Bulk package renewal for ${package_ids.length} packages`]
       );
-      const newUserPackageId = newResult.insertId;
+      paymentId = pmtResult.insertId;
+      
+      await conn.query(
+        `INSERT INTO v2_payment_transactions (payment_id, transaction_type, amount, status) VALUES (?, 'credit', ?, 'success')`,
+        [paymentId, amount]
+      );
+    }
 
-      const serviceBreakdown = await getServiceBreakdown(conn, targetPackageId, packageName);
-      for (const svc of serviceBreakdown) {
-        await conn.query(
-          'INSERT INTO package_usage (user_package_id, service_name, used_count, usage_status) VALUES (?, ?, 0, ?)',
-          [newUserPackageId, svc.service_name, 'available']
-        );
+    for (const id of package_ids) {
+      const individualPrice = price_paid ? (price_paid / package_ids.length) : undefined;
+      const renResult = await exports._renewPackageInternal(conn, {
+        user_package_id: id,
+        package_id: new_package_id,
+        payment_amount: individualPrice,
+        payment_mode: 'cash',
+        payment_id: paymentId,
+        renewed_by: 'admin',
+        notes: 'Bulk package renewal'
+      });
+      
+      if (renResult.success) {
+        renewedPackages.push({ old_id: id, new_id: renResult.data.id });
       }
-      renewedPackages.push({ old_id: id, new_id: newUserPackageId });
     }
 
     await conn.commit();
@@ -420,20 +520,52 @@ exports.bulkRenewPackages = async (req, res) => {
 };
 
 // ═══════════════════════════════════════════════════════════
+// GET RENEWALS HISTORY
+// GET /user-packages/renewals
+// ═══════════════════════════════════════════════════════════
+exports.getRenewalsHistory = async (req, res) => {
+  try {
+    const userId = req.user.role === 'admin' && req.query.user_id
+      ? req.query.user_id
+      : req.user.id;
+
+    const [rows] = await pool.query(
+      `SELECT r.*, p.name AS package_name
+       FROM v2_package_renewals r
+       JOIN packages p ON r.package_id = p.id
+       WHERE r.customer_id = ?
+       ORDER BY r.renewal_date DESC, r.id DESC`,
+      [userId]
+    );
+
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('Get renewals history error:', err);
+    res.status(500).json({ success: false, error: 'Failed to fetch renewals history' });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
 // CHECK SERVICE AVAILABILITY (read-only — for deferred deduction)
 // Does NOT reserve or deduct. Just checks if customer can use a service.
 // ═══════════════════════════════════════════════════════════
-exports.checkServiceAvailability = async (conn, userId, serviceName) => {
+exports.checkServiceAvailability = async (conn, userId, serviceName, vehicleId) => {
   // Find active package
-  const [activePackages] = await conn.query(
-    `SELECT up.id, up.package_id, p.name AS package_name
+  let queryStr = `
+     SELECT up.id, up.package_id, p.name AS package_name
      FROM user_packages up
      JOIN packages p ON p.id = up.package_id
      WHERE up.user_id = ? AND up.package_status = 'active'
        AND (up.end_date IS NULL OR up.end_date > NOW())
-     ORDER BY up.start_date DESC LIMIT 1`,
-    [userId]
-  );
+  `;
+  const params = [userId];
+  if (vehicleId) {
+    queryStr += ' AND (up.vehicle_id = ? OR up.vehicle_id IS NULL)';
+    params.push(vehicleId);
+  }
+  queryStr += ' ORDER BY (up.vehicle_id IS NOT NULL) DESC, up.start_date DESC LIMIT 1';
+
+  const [activePackages] = await conn.query(queryStr, params);
 
   if (!activePackages.length) {
     return { has_package: false, can_use: false, remaining: 0, reason: 'No active package found' };
@@ -494,17 +626,23 @@ exports.checkServiceAvailability = async (conn, userId, serviceName) => {
 // CHECK & RESERVE SERVICE (booking-time)
 // Does NOT consume — only reserves. Consumed after job completion.
 // ═══════════════════════════════════════════════════════════
-exports.checkAndUseService = async (conn, userId, serviceName) => {
+exports.checkAndUseService = async (conn, userId, serviceName, vehicleId) => {
   // Find active package
-  const [activePackages] = await conn.query(
-    `SELECT up.id, up.package_id, p.name AS package_name
+  let queryStr = `
+     SELECT up.id, up.package_id, p.name AS package_name
      FROM user_packages up
      JOIN packages p ON p.id = up.package_id
      WHERE up.user_id = ? AND up.package_status = 'active'
        AND (up.end_date IS NULL OR up.end_date > NOW())
-     ORDER BY up.start_date DESC LIMIT 1`,
-    [userId]
-  );
+  `;
+  const params = [userId];
+  if (vehicleId) {
+    queryStr += ' AND (up.vehicle_id = ? OR up.vehicle_id IS NULL)';
+    params.push(vehicleId);
+  }
+  queryStr += ' ORDER BY (up.vehicle_id IS NOT NULL) DESC, up.start_date DESC LIMIT 1';
+
+  const [activePackages] = await conn.query(queryStr, params);
 
   if (!activePackages.length) {
     return { has_package: false, can_use: false, remaining: 0 };
@@ -638,18 +776,26 @@ exports.getActivePackage = async (req, res) => {
     const userId = req.user.role === 'admin' && req.query.user_id
       ? req.query.user_id
       : req.user.id;
+    const { vehicle_id } = req.query;
 
-    const [packages] = await pool.query(`
+    let queryStr = `
       SELECT up.id, up.package_id, up.start_date, up.end_date,
              up.package_status, up.payment_status, up.price_paid,
-             up.vehicle_segment, up.renewed_from_id,
+             up.vehicle_segment, up.renewed_from_id, up.vehicle_id,
              p.name AS package_name, p.description, p.wash_count, p.wax_count
       FROM user_packages up
       JOIN packages p ON up.package_id = p.id
       WHERE up.user_id = ? AND up.package_status = 'active'
         AND (up.end_date IS NULL OR up.end_date > NOW())
-      ORDER BY up.start_date DESC LIMIT 1
-    `, [userId]);
+    `;
+    const params = [userId];
+    if (vehicle_id) {
+      queryStr += ' AND (up.vehicle_id = ? OR up.vehicle_id IS NULL)';
+      params.push(vehicle_id);
+    }
+    queryStr += ' ORDER BY (up.vehicle_id IS NOT NULL) DESC, up.start_date DESC LIMIT 1';
+
+    const [packages] = await pool.query(queryStr, params);
 
     if (!packages.length) {
       return res.json({ success: true, data: null, message: 'No active package' });
@@ -927,25 +1073,26 @@ exports.getDashboardPackageData = async (userId) => {
 
   const [activePackages] = await pool.query(`
     SELECT up.id, up.package_id, up.start_date, up.end_date,
-           up.package_status, up.price_paid,
-           p.name AS package_name, p.description
+           up.package_status, up.price_paid, up.vehicle_id,
+           p.name AS package_name, p.description,
+           v.brand AS vehicle_brand, v.model AS vehicle_model, v.registration_no AS vehicle_reg_no
     FROM user_packages up
     JOIN packages p ON up.package_id = p.id
+    LEFT JOIN vehicles v ON up.vehicle_id = v.id
     WHERE up.user_id = ? AND up.package_status = 'active'
       AND (up.end_date IS NULL OR up.end_date > NOW())
-    ORDER BY up.start_date DESC LIMIT 1
+    ORDER BY up.start_date DESC
   `, [userId]);
 
-  let activePackage = null;
-  if (activePackages.length) {
-    const pkg = activePackages[0];
+  const processedPackages = [];
+  for (const pkg of activePackages) {
     const serviceMap = await getServiceBreakdown(pool, pkg.package_id, pkg.package_name);
     const [usageRows] = await pool.query(
       'SELECT service_name, used_count FROM package_usage WHERE user_package_id = ?',
       [pkg.id]
     );
 
-    activePackage = {
+    processedPackages.push({
       ...pkg,
       usage: serviceMap.map(svc => {
         const row = usageRows.find(u => u.service_name === svc.service_name);
@@ -958,14 +1105,15 @@ exports.getDashboardPackageData = async (userId) => {
         };
       }),
       days_remaining: pkg.end_date
-        ? Math.max(0, Math.ceil((new Date(pkg.end_date) - new Date()) / (1000 * 60 * 60 * 24)))
+        ? Math.max(0, Math.ceil((new Date(pkg.end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))
         : null,
-    };
+    });
   }
 
   return {
     primary_car: primaryCar[0] || null,
-    active_package: activePackage,
+    active_package: processedPackages[0] || null,
+    active_packages: processedPackages,
   };
 };
 
@@ -1059,4 +1207,61 @@ exports.getAllUserPackages = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to fetch all user packages' });
   }
 };
+
+exports.adjustCredits = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const { id } = req.params;
+    const { service_name, new_used_count } = req.body;
+
+    if (!service_name || new_used_count === undefined) {
+      await conn.rollback();
+      return res.status(400).json({ success: false, error: 'service_name and new_used_count are required' });
+    }
+
+    // 1. Get current used count
+    const [usage] = await conn.query(
+      'SELECT id, used_count FROM package_usage WHERE user_package_id = ? AND service_name = ? FOR UPDATE',
+      [id, service_name]
+    );
+
+    let oldUsedCount = 0;
+    if (usage.length) {
+      oldUsedCount = usage[0].used_count;
+      await conn.query(
+        'UPDATE package_usage SET used_count = ? WHERE id = ?',
+        [new_used_count, usage[0].id]
+      );
+    } else {
+      // Insert new usage row
+      await conn.query(
+        'INSERT INTO package_usage (user_package_id, service_name, used_count) VALUES (?, ?, ?)',
+        [id, service_name, new_used_count]
+      );
+    }
+
+    // Log the adjustment event in v2_audit_logs
+    await conn.query(
+      `INSERT INTO v2_audit_logs (user_id, action, target_type, target_id, details)
+       VALUES (?, 'adjust_package_credits', 'user_package', ?, ?)`,
+      [
+        req.user.id,
+        id,
+        `Adjusted service '${service_name}' used count to ${new_used_count} (was ${oldUsedCount}) for subscription ID ${id}`
+      ]
+    );
+
+    await conn.commit();
+    res.json({ success: true, message: `Successfully adjusted credits for ${service_name} to ${new_used_count}` });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Adjust credits error:', err);
+    res.status(500).json({ success: false, error: 'Failed to adjust package credits' });
+  } finally {
+    conn.release();
+  }
+};
+
 

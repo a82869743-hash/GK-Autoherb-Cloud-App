@@ -17,6 +17,7 @@ router.get('/by-customer/:customerId', auth, role(['admin']), vehiclesController
 // ─── Car Management Routes ──────────────────────────────────
 router.post('/add',          auth, vehiclesController.addCar);
 router.patch('/:id/primary', auth, vehiclesController.setPrimary);
+router.patch('/:id',         auth, vehiclesController.updateCar);
 router.delete('/:id',        auth, vehiclesController.deleteCar);
 
 module.exports = router;

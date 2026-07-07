@@ -9,5 +9,7 @@ router.get('/stats',        auth, role(['admin', 'staff']), ctrl.queueStats);
 router.post('/',            auth, role(['admin', 'staff']), ctrl.create);
 router.get('/:id/invoice',  auth, role(['admin', 'staff']), ctrl.getInvoice);
 router.patch('/:id/status', auth, role(['admin', 'staff']), ctrl.updateStatus);
+router.patch('/:id/phase', auth, role(['admin', 'staff']), ctrl.updatePhase);
+router.get('/:id/phase', ctrl.getPhase);
 
 module.exports = router;

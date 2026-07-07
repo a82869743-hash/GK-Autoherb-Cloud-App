@@ -2,6 +2,15 @@ const pool = require('../config/db');
 const cloudinary = require('../config/cloudinary');
 const { generateInvoicePDF } = require('../services/invoiceService');
 
+const checkStaffModifyPermission = (user, cart) => {
+  if (user.role !== 'staff') return true;
+  const d = new Date(cart.visit_date);
+  const cartDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  return cartDateStr === todayStr;
+};
+
 // ─── VEHICLE LOOKUP ─────────────────────────
 exports.lookup = async (req, res) => {
   try {
@@ -23,7 +32,15 @@ exports.lookup = async (req, res) => {
       success: true,
       data: {
         found: true,
-        vehicle: { id: vehicle.id, registration_no: vehicle.registration_no, brand: vehicle.brand, model: vehicle.model, customer_id: vehicle.customer_id },
+        vehicle: {
+          id: vehicle.id,
+          registration_no: vehicle.registration_no,
+          brand: vehicle.brand,
+          model: vehicle.model,
+          customer_id: vehicle.customer_id,
+          car_year: vehicle.car_year,
+          manufacture_year: vehicle.manufacture_year
+        },
         customer: { id: vehicle.customer_id, name: vehicle.customer_name, mobile: vehicle.customer_mobile, email: vehicle.customer_email },
         visit_count: visitRows[0].max_visit,
         next_visit_number: visitRows[0].max_visit + 1,
@@ -95,9 +112,24 @@ exports.create = async (req, res) => {
       [vehicleId]
     );
 
+    let bAdvanceAmount = 0;
+    let bTotalAmount = 0;
+    if (booking_id) {
+      const [bRows] = await conn.query(
+        'SELECT advance_amount, total_amount FROM bookings WHERE id = ?',
+        [booking_id]
+      );
+      if (bRows.length) {
+        bAdvanceAmount = parseFloat(bRows[0].advance_amount || 0);
+        bTotalAmount = parseFloat(bRows[0].total_amount || 0);
+      }
+    }
+
+    const bBalanceDue = Math.max(0, bTotalAmount - bAdvanceAmount);
+
     const [result] = await conn.query(
-      'INSERT INTO job_carts (vehicle_id, visit_date, visit_number, status, notes, created_by, booking_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [vehicleId, visit_date || new Date(), visitRows[0].next_visit, 'draft', notes || null, req.user.id, booking_id || null]
+      'INSERT INTO job_carts (vehicle_id, visit_date, visit_number, status, notes, created_by, booking_id, advance_amount, advance_paid, balance_due) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [vehicleId, visit_date || new Date(), visitRows[0].next_visit, 'draft', notes || null, req.user.id, booking_id || null, bAdvanceAmount, bAdvanceAmount, bBalanceDue]
     );
 
     // Update booking status if converted from slot
@@ -134,6 +166,9 @@ exports.list = async (req, res) => {
     if (req.user.role === 'customer') {
       where += ' AND v.customer_id = ?';
       params.push(req.user.id);
+    }
+    if (req.user.role === 'staff') {
+      where += ' AND DATE(jc.visit_date) = CURDATE()';
     }
     if (status && status !== 'all') {
       where += ' AND jc.status = ?';
@@ -259,10 +294,18 @@ exports.getOne = async (req, res) => {
         created_at: cart.created_at,
         completed_at: cart.completed_at,
         invoice_number: cart.invoice_number,
-        customer: { id: cart.customer_id, name: cart.customer_name, mobile: cart.customer_mobile, email: cart.customer_email },
+        customer: req.user.role === 'staff'
+          ? { id: cart.customer_id, name: cart.customer_name }
+          : { id: cart.customer_id, name: cart.customer_name, mobile: cart.customer_mobile, email: cart.customer_email },
         services,
         photos,
         total_amount: totalAmount,
+        discount_type: req.user.role === 'staff' ? undefined : cart.discount_type,
+        discount_value: req.user.role === 'staff' ? undefined : cart.discount_value,
+        invoice_notes: req.user.role === 'staff' ? undefined : cart.invoice_notes,
+        advance_amount: req.user.role === 'staff' ? undefined : cart.advance_amount,
+        advance_paid: req.user.role === 'staff' ? undefined : cart.advance_paid,
+        balance_due: req.user.role === 'staff' ? undefined : cart.balance_due,
       },
     });
   } catch (err) {
@@ -277,9 +320,14 @@ exports.update = async (req, res) => {
     const { id } = req.params;
     const { visit_date, notes, discount_type, discount_value, invoice_notes } = req.body;
 
-    const [cart] = await pool.query('SELECT status, completed_at FROM job_carts WHERE id = ?', [id]);
+    const [cart] = await pool.query('SELECT status, completed_at, visit_date FROM job_carts WHERE id = ?', [id]);
     if (!cart.length) return res.status(404).json({ success: false, error: 'Not found' });
     
+    // Staff restriction: only today's carts
+    if (!checkStaffModifyPermission(req.user, cart[0])) {
+      return res.status(403).json({ success: false, error: 'Staff can only modify today\'s job carts' });
+    }
+
     if (cart[0].status === 'complete') {
       const isWithin1Day = (new Date() - new Date(cart[0].completed_at)) < 24 * 60 * 60 * 1000;
       if (!isWithin1Day && req.user.role !== 'admin') {
@@ -302,11 +350,41 @@ exports.update = async (req, res) => {
 exports.submit = async (req, res) => {
   try {
     const { id } = req.params;
-    const [cart] = await pool.query('SELECT status FROM job_carts WHERE id = ?', [id]);
+    const [cart] = await pool.query('SELECT status, visit_date FROM job_carts WHERE id = ?', [id]);
     if (!cart.length) return res.status(404).json({ success: false, error: 'Not found' });
     if (cart[0].status !== 'draft') return res.status(422).json({ success: false, error: 'Only draft carts can be submitted' });
 
+    if (!checkStaffModifyPermission(req.user, cart[0])) {
+      return res.status(403).json({ success: false, error: 'Staff can only modify today\'s job carts' });
+    }
+
     await pool.query("UPDATE job_carts SET status = 'open' WHERE id = ?", [id]);
+
+    // Trigger Service Started Notification
+    try {
+      const [info] = await pool.query(
+        `SELECT jc.vehicle_id, v.customer_id, v.registration_no, v.brand, v.model
+         FROM job_carts jc
+         JOIN vehicles v ON jc.vehicle_id = v.id
+         WHERE jc.id = ?`,
+        [id]
+      );
+      if (info.length) {
+        const messagingService = require('../services/messagingService');
+        await messagingService.notify(
+          info[0].customer_id,
+          'SERVICE_STARTED',
+          { 
+            vehicle_number: info[0].registration_no || `${info[0].brand} ${info[0].model}`,
+            estimated_time: '2 hours' 
+          },
+          { type: 'job_cart', id }
+        );
+      }
+    } catch (msgErr) {
+      console.error('[SMS/WA] Service started notification failed (non-blocking):', msgErr.message);
+    }
+
     res.json({ success: true, message: 'Job cart submitted' });
   } catch (err) {
     console.error('Submit error:', err);
@@ -328,6 +406,12 @@ exports.complete = async (req, res) => {
       [id]
     );
     if (!cart.length) { await conn.rollback(); return res.status(404).json({ success: false, error: 'Not found' }); }
+
+    if (!checkStaffModifyPermission(req.user, cart[0])) {
+      await conn.rollback();
+      return res.status(403).json({ success: false, error: 'Staff can only modify today\'s job carts' });
+    }
+
     if (cart[0].status !== 'open') { await conn.rollback(); return res.status(422).json({ success: false, error: 'Only open carts can be completed' }); }
 
     const customerId = cart[0].customer_id;
@@ -392,10 +476,13 @@ exports.complete = async (req, res) => {
     }
     grandTotal = Math.max(0, grandTotal - discountAmt);
 
+    const advancePaid = parseFloat(cart[0].advance_paid || 0);
+    const amountCollectedNow = Math.max(0, grandTotal - advancePaid);
+
     // 6. Create transaction
     await conn.query(
       'INSERT INTO transactions (type, reference_id, amount, direction, note, transaction_date, created_by) VALUES (?, ?, ?, ?, ?, CURDATE(), ?)',
-      ['job_revenue', id, grandTotal, 'in', `Job Cart #${id} completed`, req.user.id]
+      ['job_revenue', id, amountCollectedNow, 'in', `Job Cart #${id} balance completed (Advance ₹${advancePaid} paid previously)`, req.user.id]
     );
 
     // 7. Generate invoice number (atomic — lock row to prevent race condition)
@@ -406,14 +493,70 @@ exports.complete = async (req, res) => {
     const invoiceNumber = `${prefix}-${new Date().getFullYear()}-${counter}`;
 
     await conn.query("UPDATE settings SET value = CAST(CAST(value AS UNSIGNED) + 1 AS CHAR) WHERE key_name = 'invoice_counter'");
-    await conn.query('UPDATE job_carts SET invoice_number = ? WHERE id = ?', [invoiceNumber, id]);
+    await conn.query(
+      "UPDATE job_carts SET invoice_number = ?, balance_due = 0, payment_status = 'paid' WHERE id = ?",
+      [invoiceNumber, id]
+    );
+
+    // GST auto-logging for Completed Job Cart Tax Invoice
+    const [gstSetting] = await conn.query("SELECT value FROM settings WHERE key_name = 'is_gst_applicable'");
+    const isGstEnabled = gstSetting.length && gstSetting[0].value === '1';
+    if (isGstEnabled) {
+      const periodMonth = new Date().getMonth() + 1;
+      const periodYear = new Date().getFullYear();
+      const [gstSettingNo] = await conn.query("SELECT value FROM settings WHERE key_name = 'gstin'");
+      const gstin = gstSettingNo.length ? gstSettingNo[0].value : '';
+
+      const taxableAmount = grandTotal / 1.18;
+      const totalGst = grandTotal - taxableAmount;
+      const cgst = totalGst / 2;
+      const sgst = totalGst / 2;
+      const igst = 0;
+
+      await conn.query(
+        `INSERT INTO v2_gst_records (record_type, invoice_id, gstin, taxable_amount, cgst, sgst, igst, total_gst, period_month, period_year)
+         VALUES ('sales', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, gstin, taxableAmount, cgst, sgst, igst, totalGst, periodMonth, periodYear]
+      );
+    }
 
     await conn.commit();
 
-    // 8. Async WhatsApp + SMS (non-blocking — never fail completion for this)
+    // Auto-trigger Feedback Request Token & WhatsApp Log
+    try {
+      const crypto = require('crypto');
+      const token = crypto.randomBytes(32).toString('hex');
+      await pool.query(
+        `INSERT INTO v2_review_requests (customer_id, booking_id, job_cart_id, sent_via, status, feedback_token)
+         VALUES (?, ?, ?, 'whatsapp', 'sent', ?)`,
+        [customerId, cart[0].booking_id, id, token]
+      );
+
+      const [cDetails] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [customerId]);
+      if (cDetails.length) {
+        const c = cDetails[0];
+        const domain = process.env.CLIENT_URL || 'http://localhost:5173';
+        const feedbackUrl = `${domain}/feedback/${token}`;
+        const msgText = `Dear ${c.name || 'Customer'}, thank you for choosing GK AutoHerb! We would love to hear your feedback. Please rate your experience here: ${feedbackUrl}`;
+
+        await pool.query(
+          `INSERT INTO v2_notification_logs (customer_id, event_trigger, channel, recipient, message, status, response_data)
+           VALUES (?, 'FEEDBACK_REQUEST', 'whatsapp', ?, ?, 'pending', ?)`,
+          [
+            customerId,
+            c.mobile,
+            msgText,
+            JSON.stringify({ redirect_url: `https://api.whatsapp.com/send?phone=${c.mobile}&text=${encodeURIComponent(msgText)}` })
+          ]
+        );
+      }
+    } catch (err) {
+      console.error('Auto-feedback trigger error:', err);
+    }
+
+    // 8. Unified Notification Log triggers for WhatsApp + SMS
     try {
       const messagingService = require('../services/messagingService');
-      const sendSms = require('../utils/sendSms');
       const [custInfo] = await pool.query(
         `SELECT u.name, u.mobile, v.brand, v.model, v.registration_no
          FROM users u JOIN vehicles v ON v.customer_id = u.id
@@ -422,24 +565,28 @@ exports.complete = async (req, res) => {
       );
       if (custInfo.length) {
         const c = custInfo[0];
-        const [svcs] = await pool.query('SELECT service_name FROM job_services WHERE job_cart_id = ?', [id]);
-        const serviceList = svcs.map(s => s.service_name).join(', ');
-        const messageBody = `Dear ${c.name}, your ${c.brand} ${c.model} (${c.registration_no}) service is complete at GK AutoHerb! Services: ${serviceList}. Total: Rs.${grandTotal}.${isFirstVisit ? ' Bonus: 100 Welcome Credits added to your wallet!' : ''} Thank you!`;
+        const vehName = c.registration_no || `${c.brand} ${c.model}`;
         
-        // Fire-and-forget WhatsApp (existing custom template)
-        messagingService.sendWhatsApp(`91${c.mobile}`, 'job_complete', { body: messageBody }).catch(() => {});
-        
-        // Fire-and-forget 2Factor SMS (strictly matches DLT template: GK AutoHerb: Your job card #VAR1# is ready...)
-        sendSms(c.mobile, id).catch(() => {});
-        
-        // Log to messages_log
+        // Notify Service Completed
+        await messagingService.notify(
+          customerId,
+          'SERVICE_COMPLETED',
+          { vehicle_number: vehName, job_cart_id: id },
+          { type: 'job_cart', id }
+        );
+
+        // Notify Invoice Generated
         const baseUrl = process.env.APP_BASE_URL || 'https://gkautobook.cloud';
-        const smsPreview = `GK AutoHerb: Your job card ${id} is ready. Track here ${baseUrl}/job/${id}`;
-        
-        pool.query(
-          `INSERT INTO messages_log (customer_id, mobile, type, channel, status, message_preview) VALUES (?, ?, 'job_complete', 'sms', 'sent', ?)`,
-          [customerId, c.mobile, smsPreview]
-        ).catch(() => {});
+        await messagingService.notify(
+          customerId,
+          'INVOICE_GENERATED',
+          { 
+            invoice_number: invoiceNumber,
+            amount: grandTotal,
+            invoice_url: `${baseUrl}/invoice/${id}`
+          },
+          { type: 'job_cart', id }
+        );
       }
     } catch (msgErr) {
       console.error('Messaging after completion failed (non-blocking):', msgErr.message);
@@ -469,8 +616,14 @@ exports.addService = async (req, res) => {
 
     if (!service_name) return res.status(400).json({ success: false, error: 'Service name is required' });
 
-    const [cart] = await conn.query('SELECT status, completed_at FROM job_carts WHERE id = ?', [id]);
+    const [cart] = await conn.query('SELECT status, completed_at, visit_date FROM job_carts WHERE id = ?', [id]);
     if (!cart.length) { await conn.rollback(); return res.status(404).json({ success: false, error: 'Not found' }); }
+
+    if (!checkStaffModifyPermission(req.user, cart[0])) {
+      await conn.rollback();
+      return res.status(403).json({ success: false, error: 'Staff can only modify today\'s job carts' });
+    }
+
     if (cart[0].status === 'complete') {
       const isWithin1Day = (new Date() - new Date(cart[0].completed_at)) < 24 * 60 * 60 * 1000;
       if (!isWithin1Day && req.user.role !== 'admin') {
@@ -512,8 +665,14 @@ exports.updateService = async (req, res) => {
     const { id, sid } = req.params;
     const { service_name, service_price, labor_charges, products = [] } = req.body;
 
-    const [cart] = await conn.query('SELECT status, completed_at FROM job_carts WHERE id = ?', [id]);
+    const [cart] = await conn.query('SELECT status, completed_at, visit_date FROM job_carts WHERE id = ?', [id]);
     if (!cart.length) { await conn.rollback(); return res.status(404).json({ success: false, error: 'Cart not found' }); }
+
+    if (!checkStaffModifyPermission(req.user, cart[0])) {
+      await conn.rollback();
+      return res.status(403).json({ success: false, error: 'Staff can only modify today\'s job carts' });
+    }
+
     if (cart[0].status === 'complete') {
       const isWithin1Day = (new Date() - new Date(cart[0].completed_at)) < 24 * 60 * 60 * 1000;
       if (!isWithin1Day && req.user.role !== 'admin') {
@@ -552,8 +711,13 @@ exports.updateService = async (req, res) => {
 exports.deleteService = async (req, res) => {
   try {
     const { id, sid } = req.params;
-    const [cart] = await pool.query('SELECT status, completed_at FROM job_carts WHERE id = ?', [id]);
+    const [cart] = await pool.query('SELECT status, completed_at, visit_date FROM job_carts WHERE id = ?', [id]);
     if (!cart.length) return res.status(404).json({ success: false, error: 'Not found' });
+
+    if (!checkStaffModifyPermission(req.user, cart[0])) {
+      return res.status(403).json({ success: false, error: 'Staff can only modify today\'s job carts' });
+    }
+
     if (cart[0].status === 'complete') {
       const isWithin1Day = (new Date() - new Date(cart[0].completed_at)) < 24 * 60 * 60 * 1000;
       if (!isWithin1Day && req.user.role !== 'admin') {
@@ -576,6 +740,12 @@ exports.uploadPhoto = async (req, res) => {
     const photoType = req.body.type || 'before';
 
     if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+
+    const [cart] = await pool.query('SELECT visit_date FROM job_carts WHERE id = ?', [id]);
+    if (!cart.length) return res.status(404).json({ success: false, error: 'Not found' });
+    if (!checkStaffModifyPermission(req.user, cart[0])) {
+      return res.status(403).json({ success: false, error: 'Staff can only modify today\'s job carts' });
+    }
 
     // Upload to Cloudinary
     const result = await new Promise((resolve, reject) => {
@@ -607,6 +777,11 @@ exports.deletePhoto = async (req, res) => {
     const { pid } = req.params;
     const [photos] = await pool.query('SELECT * FROM job_photos WHERE id = ?', [pid]);
     if (!photos.length) return res.status(404).json({ success: false, error: 'Photo not found' });
+
+    const [cart] = await pool.query('SELECT visit_date FROM job_carts WHERE id = ?', [photos[0].job_cart_id]);
+    if (cart.length && !checkStaffModifyPermission(req.user, cart[0])) {
+      return res.status(403).json({ success: false, error: 'Staff can only modify today\'s job carts' });
+    }
 
     if (photos[0].public_id) {
       await cloudinary.uploader.destroy(photos[0].public_id).catch(() => {});

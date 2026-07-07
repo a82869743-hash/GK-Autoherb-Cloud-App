@@ -1,13 +1,14 @@
-import { useState } from 'react';
 import {
   BarChart3, FileText, Download, Calendar, ShieldAlert,
-  Clock, CheckCircle, Package, ArrowUpRight, ArrowDownRight, TrendingUp
+  Clock, CheckCircle, Package, ArrowUpRight, ArrowDownRight, TrendingUp, Star
 } from 'lucide-react';
-import { useSalesReport, useInventoryReport, useJobCardReport, downloadReport } from '../../api/hooks/useReports';
+import { useSalesReport, useInventoryReport, useJobCardReport, useWelcomeRewardsReport, downloadReport } from '../../api/hooks/useReports';
 import PremiumPageHeader from '../../components/shared/PremiumPageHeader';
 import { PageTransition, AnimatedCard, RippleButton } from '../../components/ui/Animations';
 
-type TabType = 'sales' | 'inventory' | 'jobcards';
+import { useState } from 'react';
+
+type TabType = 'sales' | 'inventory' | 'jobcards' | 'welcomerewards' | 'packagehistory';
 
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<TabType>('sales');
@@ -35,13 +36,15 @@ export default function ReportsPage() {
     staff_id: jobCardFilters.staff_id
   });
 
+  const { data: welcomeRewardsData, isLoading: welcomeRewardsLoading } = useWelcomeRewardsReport();
+
   const [downloading, setDownloading] = useState<string | null>(null);
 
-  const handleDownload = async (type: 'sales' | 'inventory' | 'job-cards', format: 'xlsx' | 'pdf') => {
+  const handleDownload = async (type: 'sales' | 'inventory' | 'job-cards' | 'package-history', format: 'xlsx' | 'pdf') => {
     const key = `${type}-${format}`;
     setDownloading(key);
     try {
-      const params = type === 'inventory' ? {} : {
+      const params = type === 'inventory' || type === 'package-history' ? {} : {
         from_date: dateRange.from,
         to_date: dateRange.to,
         ...(type === 'job-cards' ? jobCardFilters : {})
@@ -66,8 +69,8 @@ export default function ReportsPage() {
       />
 
       {/* Tabs */}
-      <div className="flex gap-2 p-1 bg-gray-100 rounded-xl max-w-md">
-        {(['sales', 'inventory', 'jobcards'] as TabType[]).map((tab) => (
+      <div className="flex gap-2 p-1 bg-gray-100 rounded-xl max-w-2xl">
+        {(['sales', 'inventory', 'jobcards', 'welcomerewards', 'packagehistory'] as TabType[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -77,13 +80,13 @@ export default function ReportsPage() {
                 : 'text-gray-500 hover:text-gray-800'
             }`}
           >
-            {tab === 'jobcards' ? 'Job Cards' : tab}
+            {tab === 'jobcards' ? 'Job Cards' : tab === 'welcomerewards' ? 'Welcome Rewards' : tab === 'packagehistory' ? 'Package History' : tab}
           </button>
         ))}
       </div>
 
-      {/* Filters Card (except for Inventory tab which doesn't need date filters) */}
-      {activeTab !== 'inventory' && (
+      {/* Filters Card (except for Inventory/Welcome Rewards/Package History tab which doesn't need date filters) */}
+      {activeTab !== 'inventory' && activeTab !== 'welcomerewards' && activeTab !== 'packagehistory' && (
         <AnimatedCard className="bg-white p-4 rounded-2xl border border-gray-100 flex flex-wrap items-center justify-between gap-4" delay={0.1}>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
@@ -464,6 +467,110 @@ export default function ReportsPage() {
           ) : (
             <div className="bg-rose-50 text-rose-700 p-4 rounded-xl text-sm border border-rose-100">Failed to load job cards report data.</div>
           )}
+        </div>
+      )}
+
+      {/* WELCOME REWARDS TAB CONTENT */}
+      {activeTab === 'welcomerewards' && (
+        <div className="space-y-6">
+          {welcomeRewardsLoading ? (
+            <div className="space-y-4 animate-pulse">
+              <div className="h-64 bg-gray-100 rounded-2xl" />
+            </div>
+          ) : welcomeRewardsData?.success ? (
+            <>
+              <AnimatedCard className="bg-white rounded-2xl border border-gray-100 overflow-hidden" delay={0.2}>
+                <div className="p-5 border-b border-gray-100">
+                  <h3 className="font-bold text-[#1c1b1b]">Welcome Reward Records</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse border-spacing-0">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 text-xs font-semibold">
+                        <th className="p-4">Customer</th>
+                        <th className="p-4">Benefits</th>
+                        <th className="p-4">Description</th>
+                        <th className="p-4 text-center">Status</th>
+                        <th className="p-4 text-center">Expiry</th>
+                        <th className="p-4 text-center">Awarded Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 text-sm">
+                      {welcomeRewardsData.data.map((r: any, idx: number) => {
+                        const isExpired = r.expires_at ? new Date(r.expires_at) < new Date() : false;
+                        return (
+                          <tr key={r.id || idx} className="hover:bg-gray-50/50">
+                            <td className="p-4">
+                              <div className="font-medium text-[#1c1b1b]">{r.customer_name || `Customer #${r.customer_id}`}</div>
+                              <div className="text-[10px] text-gray-400">{r.customer_mobile || ''}</div>
+                            </td>
+                            <td className="p-4">
+                              {r.points_awarded > 0 && <span className="inline-flex items-center gap-1 text-amber-600 font-bold"><Star size={12} /> {r.points_awarded} pts</span>}
+                              {r.discount_pct > 0 && <span className="text-emerald-600 font-bold ml-2">{r.discount_pct}% Off</span>}
+                            </td>
+                            <td className="p-4 text-gray-600 text-xs">{r.description || '—'}</td>
+                            <td className="p-4 text-center">
+                              {r.redeemed ? (
+                                <span className="text-[10px] px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full font-medium uppercase">Redeemed</span>
+                              ) : isExpired ? (
+                                <span className="text-[10px] px-2 py-0.5 bg-red-50 text-red-700 border border-red-200 rounded-full font-medium uppercase">Expired</span>
+                              ) : (
+                                <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full font-medium uppercase">Active</span>
+                              )}
+                            </td>
+                            <td className="p-4 text-center text-xs text-gray-500">
+                              {r.expires_at ? new Date(r.expires_at).toLocaleDateString('en-IN') : 'No Expiry'}
+                            </td>
+                            <td className="p-4 text-center text-xs text-gray-500">
+                              {new Date(r.created_at).toLocaleDateString('en-IN')}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {!welcomeRewardsData.data.length && (
+                         <tr>
+                           <td colSpan={6} className="p-8 text-center text-gray-400">No welcome rewards found</td>
+                         </tr>
+                       )}
+                    </tbody>
+                  </table>
+                </div>
+              </AnimatedCard>
+            </>
+          ) : (
+            <div className="bg-rose-50 text-rose-700 p-4 rounded-xl text-sm border border-rose-100">Failed to load welcome rewards report data.</div>
+          )}
+        </div>
+      )}
+
+      {/* PACKAGE HISTORY TAB CONTENT */}
+      {activeTab === 'packagehistory' && (
+        <div className="space-y-6">
+          <AnimatedCard className="bg-white p-6 rounded-2xl border border-gray-100 overflow-hidden text-center max-w-xl mx-auto space-y-6" delay={0.2}>
+            <div className="mx-auto w-12 h-12 bg-red-50 text-[#D32F2F] rounded-full flex items-center justify-center">
+              <Package size={24} />
+            </div>
+            <div>
+              <h3 className="font-black text-lg text-gray-900">Export Customer Package History</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                Download consolidated logs of all assigned customer packages, including service consumption, pricing segmentations, and active/expired status flags.
+              </p>
+            </div>
+            <div className="flex justify-center gap-3 pt-2">
+              <RippleButton
+                onClick={() => handleDownload('package-history', 'xlsx')}
+                className="px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-md hover:bg-emerald-700 transition flex items-center gap-1.5"
+              >
+                <Download size={14} /> Export Excel
+              </RippleButton>
+              <RippleButton
+                onClick={() => handleDownload('package-history', 'pdf')}
+                className="px-4 py-2.5 bg-red-600 text-white rounded-xl text-xs font-bold shadow-md hover:bg-red-700 transition flex items-center gap-1.5"
+              >
+                <Download size={14} /> Export PDF
+              </RippleButton>
+            </div>
+          </AnimatedCard>
         </div>
       )}
     </PageTransition>

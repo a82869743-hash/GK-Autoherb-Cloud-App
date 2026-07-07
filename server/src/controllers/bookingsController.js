@@ -44,7 +44,8 @@ exports.list = async (req, res) => {
         jc.status AS job_cart_status,
         v.brand AS linked_vehicle_brand, v.model AS linked_vehicle_model,
         v.registration_no AS linked_vehicle_reg_no,
-        approver.name AS approved_by_name
+        approver.name AS approved_by_name,
+        pr.status AS pickup_status, pr.id AS pickup_id, pr.address AS pickup_address
       FROM bookings b
       JOIN slots s ON b.slot_id = s.id
       JOIN users u ON b.customer_id = u.id
@@ -53,6 +54,7 @@ exports.list = async (req, res) => {
       LEFT JOIN job_carts jc ON jc.booking_id = b.id
       LEFT JOIN vehicles v ON b.vehicle_id = v.id
       LEFT JOIN users approver ON b.approved_by = approver.id
+      LEFT JOIN v2_pickup_requests pr ON pr.booking_id = b.id
       WHERE ${where}
       ORDER BY b.created_at DESC
       LIMIT ? OFFSET ?
@@ -96,7 +98,8 @@ exports.getOne = async (req, res) => {
         jc.status AS job_cart_status,
         v.brand AS linked_vehicle_brand, v.model AS linked_vehicle_model,
         v.registration_no AS linked_vehicle_reg_no,
-        approver.name AS approved_by_name
+        approver.name AS approved_by_name,
+        pr.status AS pickup_status, pr.id AS pickup_id, pr.address AS pickup_address
       FROM bookings b
       JOIN slots s ON b.slot_id = s.id
       JOIN users u ON b.customer_id = u.id
@@ -105,6 +108,7 @@ exports.getOne = async (req, res) => {
       LEFT JOIN job_carts jc ON jc.booking_id = b.id
       LEFT JOIN vehicles v ON b.vehicle_id = v.id
       LEFT JOIN users approver ON b.approved_by = approver.id
+      LEFT JOIN v2_pickup_requests pr ON pr.booking_id = b.id
       WHERE b.id = ?
     `, [req.params.id]);
 
@@ -214,6 +218,21 @@ exports.create = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Slot is required' });
     }
 
+    // 0. Fetch Settings for booking pause & advance payment rules
+    const [settingsRows] = await conn.query(
+      "SELECT key_name, value FROM settings WHERE key_name IN ('bookings_paused', 'advance_type', 'advance_value')"
+    );
+    const settings = settingsRows.reduce((acc, curr) => {
+      acc[curr.key_name] = curr.value;
+      return acc;
+    }, {});
+
+    // Enforce bookings paused globally for customers
+    if (settings.bookings_paused === '1' && req.user.role === 'customer') {
+      await conn.rollback();
+      return res.status(422).json({ success: false, error: 'Bookings are temporarily paused by administration.' });
+    }
+
     // 1. Lock slot row
     const [slots] = await conn.query(
       'SELECT booked_count, max_capacity, is_blocked FROM slots WHERE id = ? FOR UPDATE',
@@ -243,7 +262,7 @@ exports.create = async (req, res) => {
       }
     }
 
-    // 3. Calculate total duration for multi-service bookings
+    // 3. Calculate total duration and total estimated amount for multi-service bookings
     let totalDuration = null;
     const allServiceIds = service_ids && service_ids.length > 0 ? service_ids : (service_id ? [service_id] : []);
     
@@ -253,6 +272,31 @@ exports.create = async (req, res) => {
         [allServiceIds]
       );
       totalDuration = durations[0]?.total || null;
+    }
+
+    let calculatedTotal = 0;
+    let advanceAmount = 0;
+    const isAdvanceEligible = !is_free_wash && !use_package;
+
+    if (isAdvanceEligible && allServiceIds.length > 0) {
+      const cat = vehicle_category || 'sedan';
+      const priceKey = `price_${cat}`;
+      const [servicesList] = await conn.query(
+        `SELECT price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv FROM services WHERE id IN (?)`,
+        [allServiceIds]
+      );
+      calculatedTotal = servicesList.reduce((sum, s) => {
+        return sum + (Number(s[priceKey]) || Number(s.price_sedan) || 0);
+      }, 0);
+
+      const advType = settings.advance_type || 'none';
+      const advVal = parseFloat(settings.advance_value || '0');
+
+      if (advType === 'fixed') {
+        advanceAmount = Math.min(calculatedTotal, advVal);
+      } else if (advType === 'percentage') {
+        advanceAmount = (calculatedTotal * advVal) / 100;
+      }
     }
 
     // 4. Free wash validation
@@ -301,7 +345,7 @@ exports.create = async (req, res) => {
 
         for (const sName of serviceNames) {
           // Only CHECK availability — do NOT deduct. Deduction happens on admin approval.
-          const result = await userPkgCtrl.checkServiceAvailability(conn, customerId, sName);
+          const result = await userPkgCtrl.checkServiceAvailability(conn, customerId, sName, resolvedVehicleId);
           console.log(`[BOOKING] Package availability result for ${sName}:`, JSON.stringify(result));
 
           if (result.can_use) {
@@ -338,20 +382,32 @@ exports.create = async (req, res) => {
     // 6. Increment booked_count
     await conn.query('UPDATE slots SET booked_count = booked_count + 1 WHERE id = ?', [slot_id]);
 
-    // 7. Insert booking — status = pending_approval, expires in 5 minutes
-    console.log('[BOOKING] Inserting booking — type:', bookingType, 'userPackageId:', resolvedUserPackageId, 'pkgServiceName:', package_service_name);
+    // Determine status & expires_at based on advance payment rules
+    let targetStatus = 'pending_approval';
+    let expiresAt = null;
+
+    if (advanceAmount > 0 && req.user.role === 'customer') {
+      targetStatus = 'pending_payment';
+      expiresAt = conn.raw ? conn.raw('DATE_ADD(NOW(), INTERVAL 10 MINUTE)') : new Date(Date.now() + 10 * 60 * 1000);
+    } else {
+      expiresAt = req.user.role === 'admin' ? null : new Date(Date.now() + 5 * 60 * 1000);
+    }
+
+    // 7. Insert booking
+    console.log('[BOOKING] Inserting booking — type:', bookingType, 'status:', targetStatus, 'advance_amount:', advanceAmount);
     const [result] = await conn.query(
       `INSERT INTO bookings 
        (customer_id, vehicle_id, slot_id, service_id, package_id, 
         vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category, total_duration,
-        status, is_free_wash, notes, booking_type, user_package_id, package_service_name, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_approval', ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 5 MINUTE))`,
+        status, is_free_wash, notes, booking_type, user_package_id, package_service_name, expires_at, advance_amount, total_amount)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         customerId, resolvedVehicleId, slot_id,
         primaryServiceId || null, package_id || null,
         resolvedBrand, resolvedModel, resolvedRegNo, vehicle_category || null, totalDuration,
-        is_free_wash ? 1 : 0, notes || null,
-        bookingType, resolvedUserPackageId, package_service_name || null
+        targetStatus, is_free_wash ? 1 : 0, notes || null,
+        bookingType, resolvedUserPackageId, package_service_name || null,
+        expiresAt, advanceAmount, calculatedTotal
       ]
     );
 
@@ -370,43 +426,43 @@ exports.create = async (req, res) => {
 
     await conn.commit();
 
-    // 9. Fire-and-forget SMS & WhatsApp (non-blocking)
-    try {
-      const messagingService = require('../services/messagingService');
-      const whatsappController = require('./whatsappController');
-      const [custRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [customerId]);
-      const [slotRows] = await pool.query('SELECT slot_date, start_time FROM slots WHERE id = ?', [slot_id]);
-      if (custRows.length && custRows[0].mobile && slotRows.length) {
-        const date = new Date(slotRows[0].slot_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-        const time = slotRows[0].start_time ? slotRows[0].start_time.substring(0, 5) : '';
-        const msg = `GK AutoHerb: Hi ${custRows[0].name}, your booking #${bookingId} is pending approval for ${date} at ${time}. We'll confirm shortly!`;
-        messagingService.sendSMS(custRows[0].mobile, null, null, { content: msg }).catch(() => {});
-
-        const waMsg = `⏳ *Booking Pending*\n\nHi ${custRows[0].name},\nYour booking #${bookingId} is pending approval for ${date} at ${time}. We'll confirm shortly!\n\nThank you for choosing GK AutoHerb! 🚗`;
-        whatsappController._sendWhatsAppMessage(custRows[0].mobile, null, [], waMsg).catch(() => {});
+    // 9. Send notifications only if NOT pending_payment
+    if (targetStatus !== 'pending_payment') {
+      try {
+        const messagingService = require('../services/messagingService');
+        await messagingService.notify(
+          customerId,
+          'BOOKING_RECEIVED',
+          { booking_id: bookingId },
+          { type: 'booking', id: bookingId }
+        );
+      } catch (msgErr) {
+        console.error('[SMS/WA] Booking notification setup failed (non-blocking):', msgErr.message);
       }
-    } catch (msgErr) {
-      console.error('[SMS/WA] Booking notification setup failed (non-blocking):', msgErr.message);
+
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('new_booking', { bookingId, status: targetStatus });
+      }
     }
 
-    console.log(`[BOOKING] #${bookingId} created — pending_approval, customer=${customerId}, slot=${slot_id}, type=${bookingType}`);
-
-    const io = req.app.get('io');
-    if (io) {
-      io.emit('new_booking', { bookingId, status: 'pending_approval' });
-    }
+    console.log(`[BOOKING] #${bookingId} created — status=${targetStatus}, customer=${customerId}, slot=${slot_id}, type=${bookingType}`);
 
     res.status(201).json({
       success: true,
       data: {
         id: bookingId,
-        status: 'pending_approval',
+        status: targetStatus,
+        advance_amount: advanceAmount,
+        total_amount: calculatedTotal,
         package_used: packageUsed,
         ...(packageInfo && { package_info: packageInfo }),
       },
-      message: packageUsed
-        ? `Booking submitted — used ${packageInfo.package_name} credit (${packageInfo.remaining} left). Awaiting admin approval.`
-        : 'Booking submitted — awaiting admin approval',
+      message: targetStatus === 'pending_payment'
+        ? 'Booking created. Awaiting advance payment.'
+        : (packageUsed
+          ? `Booking submitted — used ${packageInfo.package_name} credit (${packageInfo.remaining} left). Awaiting admin approval.`
+          : 'Booking submitted — awaiting admin approval'),
     });
   } catch (err) {
     await conn.rollback();
@@ -454,7 +510,7 @@ exports.approve = async (req, res) => {
       if (serviceNames.length > 0) {
         const userPkgCtrl = require('./userPackagesController');
         for (const sName of serviceNames) {
-          const result = await userPkgCtrl.checkAndUseService(conn, booking.customer_id, sName);
+          const result = await userPkgCtrl.checkAndUseService(conn, booking.customer_id, sName, booking.vehicle_id);
           if (!result.can_use) {
             await conn.rollback();
             return res.status(422).json({
@@ -472,13 +528,196 @@ exports.approve = async (req, res) => {
       [booking_notes || null, req.user.id, id]
     );
 
+    // ─── Referral Completion & Welcome Reward Triggers ───
+    try {
+      // 1. Check if this is the customer's first confirmed booking ever (excluding this one)
+      const [prevBookings] = await conn.query(
+        'SELECT id FROM bookings WHERE customer_id = ? AND status = "confirmed" AND id != ?',
+        [booking.customer_id, id]
+      );
+
+      if (prevBookings.length === 0) {
+        // Yes, this is their first confirmed booking!
+        
+        // ─── Trigger Referral Completion & Reward ───
+        const [pendingRefs] = await conn.query(
+          'SELECT * FROM v2_referrals WHERE referred_id = ? AND status = "pending"',
+          [booking.customer_id]
+        );
+
+        if (pendingRefs.length > 0) {
+          const ref = pendingRefs[0];
+
+          // Set status to completed temporarily
+          await conn.query(
+            'UPDATE v2_referrals SET status = "completed" WHERE id = ?',
+            [ref.id]
+          );
+
+          // Get referral reward points setting
+          let referrerPoints = 100;
+          const [settingRow] = await conn.query('SELECT value FROM settings WHERE key_name = "referral_referrer_points"');
+          if (settingRow.length) {
+            referrerPoints = parseInt(settingRow[0].value) || 100;
+          }
+
+          // Check/Create referrer's wallet in v2_wallets
+          const [referrerWallets] = await conn.query('SELECT id FROM v2_wallets WHERE customer_id = ?', [ref.referrer_id]);
+          let referrerWalletId;
+          if (!referrerWallets.length) {
+            const [insWallet] = await conn.query(
+              'INSERT INTO v2_wallets (customer_id, balance, reward_points, total_earned, total_spent) VALUES (?, 0, 0, 0, 0)',
+              [ref.referrer_id]
+            );
+            referrerWalletId = insWallet.insertId;
+          } else {
+            referrerWalletId = referrerWallets[0].id;
+          }
+
+          // Credit referrer's wallet
+          await conn.query(
+            'UPDATE v2_wallets SET reward_points = reward_points + ?, total_earned = total_earned + ? WHERE id = ?',
+            [referrerPoints, referrerPoints, referrerWalletId]
+          );
+
+          // Log in v2_wallet_transactions
+          await conn.query(
+            `INSERT INTO v2_wallet_transactions 
+             (wallet_id, customer_id, transaction_type, amount, points, description, reference_type, reference_id, balance_after)
+             VALUES (?, ?, 'referral_bonus', 0, ?, ?, 'referral', ?, 0)`,
+            [referrerWalletId, ref.referrer_id, referrerPoints, `Referral reward points for referring customer ID ${booking.customer_id}`, ref.id]
+          );
+
+          // Log in v2_reward_logs
+          await conn.query(
+            `INSERT INTO v2_reward_logs (customer_id, points, action, description, reference_type, reference_id)
+             VALUES (?, ?, 'referral', ?, 'referral', ?)`,
+            [ref.referrer_id, referrerPoints, `Referral bonus for customer ID ${booking.customer_id}`, ref.id]
+          );
+
+          // Transition referral to rewarded
+          await conn.query(
+            'UPDATE v2_referrals SET status = "rewarded", reward_given = 1 WHERE id = ?',
+            [ref.id]
+          );
+
+          // Update legacy table referral_rewards in sync
+          await conn.query(
+            'UPDATE referral_rewards SET status = "credited", credited_at = NOW() WHERE referrer_id = ? AND referred_id = ?',
+            [ref.referrer_id, booking.customer_id]
+          );
+
+          // Also update legacy loyalty table
+          const [existingLoyalty] = await conn.query('SELECT id FROM loyalty WHERE customer_id = ?', [ref.referrer_id]);
+          if (existingLoyalty.length > 0) {
+            await conn.query('UPDATE loyalty SET credits = credits + ? WHERE customer_id = ?', [referrerPoints, ref.referrer_id]);
+          } else {
+            await conn.query('INSERT INTO loyalty (customer_id, credits) VALUES (?, ?)', [ref.referrer_id, referrerPoints]);
+          }
+
+          await conn.query(
+            `INSERT INTO loyalty_transactions (customer_id, type, amount, description) VALUES (?, 'earn', ?, 'Referral reward points awarded.')`,
+            [ref.referrer_id, referrerPoints]
+          );
+        }
+
+        // ─── Trigger New Customer Welcome Reward (Update 24) ───
+        let welcomeType = 'points';
+        let welcomeValue = 500;
+
+        const [typeRow] = await conn.query('SELECT value FROM settings WHERE key_name = "welcome_reward_type"');
+        if (typeRow.length) welcomeType = typeRow[0].value;
+
+        const [valRow] = await conn.query('SELECT value FROM settings WHERE key_name = "welcome_reward_value"');
+        if (valRow.length) welcomeValue = parseFloat(valRow[0].value) || 500;
+
+        if (welcomeType === 'points') {
+          // Credit points to v2_wallets
+          const [customerWallets] = await conn.query('SELECT id FROM v2_wallets WHERE customer_id = ?', [booking.customer_id]);
+          let customerWalletId;
+          if (!customerWallets.length) {
+            const [insWallet] = await conn.query(
+              'INSERT INTO v2_wallets (customer_id, balance, reward_points, total_earned, total_spent) VALUES (?, 0, 0, 0, 0)',
+              [booking.customer_id]
+            );
+            customerWalletId = insWallet.insertId;
+          } else {
+            customerWalletId = customerWallets[0].id;
+          }
+
+          await conn.query(
+            'UPDATE v2_wallets SET reward_points = reward_points + ?, total_earned = total_earned + ? WHERE id = ?',
+            [welcomeValue, welcomeValue, customerWalletId]
+          );
+
+          // Log in v2_wallet_transactions
+          await conn.query(
+            `INSERT INTO v2_wallet_transactions 
+             (wallet_id, customer_id, transaction_type, amount, points, description, reference_type, reference_id, balance_after)
+             VALUES (?, ?, 'welcome_bonus', 0, ?, 'New customer welcome bonus points', 'booking', ?, 0)`,
+            [customerWalletId, booking.customer_id, welcomeValue, id]
+          );
+
+          // Log in v2_reward_logs
+          await conn.query(
+            `INSERT INTO v2_reward_logs (customer_id, points, action, description, reference_type, reference_id)
+             VALUES (?, ?, 'welcome', 'New customer welcome bonus points', 'booking', ?)`,
+            [booking.customer_id, welcomeValue, id]
+          );
+
+          // Add to legacy customer_rewards & loyalty
+          const expiresAt = new Date();
+          expiresAt.setDate(expiresAt.getDate() + 30);
+
+          await conn.query(
+            `INSERT INTO customer_rewards (customer_id, reward_type, points_awarded, discount_pct, description, expires_at)
+             VALUES (?, 'welcome', ?, 0, 'New customer welcome bonus points', ?)`,
+            [booking.customer_id, welcomeValue, expiresAt]
+          );
+
+          const [existingLoyalty] = await conn.query('SELECT id FROM loyalty WHERE customer_id = ?', [booking.customer_id]);
+          if (existingLoyalty.length > 0) {
+            await conn.query('UPDATE loyalty SET credits = credits + ? WHERE customer_id = ?', [welcomeValue, booking.customer_id]);
+          } else {
+            await conn.query('INSERT INTO loyalty (customer_id, credits) VALUES (?, ?)', [booking.customer_id, welcomeValue]);
+          }
+
+          await conn.query(
+            `INSERT INTO loyalty_transactions (customer_id, type, amount, description) VALUES (?, 'earn', ?, 'New customer welcome bonus points')`,
+            [booking.customer_id, welcomeValue]
+          );
+        } else if (welcomeType === 'discount') {
+          // Deduct from booking total_amount
+          await conn.query(
+            'UPDATE bookings SET total_amount = GREATEST(0, total_amount - ?) WHERE id = ?',
+            [welcomeValue, id]
+          );
+
+          // Log in customer_rewards (legacy table)
+          await conn.query(
+            `INSERT INTO customer_rewards (customer_id, reward_type, points_awarded, discount_pct, description)
+             VALUES (?, 'welcome', 0, 0, ?)`,
+            [booking.customer_id, `Welcome discount of ₹${welcomeValue} applied to booking #${id}`]
+          );
+
+          // Log in v2_reward_logs
+          await conn.query(
+            `INSERT INTO v2_reward_logs (customer_id, points, action, description, reference_type, reference_id)
+             VALUES (?, 0, 'welcome', ?, 'booking', ?)`,
+            [booking.customer_id, `Welcome discount of ₹${welcomeValue} applied`, id]
+          );
+        }
+      }
+    } catch (rewardsErr) {
+      console.error('[REWARDS] Failed to process signup/booking rewards:', rewardsErr.message);
+      // Non-fatal: do not block booking approval
+    }
+
     await conn.commit();
 
     // Fire-and-forget confirmation SMS & WhatsApp
     try {
       const messagingService = require('../services/messagingService');
-      const whatsappController = require('./whatsappController');
-      const [custRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [booking.customer_id]);
       const [slotRows] = await pool.query('SELECT slot_date, start_time FROM slots WHERE id = ?', [booking.slot_id]);
       
       let serviceName = booking.package_service_name || 'Service';
@@ -487,15 +726,19 @@ exports.approve = async (req, res) => {
           if (svcRows.length) serviceName = svcRows[0].name;
       }
 
-      if (custRows.length && custRows[0].mobile && slotRows.length) {
+      if (slotRows.length) {
         const date = new Date(slotRows[0].slot_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
         const time = slotRows[0].start_time ? slotRows[0].start_time.substring(0, 5) : '';
-        const msg = `GK AutoHerb: Hi ${custRows[0].name}, your booking #${id} for ${date} at ${time} is CONFIRMED! See you soon.`;
-        messagingService.sendSMS(custRows[0].mobile, null, null, { content: msg }).catch(() => {});
-
-        whatsappController.sendBookingConfirmation(custRows[0].mobile, custRows[0].name, date, time, serviceName).catch(() => {});
+        await messagingService.notify(
+          booking.customer_id,
+          'BOOKING_CONFIRMED',
+          { booking_id: id, booking_date: `${date} at ${time}`, service_name: serviceName },
+          { type: 'booking', id }
+        );
       }
-    } catch { /* non-blocking */ }
+    } catch (msgErr) {
+      console.error('[SMS/WA] Booking confirmation notification failed:', msgErr.message);
+    }
 
     console.log(`[BOOKING] #${id} approved by admin ${req.user.id}`);
     res.json({ success: true, message: 'Booking approved' });
@@ -584,18 +827,16 @@ exports.reject = async (req, res) => {
     // Fire-and-forget rejection SMS & WhatsApp
     try {
       const messagingService = require('../services/messagingService');
-      const whatsappController = require('./whatsappController');
-      const [custRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [booking.customer_id]);
-      if (custRows.length && custRows[0].mobile) {
-        const msg = packageRestored
-          ? `GK AutoHerb: Hi ${custRows[0].name}, your booking #${id} has been rejected and your package balance has been restored. Contact us for details.`
-          : `GK AutoHerb: Hi ${custRows[0].name}, your booking #${id} has been rejected. ${booking_notes ? 'Reason: ' + booking_notes : 'Contact us for details.'}`;
-        messagingService.sendSMS(custRows[0].mobile, null, null, { content: msg }).catch(() => {});
-
-        const waMsg = `❌ *Booking Rejected*\n\nHi ${custRows[0].name},\nYour booking #${id} has been rejected.\n${booking_notes ? 'Reason: ' + booking_notes : ''}\n${packageRestored ? 'Your package balance has been restored.' : ''}\n\nPlease contact us for more details.`;
-        whatsappController._sendWhatsAppMessage(custRows[0].mobile, null, [], waMsg).catch(() => {});
-      }
-    } catch { /* non-blocking */ }
+      const rejectionReason = booking_notes || 'Booking details mismatch or scheduling conflict.';
+      await messagingService.notify(
+        booking.customer_id,
+        'BOOKING_REJECTED',
+        { booking_id: id, rejection_reason: rejectionReason },
+        { type: 'booking', id }
+      );
+    } catch (msgErr) {
+      console.error('[SMS/WA] Booking rejection notification failed:', msgErr.message);
+    }
 
     console.log(`[BOOKING] #${id} rejected by admin ${req.user.id}`);
     res.json({ success: true, message: packageRestored ? 'Booking rejected — package balance restored' : 'Booking rejected' });
@@ -685,6 +926,547 @@ exports.cancel = async (req, res) => {
     await conn.rollback();
     console.error('Cancel booking error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
+  } finally {
+    conn.release();
+  }
+};
+
+// Helper to check if a booking can be updated (cutoff is 24 hours before slot time)
+function checkCanChangeBooking(booking, slot) {
+  if (!booking || !slot) return { canChange: false, hoursRemaining: 0 };
+  
+  // Format slot date and time
+  const slotDateStr = new Date(slot.slot_date).toISOString().split('T')[0];
+  const slotDateTime = new Date(`${slotDateStr}T${slot.start_time}`);
+  
+  const now = new Date();
+  const diffMs = slotDateTime - now;
+  const hoursRemaining = diffMs / (1000 * 60 * 60);
+  
+  return {
+    canChange: hoursRemaining >= 24,
+    hoursRemaining: parseFloat(hoursRemaining.toFixed(2))
+  };
+}
+
+// GET /bookings/:id/can-change
+exports.canChange = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [bookings] = await pool.query('SELECT * FROM bookings WHERE id = ?', [id]);
+    if (!bookings.length) {
+      return res.status(404).json({ success: false, error: 'Booking not found' });
+    }
+    const booking = bookings[0];
+    
+    // Check ownership
+    if (req.user.role === 'customer' && booking.customer_id !== req.user.id) {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+    
+    const [slots] = await pool.query('SELECT slot_date, start_time FROM slots WHERE id = ?', [booking.slot_id]);
+    if (!slots.length) {
+      return res.status(404).json({ success: false, error: 'Slot not found' });
+    }
+    
+    const { canChange, hoursRemaining } = checkCanChangeBooking(booking, slots[0]);
+    
+    res.json({
+      success: true,
+      canChange: req.user.role === 'admin' ? true : canChange,
+      hoursRemaining
+    });
+  } catch (err) {
+    console.error('canChange error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// PATCH /bookings/:id/change-services
+exports.changeServices = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const { id } = req.params;
+    const { service_ids } = req.body;
+    
+    if (!Array.isArray(service_ids) || service_ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'Service IDs must be a non-empty array' });
+    }
+    
+    await conn.beginTransaction();
+    
+    const [bookings] = await conn.query('SELECT * FROM bookings WHERE id = ? FOR UPDATE', [id]);
+    if (!bookings.length) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, error: 'Booking not found' });
+    }
+    const booking = bookings[0];
+    
+    // Check status: only pending_approval or confirmed bookings can be updated
+    if (!['confirmed', 'pending_approval'].includes(booking.status)) {
+      await conn.rollback();
+      return res.status(422).json({ success: false, error: 'Only pending or confirmed bookings can be modified' });
+    }
+    
+    // Check ownership
+    if (req.user.role === 'customer' && booking.customer_id !== req.user.id) {
+      await conn.rollback();
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+    
+    // Check 24-hour cutoff
+    const [slots] = await conn.query('SELECT slot_date, start_time FROM slots WHERE id = ?', [booking.slot_id]);
+    if (!slots.length) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, error: 'Slot not found' });
+    }
+    
+    const { canChange } = checkCanChangeBooking(booking, slots[0]);
+    if (!canChange && req.user.role !== 'admin') {
+      await conn.rollback();
+      return res.status(400).json({ success: false, error: 'Cannot modify service within 24 hours of slot start time' });
+    }
+    
+    // Get existing service links to log as old_value in audit log
+    const [oldLinks] = await conn.query('SELECT service_id FROM booking_services WHERE booking_id = ?', [id]);
+    const oldServiceIds = oldLinks.map(l => l.service_id);
+    
+    // Delete old service links
+    await conn.query('DELETE FROM booking_services WHERE booking_id = ?', [id]);
+    
+    // Insert new service links
+    for (const sid of service_ids) {
+      await conn.query('INSERT INTO booking_services (booking_id, service_id) VALUES (?, ?)', [id, sid]);
+    }
+    
+    // Recalculate duration & select primary service_id (usually the first one)
+    const [services] = await conn.query('SELECT id, name, duration_minutes FROM services WHERE id IN (?)', [service_ids]);
+    if (services.length !== service_ids.length) {
+      await conn.rollback();
+      return res.status(400).json({ success: false, error: 'Some service IDs are invalid' });
+    }
+    
+    const totalDuration = services.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
+    const newPrimaryServiceId = service_ids[0];
+    
+    // Update booking row
+    await conn.query(
+      'UPDATE bookings SET service_id = ?, total_duration = ? WHERE id = ?',
+      [newPrimaryServiceId, totalDuration, id]
+    );
+    
+    // Log action in v2_audit_logs
+    await conn.query(
+      `INSERT INTO v2_audit_logs (user_id, user_type, action, resource, resource_id, old_value, new_value, ip_address) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.user.id,
+        req.user.role,
+        'change_services',
+        'booking',
+        id,
+        JSON.stringify(oldServiceIds),
+        JSON.stringify(service_ids),
+        req.ip || null
+      ]
+    );
+    
+    await conn.commit();
+    
+    // Send notifications (fire-and-forget)
+    try {
+      const messagingService = require('../services/messagingService');
+      const whatsappController = require('./whatsappController');
+      const [custRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [booking.customer_id]);
+      
+      const newServiceNames = services.map(s => s.name).join(', ');
+      
+      if (custRows.length && custRows[0].mobile) {
+        const msg = `GK AutoHerb: Hi ${custRows[0].name}, your services for booking #${id} have been updated to: ${newServiceNames}.`;
+        messagingService.sendSMS(custRows[0].mobile, null, null, { content: msg }).catch(() => {});
+        
+        const waMsg = `🔄 *Services Updated*\n\nHi ${custRows[0].name},\nYour booking #${id} services have been successfully updated to:\n👉 *${newServiceNames}*\n\nThank you for choosing GK AutoHerb!`;
+        whatsappController._sendWhatsAppMessage(custRows[0].mobile, null, [], waMsg).catch(() => {});
+      }
+    } catch (msgErr) {
+      console.error('Failed to send service change notifications:', msgErr.message);
+    }
+    
+    res.json({
+      success: true,
+      message: 'Booking services updated successfully',
+      data: {
+        booking_id: parseInt(id),
+        service_id: newPrimaryServiceId,
+        total_duration: totalDuration
+      }
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error('changeServices error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  } finally {
+    conn.release();
+  }
+};
+
+exports.createManual = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const {
+      customer_id, slot_id, service_id, service_ids, package_id,
+      vehicle_id, vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category,
+      is_free_wash = false, use_package = false, notes, booking_notes
+    } = req.body;
+
+    let package_service_name = req.body.package_service_name;
+
+    if (!customer_id || !slot_id) {
+      await conn.rollback();
+      return res.status(400).json({ success: false, error: 'Customer ID and Slot ID are required' });
+    }
+
+    // 1. Lock slot row
+    const [slots] = await conn.query(
+      'SELECT booked_count, max_capacity, is_blocked FROM slots WHERE id = ? FOR UPDATE',
+      [slot_id]
+    );
+    if (!slots.length) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, error: 'Slot not found' });
+    }
+
+    const slot = slots[0];
+    if (slot.is_blocked) {
+      await conn.rollback();
+      return res.status(409).json({ success: false, error: 'Slot is blocked' });
+    }
+    if (slot.booked_count >= slot.max_capacity) {
+      await conn.rollback();
+      return res.status(409).json({ success: false, error: 'Slot is fully booked' });
+    }
+
+    // 2. Resolve vehicle data
+    let resolvedBrand = vehicle_brand || null;
+    let resolvedModel = vehicle_model || null;
+    let resolvedRegNo = vehicle_reg_no || null;
+    let resolvedVehicleId = vehicle_id || null;
+
+    if (vehicle_id) {
+      const [vRows] = await conn.query(
+        'SELECT id, brand, model, registration_no FROM vehicles WHERE id = ?', [vehicle_id]
+      );
+      if (vRows.length) {
+        resolvedBrand = vRows[0].brand;
+        resolvedModel = vRows[0].model;
+        resolvedRegNo = vRows[0].registration_no;
+        resolvedVehicleId = vRows[0].id;
+      }
+    }
+
+    // 3. Calculate total duration and total estimated amount
+    let totalDuration = null;
+    const allServiceIds = service_ids && service_ids.length > 0 ? service_ids : (service_id ? [service_id] : []);
+    
+    if (allServiceIds.length > 0) {
+      const [durations] = await conn.query(
+        `SELECT SUM(duration_minutes) AS total FROM services WHERE id IN (?)`,
+        [allServiceIds]
+      );
+      totalDuration = durations[0]?.total || null;
+    }
+
+    let calculatedTotal = 0;
+    if (!is_free_wash && !use_package && allServiceIds.length > 0) {
+      const cat = vehicle_category || 'sedan';
+      const priceKey = `price_${cat}`;
+      const [servicesList] = await conn.query(
+        `SELECT price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv FROM services WHERE id IN (?)`,
+        [allServiceIds]
+      );
+      calculatedTotal = servicesList.reduce((sum, s) => {
+        return sum + (Number(s[priceKey]) || Number(s.price_sedan) || 0);
+      }, 0);
+    }
+
+    // 4. Free wash deduction
+    if (is_free_wash) {
+      const [loyalty] = await conn.query('SELECT free_washes FROM loyalty WHERE customer_id = ?', [customer_id]);
+      if (!loyalty.length || loyalty[0].free_washes <= 0) {
+        await conn.rollback();
+        return res.status(422).json({ success: false, error: 'No free washes available' });
+      }
+      await conn.query(
+        'UPDATE loyalty SET free_washes = GREATEST(0, free_washes - 1) WHERE customer_id = ?',
+        [customer_id]
+      );
+    }
+
+    // 5. Package deduction immediately (since it's confirmed right away)
+    let packageUsed = false;
+    let resolvedUserPackageId = null;
+    const primaryServiceId = service_id || (allServiceIds.length > 0 ? allServiceIds[0] : null);
+
+    if (use_package && !is_free_wash) {
+      let serviceNames = [];
+      if (Array.isArray(package_service_name)) {
+        serviceNames = package_service_name;
+      } else if (typeof package_service_name === 'string') {
+        serviceNames = package_service_name.split(',').map(s => s.trim()).filter(s => s);
+      }
+      
+      if (serviceNames.length === 0 && primaryServiceId) {
+        const [svcRows] = await conn.query('SELECT name FROM services WHERE id = ?', [primaryServiceId]);
+        if (svcRows.length) serviceNames = [svcRows[0].name];
+      }
+
+      if (serviceNames.length > 0) {
+        const userPkgCtrl = require('./userPackagesController');
+        let canonicalNames = [];
+
+        for (const sName of serviceNames) {
+          const result = await userPkgCtrl.checkAndUseService(conn, customer_id, sName, vehicle_id);
+          if (!result.can_use) {
+            await conn.rollback();
+            return res.status(422).json({ success: false, error: `No package credits remaining for ${sName}. ${result.reason || ''}` });
+          }
+          resolvedUserPackageId = result.user_package_id;
+          canonicalNames.push(result.canonical_service_name || sName);
+        }
+        packageUsed = true;
+        package_service_name = canonicalNames.join(', ');
+      } else {
+        await conn.rollback();
+        return res.status(400).json({ success: false, error: 'Package service name or service ID required to use package' });
+      }
+    }
+
+    const bookingType = (use_package && packageUsed) ? 'package' : 'direct';
+
+    // 6. Increment booked_count
+    await conn.query('UPDATE slots SET booked_count = booked_count + 1 WHERE id = ?', [slot_id]);
+
+    // 7. Insert booking
+    const [result] = await conn.query(
+      `INSERT INTO bookings 
+       (customer_id, vehicle_id, slot_id, service_id, package_id, 
+        vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category, total_duration,
+        status, is_free_wash, notes, booking_notes, booking_type, user_package_id, package_service_name, 
+        approved_by, approved_at, advance_amount, total_amount)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, NOW(), 0, ?)`,
+      [
+        customer_id, resolvedVehicleId, slot_id,
+        primaryServiceId || null, package_id || null,
+        resolvedBrand, resolvedModel, resolvedRegNo, vehicle_category || null, totalDuration,
+        is_free_wash ? 1 : 0, notes || null, booking_notes || null,
+        bookingType, resolvedUserPackageId, package_service_name || null,
+        req.user.id, calculatedTotal
+      ]
+    );
+
+    const bookingId = result.insertId;
+
+    // 8. Insert booking_services
+    if (allServiceIds.length > 0) {
+      for (const sid of allServiceIds) {
+        await conn.query(
+          'INSERT INTO booking_services (booking_id, service_id) VALUES (?, ?)',
+          [bookingId, sid]
+        );
+      }
+    }
+
+    // ─── Referral Completion & Welcome Reward Triggers ───
+    try {
+      const [prevBookings] = await conn.query(
+        'SELECT id FROM bookings WHERE customer_id = ? AND status = "confirmed" AND id != ?',
+        [customer_id, bookingId]
+      );
+
+      if (prevBookings.length === 0) {
+        const [pendingRefs] = await conn.query(
+          'SELECT * FROM v2_referrals WHERE referred_id = ? AND status = "pending"',
+          [customer_id]
+        );
+
+        if (pendingRefs.length > 0) {
+          const ref = pendingRefs[0];
+          await conn.query('UPDATE v2_referrals SET status = "completed" WHERE id = ?', [ref.id]);
+          let referrerPoints = 100;
+          const [settingRow] = await conn.query('SELECT value FROM settings WHERE key_name = "referral_referrer_points"');
+          if (settingRow.length) referrerPoints = parseInt(settingRow[0].value) || 100;
+
+          const [referrerWallets] = await conn.query('SELECT id FROM v2_wallets WHERE customer_id = ?', [ref.referrer_id]);
+          let referrerWalletId;
+          if (!referrerWallets.length) {
+            const [insWallet] = await conn.query(
+              'INSERT INTO v2_wallets (customer_id, balance, reward_points, total_earned, total_spent) VALUES (?, 0, 0, 0, 0)',
+              [ref.referrer_id]
+            );
+            referrerWalletId = insWallet.insertId;
+          } else {
+            referrerWalletId = referrerWallets[0].id;
+          }
+
+          await conn.query(
+            'UPDATE v2_wallets SET reward_points = reward_points + ?, total_earned = total_earned + ? WHERE id = ?',
+            [referrerPoints, referrerPoints, referrerWalletId]
+          );
+
+          await conn.query(
+            `INSERT INTO v2_wallet_transactions 
+             (wallet_id, customer_id, transaction_type, amount, points, description, reference_type, reference_id, balance_after)
+             VALUES (?, ?, 'referral_bonus', 0, ?, ?, 'referral', ?, 0)`,
+            [referrerWalletId, ref.referrer_id, referrerPoints, `Referral reward points for referring customer ID ${customer_id}`, ref.id]
+          );
+
+          await conn.query(
+            `INSERT INTO v2_reward_logs (customer_id, points, action, description, reference_type, reference_id)
+             VALUES (?, ?, 'referral', ?, 'referral', ?)`,
+            [ref.referrer_id, referrerPoints, `Referral bonus for customer ID ${customer_id}`, ref.id]
+          );
+
+          await conn.query('UPDATE v2_referrals SET status = "rewarded", reward_given = 1 WHERE id = ?', [ref.id]);
+          await conn.query(
+            'UPDATE referral_rewards SET status = "credited", credited_at = NOW() WHERE referrer_id = ? AND referred_id = ?',
+            [ref.referrer_id, customer_id]
+          );
+
+          const [existingLoyalty] = await conn.query('SELECT id FROM loyalty WHERE customer_id = ?', [ref.referrer_id]);
+          if (existingLoyalty.length > 0) {
+            await conn.query('UPDATE loyalty SET credits = credits + ? WHERE customer_id = ?', [referrerPoints, ref.referrer_id]);
+          } else {
+            await conn.query('INSERT INTO loyalty (customer_id, credits) VALUES (?, ?)', [ref.referrer_id, referrerPoints]);
+          }
+          await conn.query(
+            `INSERT INTO loyalty_transactions (customer_id, type, amount, description) VALUES (?, 'earn', ?, 'Referral reward points awarded.')`,
+            [ref.referrer_id, referrerPoints]
+          );
+        }
+
+        // Trigger New Customer Welcome Reward (Update 24)
+        let welcomeType = 'points';
+        let welcomeValue = 500;
+
+        const [typeRow] = await conn.query('SELECT value FROM settings WHERE key_name = "welcome_reward_type"');
+        if (typeRow.length) welcomeType = typeRow[0].value;
+
+        const [valRow] = await conn.query('SELECT value FROM settings WHERE key_name = "welcome_reward_value"');
+        if (valRow.length) welcomeValue = parseFloat(valRow[0].value) || 500;
+
+        if (welcomeType === 'points') {
+          const [customerWallets] = await conn.query('SELECT id FROM v2_wallets WHERE customer_id = ?', [customer_id]);
+          let customerWalletId;
+          if (!customerWallets.length) {
+            const [insWallet] = await conn.query(
+              'INSERT INTO v2_wallets (customer_id, balance, reward_points, total_earned, total_spent) VALUES (?, 0, 0, 0, 0)',
+              [customer_id]
+            );
+            customerWalletId = insWallet.insertId;
+          } else {
+            customerWalletId = customerWallets[0].id;
+          }
+
+          await conn.query(
+            'UPDATE v2_wallets SET reward_points = reward_points + ?, total_earned = total_earned + ? WHERE id = ?',
+            [welcomeValue, welcomeValue, customerWalletId]
+          );
+
+          await conn.query(
+            `INSERT INTO v2_wallet_transactions 
+             (wallet_id, customer_id, transaction_type, amount, points, description, reference_type, reference_id, balance_after)
+             VALUES (?, ?, 'welcome_bonus', 0, ?, 'New customer welcome bonus points', 'booking', ?, 0)`,
+            [customerWalletId, customer_id, welcomeValue, bookingId]
+          );
+
+          await conn.query(
+            `INSERT INTO v2_reward_logs (customer_id, points, action, description, reference_type, reference_id)
+             VALUES (?, ?, 'welcome', 'New customer welcome bonus points', 'booking', ?)`,
+            [customer_id, welcomeValue, bookingId]
+          );
+
+          const expiresAt = new Date();
+          expiresAt.setDate(expiresAt.getDate() + 30);
+          await conn.query(
+            `INSERT INTO customer_rewards (customer_id, reward_type, points_awarded, discount_pct, description, expires_at)
+             VALUES (?, 'welcome', ?, 0, 'New customer welcome bonus points', ?)`,
+            [customer_id, welcomeValue, expiresAt]
+          );
+
+          const [existingLoyalty] = await conn.query('SELECT id FROM loyalty WHERE customer_id = ?', [customer_id]);
+          if (existingLoyalty.length > 0) {
+            await conn.query('UPDATE loyalty SET credits = credits + ? WHERE customer_id = ?', [welcomeValue, customer_id]);
+          } else {
+            await conn.query('INSERT INTO loyalty (customer_id, credits) VALUES (?, ?)', [customer_id, welcomeValue]);
+          }
+          await conn.query(
+            `INSERT INTO loyalty_transactions (customer_id, type, amount, description) VALUES (?, 'earn', ?, 'New customer welcome bonus points')`,
+            [customer_id, welcomeValue]
+          );
+        } else if (welcomeType === 'discount') {
+          await conn.query(
+            'UPDATE bookings SET total_amount = GREATEST(0, total_amount - ?) WHERE id = ?',
+            [welcomeValue, bookingId]
+          );
+          await conn.query(
+            `INSERT INTO customer_rewards (customer_id, reward_type, points_awarded, discount_pct, description)
+             VALUES (?, 'welcome', 0, 0, ?)`,
+            [customer_id, `Welcome discount of ₹${welcomeValue} applied to booking #${bookingId}`]
+          );
+          await conn.query(
+            `INSERT INTO v2_reward_logs (customer_id, points, action, description, reference_type, reference_id)
+             VALUES (?, 0, 'welcome', ?, 'booking', ?)`,
+            [customer_id, `Welcome discount of ₹${welcomeValue} applied`, bookingId]
+          );
+        }
+      }
+    } catch (rewardsErr) {
+      console.error('[REWARDS] Failed to process rewards (manual booking):', rewardsErr.message);
+    }
+
+    await conn.commit();
+
+    // Send WhatsApp confirmation
+    try {
+      const messagingService = require('../services/messagingService');
+      const whatsappController = require('./whatsappController');
+      const [custRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [customer_id]);
+      const [slotRows] = await pool.query('SELECT slot_date, start_time FROM slots WHERE id = ?', [slot_id]);
+      
+      let serviceName = package_service_name || 'Service';
+      if (serviceName === 'Service' && primaryServiceId) {
+        const [svcRows] = await pool.query('SELECT name FROM services WHERE id = ?', [primaryServiceId]);
+        if (svcRows.length) serviceName = svcRows[0].name;
+      }
+
+      if (custRows.length && custRows[0].mobile && slotRows.length) {
+        const date = new Date(slotRows[0].slot_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+        const time = slotRows[0].start_time ? slotRows[0].start_time.substring(0, 5) : '';
+        const msg = `GK AutoHerb: Hi ${custRows[0].name}, your manual booking #${bookingId} for ${date} at ${time} is CONFIRMED! See you soon.`;
+        messagingService.sendSMS(custRows[0].mobile, null, null, { content: msg }).catch(() => {});
+
+        whatsappController.sendBookingConfirmation(custRows[0].mobile, custRows[0].name, date, time, serviceName).catch(() => {});
+      }
+    } catch (waErr) {
+      console.error('[WA] Manual booking confirmation notification failed:', waErr.message);
+    }
+
+    res.status(201).json({
+      success: true,
+      data: {
+        id: bookingId,
+        status: 'confirmed',
+        total_amount: calculatedTotal,
+      },
+      message: 'Manual booking created and confirmed successfully.'
+    });
+
+  } catch (err) {
+    await conn.rollback();
+    console.error('Manual booking creation error:', err);
+    res.status(500).json({ success: false, error: err.sqlMessage || err.message || 'Server error' });
   } finally {
     conn.release();
   }

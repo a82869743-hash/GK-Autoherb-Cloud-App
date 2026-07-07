@@ -11,6 +11,7 @@ import Select from '../../components/ui/Select';
 import Textarea from '../../components/ui/Textarea';
 import FileUpload from '../../components/ui/FileUpload';
 import { useUIStore } from '../../store/uiStore';
+import { useAuthStore } from '../../store/authStore';
 import type { InventoryItem } from '../../types';
 
 interface ProductRow {
@@ -52,6 +53,9 @@ export default function JobCartCreatePage() {
   const createCart = useCreateJobCart();
   const addServiceMut = useAddService();
   const uploadPhotoMut = useUploadPhoto();
+  const user = useAuthStore((s) => s.user);
+  const isStaff = user?.role === 'staff';
+  const cancelPath = isStaff ? '/staff/job-carts' : '/admin/job-carts';
 
   // ─── Form state ─────────────────────────
   const [regNo, setRegNo] = useState(prefill?.vehicle_reg_no || '');
@@ -397,9 +401,9 @@ export default function JobCartCreatePage() {
                 </button>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className={`grid grid-cols-1 ${isStaff ? '' : 'sm:grid-cols-3'} gap-4`}>
                 {block.is_custom ? (
-                  <div className="sm:col-span-3 flex gap-2 items-end">
+                  <div className={`${isStaff ? 'col-span-full' : 'sm:col-span-3'} flex gap-2 items-end`}>
                     <div className="flex-1">
                       <Input
                         label="Custom Service Name"
@@ -408,9 +412,7 @@ export default function JobCartCreatePage() {
                         placeholder="Enter service name"
                       />
                     </div>
-                    <button onClick={() => updateService(block.key, 'is_custom', false)} className="pb-3 text-gray-400 hover:text-gray-600">
-                      <X size={16} />
-                    </button>
+                    <button onClick={() => updateService(block.key, 'is_custom', false)} className="pb-3 text-gray-400 hover:text-gray-600"><X size={16} /></button>
                   </div>
                 ) : (
                   <Select
@@ -421,18 +423,22 @@ export default function JobCartCreatePage() {
                     placeholder="Select service..."
                   />
                 )}
-                <Input
-                  label="Service Price (₹)"
-                  type="number"
-                  value={block.service_price || ''}
-                  onChange={e => updateService(block.key, 'service_price', parseFloat(e.target.value) || 0)}
-                />
-                <Input
-                  label="Labor Charges (₹)"
-                  type="number"
-                  value={block.labor_charges || ''}
-                  onChange={e => updateService(block.key, 'labor_charges', parseFloat(e.target.value) || 0)}
-                />
+                {!isStaff && (
+                  <>
+                    <Input
+                      label="Service Price (₹)"
+                      type="number"
+                      value={block.service_price || ''}
+                      onChange={e => updateService(block.key, 'service_price', parseFloat(e.target.value) || 0)}
+                    />
+                    <Input
+                      label="Labor Charges (₹)"
+                      type="number"
+                      value={block.labor_charges || ''}
+                      onChange={e => updateService(block.key, 'labor_charges', parseFloat(e.target.value) || 0)}
+                    />
+                  </>
+                )}
               </div>
 
               {/* Products */}
@@ -465,14 +471,16 @@ export default function JobCartCreatePage() {
                         placeholder="Qty"
                       />
                     </div>
-                    <div className="w-24">
-                      <Input
-                        type="number"
-                        value={prod.unit_cost || ''}
-                        onChange={e => updateProduct(block.key, pIdx, 'unit_cost', parseFloat(e.target.value) || 0)}
-                        placeholder="₹ Cost"
-                      />
-                    </div>
+                    {!isStaff && (
+                      <div className="w-24">
+                        <Input
+                          type="number"
+                          value={prod.unit_cost || ''}
+                          onChange={e => updateProduct(block.key, pIdx, 'unit_cost', parseFloat(e.target.value) || 0)}
+                          placeholder="₹ Cost"
+                        />
+                      </div>
+                    )}
                     <button onClick={() => removeProduct(block.key, pIdx)} className="pb-3 text-gray-300 hover:text-red-500">
                       <X size={16} />
                     </button>
@@ -481,12 +489,14 @@ export default function JobCartCreatePage() {
               </div>
 
               {/* Block subtotal */}
-              <div className="mt-3 pt-3 border-t border-gray-50 text-right">
-                <span className="text-xs font-bold text-[#5f5e5e]">Subtotal: </span>
-                <span className="text-sm font-extrabold text-[#1c1b1b]">
-                  ₹{calcBlockSubtotal(block).toLocaleString('en-IN')}
-                </span>
-              </div>
+              {!isStaff && (
+                <div className="mt-3 pt-3 border-t border-gray-50 text-right">
+                  <span className="text-xs font-bold text-[#5f5e5e]">Subtotal: </span>
+                  <span className="text-sm font-extrabold text-[#1c1b1b]">
+                    ₹{calcBlockSubtotal(block).toLocaleString('en-IN')}
+                  </span>
+                </div>
+              )}
             </div>
           ))}
 
@@ -518,16 +528,18 @@ export default function JobCartCreatePage() {
         </section>
 
         {/* ─── SECTION E: Grand Total ──────────────── */}
-        <div className="bg-[#1c1b1b] rounded-lg p-6 flex items-center justify-between">
-          <span className="text-white text-sm font-bold uppercase tracking-widest">Grand Total</span>
-          <span className="text-3xl font-black text-white tracking-tight">
-            ₹{grandTotal.toLocaleString('en-IN')}
-          </span>
-        </div>
+        {!isStaff && (
+          <div className="bg-[#1c1b1b] rounded-lg p-6 flex items-center justify-between">
+            <span className="text-white text-sm font-bold uppercase tracking-widest">Grand Total</span>
+            <span className="text-3xl font-black text-white tracking-tight">
+              ₹{grandTotal.toLocaleString('en-IN')}
+            </span>
+          </div>
+        )}
 
         {/* ─── SECTION F: Actions ──────────────────── */}
         <div className="flex justify-end gap-3 pb-8">
-          <Button variant="ghost" onClick={() => navigate('/admin/job-carts')} disabled={submitting}>
+          <Button variant="ghost" onClick={() => navigate(cancelPath)} disabled={submitting}>
             Cancel
           </Button>
           <Button variant="secondary" onClick={() => handleSave(false)} loading={submitting}>

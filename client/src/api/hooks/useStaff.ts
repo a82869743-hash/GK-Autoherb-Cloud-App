@@ -108,3 +108,38 @@ export const useMyPayments = () =>
     },
   });
 
+export const useMyAttendance = (params?: { from_date?: string; to_date?: string }) =>
+  useQuery({
+    queryKey: ['my-attendance', params],
+    queryFn: async () => {
+      const res = await api.get('/staff/my-attendance', { params });
+      return res.data;
+    },
+  });
+
+export const useCheckIn = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await api.post('/staff/check-in');
+      return res.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['my-attendance'] });
+    },
+  });
+};
+
+export const useCheckOut = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await api.post('/staff/check-out');
+      return res.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['my-attendance'] });
+    },
+  });
+};
+

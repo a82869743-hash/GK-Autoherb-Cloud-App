@@ -78,27 +78,46 @@ export default function MessagesPage() {
           <EmptyState icon={Mail} title="No Messages Sent" description="Start a new campaign to reach out to customers" />
         ) : (
           <div className="divide-y divide-gray-100">
-            {logs.map((log: any) => (
-              <div key={log.id} className="p-4 hover:bg-gray-50/50 transition-colors flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-semibold text-sm text-[#1c1b1b]">{log.customer_name || 'Unknown'}</span>
-                    <span className="text-xs text-gray-500">({log.mobile})</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                      log.status === 'sent' ? 'bg-green-100 text-green-700' : 
-                      log.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {log.status}
-                    </span>
+            {logs.map((log: any) => {
+              const waLink = log.response_data?.wa_link;
+              return (
+                <div key={log.id} className="p-4 hover:bg-gray-50/50 transition-colors flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-semibold text-sm text-[#1c1b1b]">{log.customer_name || 'Unknown'}</span>
+                      <span className="text-xs text-gray-500">({log.mobile})</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        log.status === 'sent' ? 'bg-green-100 text-green-700' : 
+                        log.status === 'failed' ? 'bg-red-100 text-red-700' : 
+                        log.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {log.status}
+                      </span>
+                      {log.template_name && (
+                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-[10px] font-medium border border-blue-100">
+                          {log.template_name}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-[#5f5e5e]">{log.message_preview}</p>
+                    {log.channel === 'whatsapp' && waLink && (
+                      <a 
+                        href={waLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 mt-2 text-xs font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 transition-all shadow-sm hover:shadow"
+                      >
+                        💬 Send WhatsApp Manual
+                      </a>
+                    )}
                   </div>
-                  <p className="text-xs text-[#5f5e5e]">{log.message_preview}</p>
+                  <div className="text-right">
+                    <span className="text-xs uppercase font-bold text-gray-400 block tracking-widest">{log.channel}</span>
+                    <span className="text-[10px] text-gray-400 block mt-1">{new Date(log.sent_at).toLocaleDateString()}</span>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <span className="text-xs uppercase font-bold text-gray-400 block tracking-widest">{log.channel}</span>
-                  <span className="text-[10px] text-gray-400 block mt-1">{new Date(log.sent_at).toLocaleDateString()}</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

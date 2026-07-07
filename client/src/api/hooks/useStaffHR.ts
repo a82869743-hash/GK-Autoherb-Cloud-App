@@ -85,3 +85,45 @@ export function useAddPerformanceReview() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['staff-performance'] }),
   });
 }
+
+export function useStaffAttendance(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: ['staff-attendance', params],
+    queryFn: async () => {
+      const { data } = await api.get('/staff-hr/attendance', { params });
+      return data.data || [];
+    },
+  });
+}
+
+export function useStaffPayroll(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: ['staff-payroll', params],
+    queryFn: async () => {
+      const { data } = await api.get('/staff-hr/payroll', { params });
+      return data.data || [];
+    },
+  });
+}
+
+export function useProcessPayroll() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { month: number; year: number }) => {
+      const { data } = await api.post('/staff-hr/payroll/process', payload);
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['staff-payroll'] }),
+  });
+}
+
+export function useUpdatePayrollItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...payload }: { id: number; [key: string]: any }) => {
+      const { data } = await api.put(`/staff-hr/payroll/${id}`, payload);
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['staff-payroll'] }),
+  });
+}

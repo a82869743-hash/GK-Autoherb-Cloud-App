@@ -11,8 +11,9 @@ router.post('/', auth, role(['admin','staff']), ctrl.createPayment);
 router.post('/advance', auth, role(['admin','staff']), ctrl.createAdvancePayment);
 router.post('/refund', auth, role(['admin']), ctrl.createRefund);
 router.get('/:id/invoice', auth, ctrl.downloadInvoice);
-router.post('/razorpay/order', auth, role(['admin','staff']), ctrl.createRazorpayOrder);
-router.post('/razorpay/verify', auth, role(['admin','staff']), ctrl.verifyRazorpayPayment);
+router.post('/razorpay/order', auth, role(['admin','staff','customer']), ctrl.createRazorpayOrder);
+router.post('/razorpay/verify', auth, role(['admin','staff','customer']), ctrl.verifyRazorpayPayment);
 router.post('/:id/remind', auth, role(['admin','staff']), ctrl.sendReminder);
+router.post('/qr-confirm', auth, role(['admin','staff','customer']), ctrl.confirmQrPayment);
 
 module.exports = router;

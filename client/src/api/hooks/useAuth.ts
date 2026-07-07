@@ -16,6 +16,7 @@ interface RegisterPayload {
   car_brand?: string;
   car_model?: string;
   car_reg_no?: string;
+  referral_code?: string;
 }
 
 interface AuthResponse {
@@ -49,7 +50,7 @@ export const useChangePassword = () =>
 
 export const useUpdateProfile = () =>
   useMutation({
-    mutationFn: async (payload: { name: string; email: string; address?: string }) => {
+    mutationFn: async (payload: { name: string; email: string; address?: string; opt_out_promotional?: number }) => {
       const res = await api.put('/auth/profile', payload);
       return res.data;
     },

@@ -6,9 +6,11 @@ exports.list = async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT u.id, u.name, u.mobile, u.email, u.is_active, u.created_at,
+              u.custom_role_id, u.base_salary, r.role_name as custom_role_name,
               sp.specialisations
        FROM users u
        LEFT JOIN staff_profiles sp ON u.id = sp.user_id
+       LEFT JOIN v2_roles r ON u.custom_role_id = r.id
        WHERE u.role = 'staff' AND u.is_active = 1
        ORDER BY u.created_at DESC`
     );
@@ -39,9 +41,11 @@ exports.getOne = async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT u.id, u.name, u.mobile, u.email, u.is_active, u.created_at,
+              u.custom_role_id, u.base_salary, r.role_name as custom_role_name,
               sp.specialisations
        FROM users u
        LEFT JOIN staff_profiles sp ON u.id = sp.user_id
+       LEFT JOIN v2_roles r ON u.custom_role_id = r.id
        WHERE u.id = ? AND u.role = 'staff'`,
       [req.params.id]
     );
@@ -57,7 +61,7 @@ exports.getOne = async (req, res) => {
 exports.create = async (req, res) => {
   const conn = await pool.getConnection();
   try {
-    const { name, mobile, password, specialisations, email } = req.body;
+    const { name, mobile, password, specialisations, email, custom_role_id, base_salary } = req.body;
     if (!name || !mobile || !password) {
       return res.status(400).json({ success: false, error: 'Name, mobile, and password are required' });
     }
@@ -75,8 +79,8 @@ exports.create = async (req, res) => {
 
     const password_hash = await bcrypt.hash(password, 10);
     const [userResult] = await conn.query(
-      'INSERT INTO users (name, mobile, email, password_hash, role) VALUES (?, ?, ?, ?, ?)',
-      [name, mobile, email || null, password_hash, 'staff']
+      'INSERT INTO users (name, mobile, email, password_hash, role, custom_role_id, base_salary) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [name, mobile, email || null, password_hash, 'staff', custom_role_id || null, base_salary || 15000.00]
     );
 
     await conn.query(
@@ -99,7 +103,7 @@ exports.create = async (req, res) => {
 exports.update = async (req, res) => {
   const conn = await pool.getConnection();
   try {
-    const { name, mobile, email, specialisations } = req.body;
+    const { name, mobile, email, specialisations, custom_role_id, base_salary } = req.body;
     const [existing] = await conn.query('SELECT id FROM users WHERE id = ? AND role = ?', [req.params.id, 'staff']);
     if (!existing.length) return res.status(404).json({ success: false, error: 'Staff not found' });
 
@@ -110,6 +114,8 @@ exports.update = async (req, res) => {
     if (name !== undefined) { updates.push('name = ?'); params.push(name); }
     if (mobile !== undefined) { updates.push('mobile = ?'); params.push(mobile); }
     if (email !== undefined) { updates.push('email = ?'); params.push(email); }
+    if (custom_role_id !== undefined) { updates.push('custom_role_id = ?'); params.push(custom_role_id || null); }
+    if (base_salary !== undefined) { updates.push('base_salary = ?'); params.push(base_salary); }
 
     if (updates.length) {
       params.push(req.params.id);

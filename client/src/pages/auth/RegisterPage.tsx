@@ -17,6 +17,7 @@ const registerSchema = z.object({
   carBrand: z.string().optional(),
   carModel: z.string().optional(),
   carRegNo: z.string().optional(),
+  referralCode: z.string().optional(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: 'Passwords do not match',
   path: ['confirmPassword'],
@@ -55,7 +56,8 @@ export default function RegisterPage() {
         password: data.password,
         car_brand: finalBrand || undefined,
         car_model: finalModel || undefined,
-        car_reg_no: data.carRegNo || undefined
+        car_reg_no: data.carRegNo || undefined,
+        referral_code: data.referralCode || undefined
       },
       {
         onSuccess: (result) => {
@@ -264,6 +266,20 @@ export default function RegisterPage() {
                 {...register('carRegNo')}
                 type="text"
                 placeholder="e.g. GJ06AB1234"
+                className="w-full px-4 py-4 bg-[#f6f3f2] border border-transparent rounded-lg text-[#1c1b1b] font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white focus:border-[#D32F2F]/30 placeholder:text-[#8f6f6c]/60 transition-all duration-200"
+                style={{ textTransform: 'uppercase' }}
+              />
+            </div>
+
+            {/* Referral Code */}
+            <div>
+              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#5f5e5e] mb-2">
+                Referral Code <span className="text-[#8f6f6c]/60 normal-case tracking-normal">(optional)</span>
+              </label>
+              <input
+                {...register('referralCode')}
+                type="text"
+                placeholder="Enter referral code (e.g. GK1234)"
                 className="w-full px-4 py-4 bg-[#f6f3f2] border border-transparent rounded-lg text-[#1c1b1b] font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white focus:border-[#D32F2F]/30 placeholder:text-[#8f6f6c]/60 transition-all duration-200"
                 style={{ textTransform: 'uppercase' }}
               />

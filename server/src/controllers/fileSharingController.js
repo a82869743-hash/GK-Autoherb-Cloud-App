@@ -2,6 +2,7 @@ const pool = require('../config/db');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { generateInvoicePDF } = require('../services/invoiceService');
 
 // ─── LIST SHARED FILES ──────────────────────────────
 exports.list = async (req, res) => {
@@ -91,5 +92,177 @@ exports.downloadByToken = async (req, res) => {
   } catch (err) {
     console.error('File download error:', err);
     res.status(500).send('Server error');
+  }
+};
+
+// ─── GENERATE CRYPTO SHARE LINK (Update 22) ───────────
+exports.generateLink = async (req, res) => {
+  try {
+    const { file_name, file_url, file_type, reference_type, reference_id, expiry_hours } = req.body;
+    if (!file_url || !file_name) {
+      return res.status(400).json({ success: false, error: 'File URL and Name are required' });
+    }
+
+    const shareToken = crypto.randomBytes(32).toString('hex');
+    let expiresAt = null;
+    if (expiry_hours) {
+      expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + parseInt(expiry_hours));
+    }
+
+    // Insert into v2_file_attachments
+    await pool.query(
+      `INSERT INTO v2_file_attachments (file_name, file_url, file_type, reference_type, reference_id, share_token, share_expires_at, share_created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [file_name, file_url, file_type || 'image', reference_type || 'general', reference_id || null, shareToken, expiresAt, req.user.id]
+    );
+
+    const shareUrl = `${req.protocol}://${req.get('host')}/api/shared/${shareToken}`;
+
+    res.json({
+      success: true,
+      data: {
+        share_token: shareToken,
+        share_url: shareUrl,
+        expires_at: expiresAt
+      }
+    });
+  } catch (err) {
+    console.error('generateLink error:', err);
+    res.status(500).json({ success: false, error: 'Failed to generate share link' });
+  }
+};
+
+// ─── RESOLVE CRYPTO SHARE LINK (Update 22) ───────────
+exports.getSharedFile = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const [rows] = await pool.query(
+      `SELECT * FROM v2_file_attachments WHERE share_token = ?`,
+      [token]
+    );
+
+    if (!rows.length) {
+      return res.status(404).send('<h1>Link Invalid or Expired</h1><p>The shareable link you are trying to access is invalid.</p>');
+    }
+
+    const file = rows[0];
+
+    // Check expiry
+    if (file.share_expires_at && new Date(file.share_expires_at) < new Date()) {
+      return res.status(410).send('<h1>Link Expired</h1><p>This shareable link has expired.</p>');
+    }
+
+    if (file.reference_type === 'invoice') {
+      try {
+        const { pdfBuffer } = await generateInvoicePDF(file.reference_id);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${file.file_name}"`);
+        return res.send(pdfBuffer);
+      } catch (pdfErr) {
+        console.error('Dynamic PDF generation failed:', pdfErr);
+        return res.status(500).send('Failed to compile invoice PDF');
+      }
+    }
+
+    const isPdf = file.file_type === 'pdf' || (file.file_name && file.file_name.toLowerCase().endsWith('.pdf'));
+    const isImage = file.file_type === 'image' || ['jpg', 'jpeg', 'png', 'webp', 'gif'].some(ext => file.file_url.toLowerCase().endsWith('.' + ext));
+
+    if (isPdf) {
+      if (file.file_url.startsWith('http')) {
+        return res.redirect(file.file_url);
+      }
+      const filePath = path.join(__dirname, '../../public', file.file_url);
+      if (fs.existsSync(filePath)) {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${file.file_name}"`);
+        return res.sendFile(filePath);
+      }
+      return res.status(404).send('File not found on server.');
+    } else if (isImage) {
+      return res.send(`
+        <html>
+        <head>
+          <title>${file.file_name} - Shared via GK AutoHerb</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            body {
+              margin: 0;
+              padding: 0;
+              background: radial-gradient(circle at top, #1a1a1a, #0d0d0d);
+              height: 100vh;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              font-family: system-ui, -apple-system, sans-serif;
+              color: white;
+            }
+            .preview-container {
+              background: rgba(255, 255, 255, 0.03);
+              backdrop-filter: blur(16px);
+              border: 1px solid rgba(255, 255, 255, 0.1);
+              padding: 24px;
+              border-radius: 24px;
+              max-width: 90%;
+              max-height: 80vh;
+              box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+            }
+            img {
+              max-width: 100%;
+              max-height: 60vh;
+              border-radius: 12px;
+              object-fit: contain;
+              border: 1px solid rgba(255,255,255,0.05);
+            }
+            .title {
+              margin-top: 16px;
+              font-size: 16px;
+              font-weight: 600;
+              color: rgba(255,255,255,0.9);
+            }
+            .subtitle {
+              font-size: 12px;
+              color: rgba(255,255,255,0.4);
+              margin-top: 4px;
+            }
+            .btn {
+              margin-top: 20px;
+              background: linear-gradient(135deg, #10b981, #059669);
+              border: none;
+              color: white;
+              padding: 10px 24px;
+              border-radius: 12px;
+              font-weight: 600;
+              cursor: pointer;
+              text-decoration: none;
+              font-size: 13px;
+              box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+              transition: transform 0.2s;
+            }
+            .btn:hover {
+              transform: translateY(-2px);
+            }
+          </style>
+        </head>
+        <body>
+          <div class="preview-container">
+            <img src="${file.file_url}" alt="${file.file_name}" />
+            <div class="title">${file.file_name}</div>
+            <div class="subtitle">Shared from GK AutoHerb Studio</div>
+            <a href="${file.file_url}" download="${file.file_name}" class="btn">Download Original Image</a>
+          </div>
+        </body>
+        </html>
+      `);
+    } else {
+      return res.redirect(file.file_url);
+    }
+  } catch (err) {
+    console.error('getSharedFile error:', err);
+    res.status(500).send('Server Error');
   }
 };
