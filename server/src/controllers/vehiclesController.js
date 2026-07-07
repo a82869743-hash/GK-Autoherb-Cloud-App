@@ -121,7 +121,7 @@ exports.addCar = async (req, res) => {
     await conn.beginTransaction();
 
     const userId = req.user.id;
-    const { brand, model, registration_no, car_year, manufacture_year } = req.body;
+    const { brand, model, registration_no, car_year, manufacture_year, category } = req.body;
     const resolvedYear = car_year || manufacture_year || null;
 
     // Validate required fields
@@ -142,9 +142,9 @@ exports.addCar = async (req, res) => {
 
     // Insert new car — first car is automatically primary
     const [result] = await conn.query(
-      `INSERT INTO vehicles (customer_id, brand, model, registration_no, car_year, is_primary)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [userId, brand.trim(), model.trim(), registration_no?.toUpperCase().trim() || null, resolvedYear, isFirst ? 1 : 0]
+      `INSERT INTO vehicles (customer_id, brand, model, registration_no, car_year, is_primary, category)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [userId, brand.trim(), model.trim(), registration_no?.toUpperCase().trim() || null, resolvedYear, isFirst ? 1 : 0, category || 'sedan']
     );
 
     await conn.commit();
@@ -158,6 +158,7 @@ exports.addCar = async (req, res) => {
         registration_no: registration_no?.toUpperCase().trim() || null,
         car_year: resolvedYear,
         is_primary: isFirst ? 1 : 0,
+        category: category || 'sedan',
       },
       message: 'Car added successfully',
     });
@@ -279,7 +280,7 @@ exports.updateCar = async (req, res) => {
 
     const userId = req.user.id;
     const carId = req.params.id;
-    const { brand, model, registration_no, car_year, manufacture_year } = req.body;
+    const { brand, model, registration_no, car_year, manufacture_year, category } = req.body;
     const resolvedYear = car_year || manufacture_year || null;
 
     // Verify car exists
@@ -301,13 +302,14 @@ exports.updateCar = async (req, res) => {
     // Update details
     await conn.query(
       `UPDATE vehicles 
-       SET brand = ?, model = ?, registration_no = ?, car_year = ?
+       SET brand = ?, model = ?, registration_no = ?, car_year = ?, category = ?
        WHERE id = ?`,
       [
         brand ? brand.trim() : null,
         model ? model.trim() : null,
         registration_no ? registration_no.toUpperCase().trim() : null,
         resolvedYear,
+        category || 'sedan',
         carId
       ]
     );
@@ -321,7 +323,8 @@ exports.updateCar = async (req, res) => {
         brand: brand?.trim() || null,
         model: model?.trim() || null,
         registration_no: registration_no?.toUpperCase().trim() || null,
-        car_year: resolvedYear
+        car_year: resolvedYear,
+        category: category || 'sedan'
       }
     });
   } catch (err) {

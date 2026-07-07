@@ -678,27 +678,12 @@ export default function BookingPage() {
               )}
             </div>
           ) : (
-            /* ── NORMAL BOOKING FLOW ── */
             <div>
-              {/* Vehicle category filter */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+              {/* Vehicle category filter (read-only label since it matches chosen car) */}
+              <div className="mb-4 text-left">
                 <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                  Pricing Category: <span className="text-[#D32F2F] font-extrabold">{filter === 'medium_hatchback' ? 'Medium Hatchback' : filter === 'premium_sedan' ? 'Premium Sedan' : filter.toUpperCase()}</span>
+                  Pricing Category: <span className="text-[#D32F2F] font-extrabold">{filter === 'medium_hatchback' ? 'Medium Hatchback' : filter === 'premium_sedan' ? 'Premium Sedan' : filter.toUpperCase().replace('_', ' ')}</span>
                 </span>
-                <div className="flex flex-wrap gap-1">
-                  {['hatchback', 'medium_hatchback', 'sedan', 'premium_sedan', 'suv'].map((f) => (
-                    <button
-                      key={f}
-                      type="button"
-                      onClick={() => setFilter(f)}
-                      className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors ${
-                        filter === f ? 'bg-[#D32F2F] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      {f === 'medium_hatchback' ? 'Med Hatch' : f === 'premium_sedan' ? 'Prem Sedan' : f.charAt(0).toUpperCase() + f.slice(1, 4)}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               {servicesLoading ? (
@@ -731,17 +716,7 @@ export default function BookingPage() {
                               </div>
                             {svc.description && <p className="text-xs text-[#5f5e5e] mt-1 line-clamp-2">{svc.description}</p>}
                             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-[#5f5e5e]">
-                              {filter === 'all' ? (
-                                <>
-                                  <span>Hatch: ₹{svc.price_hatchback}</span>
-                                  <span>Med Hatch: ₹{svc.price_medium_hatchback}</span>
-                                  <span>Sedan: ₹{svc.price_sedan}</span>
-                                  <span>Prem Sedan: ₹{svc.price_premium_sedan}</span>
-                                  <span>SUV: ₹{svc.price_suv}</span>
-                                </>
-                              ) : (
-                                <span className="font-bold text-[#D32F2F]">₹{svc[`price_${filter}`]}</span>
-                              )}
+                              <span className="font-bold text-[#D32F2F]">₹{svc[`price_${filter}`] || svc.price_sedan}</span>
                             </div>
                           </button>
                         );})}

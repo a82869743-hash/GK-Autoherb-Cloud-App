@@ -19,6 +19,7 @@ export default function AddCarModal({ isOpen, onClose, editVehicle }: AddCarModa
   const [customModel, setCustomModel] = useState('');
   const [regNo, setRegNo] = useState('');
   const [year, setYear] = useState('');
+  const [category, setCategory] = useState('sedan');
   const [isPending, setIsPending] = useState(false);
 
   useEffect(() => {
@@ -27,6 +28,7 @@ export default function AddCarModal({ isOpen, onClose, editVehicle }: AddCarModa
       setModel(editVehicle.model || '');
       setRegNo(editVehicle.registration_no || '');
       setYear(editVehicle.car_year ? String(editVehicle.car_year) : '');
+      setCategory(editVehicle.category || 'sedan');
     } else {
       resetForm();
     }
@@ -56,6 +58,7 @@ export default function AddCarModal({ isOpen, onClose, editVehicle }: AddCarModa
           model: finalModel,
           registration_no: regNo || undefined,
           car_year: year ? parseInt(year) : undefined,
+          category: category,
         });
         toast.success('Car updated successfully!');
       } else {
@@ -64,6 +67,7 @@ export default function AddCarModal({ isOpen, onClose, editVehicle }: AddCarModa
           model: finalModel,
           registration_no: regNo || undefined,
           car_year: year ? parseInt(year) : undefined,
+          category: category,
         });
         toast.success('Car added successfully!');
       }
@@ -80,7 +84,7 @@ export default function AddCarModal({ isOpen, onClose, editVehicle }: AddCarModa
   };
 
   const resetForm = () => {
-    setBrand(''); setModel(''); setCustomBrand(''); setCustomModel(''); setRegNo(''); setYear('');
+    setBrand(''); setModel(''); setCustomBrand(''); setCustomModel(''); setRegNo(''); setYear(''); setCategory('sedan');
   };
 
   if (!isOpen) return null;
@@ -163,6 +167,21 @@ export default function AddCarModal({ isOpen, onClose, editVehicle }: AddCarModa
               <select value={year} onChange={(e) => setYear(e.target.value)} className={selectCls}>
                 <option value="">Select year...</option>
                 {years.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+              <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            </div>
+          </div>
+
+          {/* Vehicle Category */}
+          <div>
+            <label className={labelCls}>Vehicle Category</label>
+            <div className="relative">
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className={selectCls}>
+                <option value="hatchback">Hatchback</option>
+                <option value="medium_hatchback">Medium Hatchback</option>
+                <option value="sedan">Sedan</option>
+                <option value="premium_sedan">Premium Sedan</option>
+                <option value="suv">SUV</option>
               </select>
               <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
