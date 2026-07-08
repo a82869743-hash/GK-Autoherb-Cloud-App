@@ -25,7 +25,7 @@ export default function QrPaymentModal({
   const [transactionId, setTransactionId] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const upiUrl = `upi://pay?pa=paytm.s2do639@paytm&pn=GK%20AUTO%20HERB&am=${amount}&cu=INR&tn=GK%20Auto%20Herb%20Payment`;
+  const upiUrl = `upi://pay?pa=paytm.s2do639@pty&pn=GK%20AUTO%20HERB&am=${amount}&cu=INR&tn=GK%20Auto%20Herb%20Payment`;
   const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiUrl)}`;
 
   const handleSubmit = async (e: React.FormEvent) => {

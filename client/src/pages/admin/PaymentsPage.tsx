@@ -376,7 +376,7 @@ export default function PaymentsPage() {
                     </div>
                     <div className="bg-white p-2 rounded-lg shadow-sm">
                       <img 
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`upi://pay?pa=gkautoherb@axisbank&pn=GK Auto Herb&am=${payForm.amount || 0}&cu=INR`)}`} 
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`upi://pay?pa=paytm.s2do639@pty&pn=GK%20AUTO%20HERB&am=${payForm.amount || 0}&cu=INR`)}`} 
                         alt="UPI QR Code"
                         className="w-20 h-20 sm:w-24 sm:h-24 object-contain"
                       />
