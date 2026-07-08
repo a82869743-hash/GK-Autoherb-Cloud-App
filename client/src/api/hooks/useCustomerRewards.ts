@@ -16,7 +16,7 @@ export const useAwardWelcomeReward = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (payload: { customer_id: string }) => {
-      const { data } = await api.post('/customer-rewards/welcome', payload);
+      const { data } = await api.post('/customer-rewards/award-welcome', payload);
       return data;
     },
     onSuccess: () => {

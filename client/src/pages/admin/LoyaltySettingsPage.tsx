@@ -54,7 +54,7 @@ function CustomerLoyaltyLookup() {
   const { data: searchResults = [], isLoading: searching } = useQuery({
     queryKey: ['loyalty-search', query],
     queryFn: async () => {
-      const { data } = await api.get('/api/loyalty/search', { params: { q: query } });
+      const { data } = await api.get('/loyalty/search', { params: { q: query } });
       return data.data;
     },
     enabled: query.length >= 2,
@@ -63,7 +63,7 @@ function CustomerLoyaltyLookup() {
   const { data: transactions = [] } = useQuery<LoyaltyTransaction[]>({
     queryKey: ['loyalty-history', selectedCustomerId],
     queryFn: async () => {
-      const { data } = await api.get(`/api/loyalty/${selectedCustomerId}/history`);
+      const { data } = await api.get(`/loyalty/${selectedCustomerId}/history`);
       return data.data;
     },
     enabled: !!selectedCustomerId,
@@ -72,7 +72,7 @@ function CustomerLoyaltyLookup() {
   const queryClient = useQueryClient();
   const earnMutation = useMutation({
     mutationFn: async (payload: { customer_id: number; amount: number }) => {
-      const { data } = await api.post('/api/loyalty/earn', payload);
+      const { data } = await api.post('/loyalty/earn', payload);
       return data;
     },
     onSuccess: (data) => {
@@ -229,7 +229,7 @@ function LoyaltySettingsTab() {
   const { data: settings, isLoading } = useQuery<LoyaltySettings>({
     queryKey: ['loyalty-settings'],
     queryFn: async () => {
-      const { data } = await api.get('/api/loyalty/settings');
+      const { data } = await api.get('/loyalty/settings');
       return data.data;
     },
   });
@@ -242,7 +242,7 @@ function LoyaltySettingsTab() {
 
   const updateMutation = useMutation({
     mutationFn: async (payload: Partial<LoyaltySettings>) => {
-      const { data } = await api.patch('/api/loyalty/settings', payload);
+      const { data } = await api.patch('/loyalty/settings', payload);
       return data;
     },
     onSuccess: (data) => {

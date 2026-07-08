@@ -10,7 +10,7 @@ interface ReportParams {
 export function useSalesReport(params: ReportParams) {
   return useQuery({
     queryKey: ['report-sales', params],
-    queryFn: () => api.get('/api/reports/sales', { params }).then(r => r.data),
+    queryFn: () => api.get('/reports/sales', { params }).then(r => r.data),
     enabled: !!params.from_date && !!params.to_date,
   });
 }
@@ -18,20 +18,20 @@ export function useSalesReport(params: ReportParams) {
 export function useInventoryReport() {
   return useQuery({
     queryKey: ['report-inventory'],
-    queryFn: () => api.get('/api/reports/inventory').then(r => r.data),
+    queryFn: () => api.get('/reports/inventory').then(r => r.data),
   });
 }
 
 export function useJobCardReport(params: { from_date?: string; to_date?: string; status?: string; staff_id?: string }) {
   return useQuery({
     queryKey: ['report-jobcards', params],
-    queryFn: () => api.get('/api/reports/job-cards', { params }).then(r => r.data),
+    queryFn: () => api.get('/reports/job-cards', { params }).then(r => r.data),
     enabled: !!params.from_date && !!params.to_date,
   });
 }
 
 export function downloadReport(type: 'sales' | 'inventory' | 'job-cards' | 'package-history', params: any, format: 'xlsx' | 'pdf') {
-  return api.get(`/api/reports/${type}`, {
+  return api.get(`/reports/${type}`, {
     params: { ...params, format },
     responseType: 'blob',
   }).then(res => {
@@ -47,6 +47,6 @@ export function downloadReport(type: 'sales' | 'inventory' | 'job-cards' | 'pack
 export function useWelcomeRewardsReport() {
   return useQuery({
     queryKey: ['report-welcome-rewards'],
-    queryFn: () => api.get('/api/reports/welcome-rewards').then(r => r.data),
+    queryFn: () => api.get('/reports/welcome-rewards').then(r => r.data),
   });
 }
