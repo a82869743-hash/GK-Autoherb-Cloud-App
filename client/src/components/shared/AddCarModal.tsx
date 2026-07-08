@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Car, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { carBrands, getModelsForBrand } from '../../utils/carData';
+import { carBrands, getModelsForBrand, getCategoryForModel } from '../../utils/carData';
 import api from '../../api/axiosInstance';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -137,7 +137,14 @@ export default function AddCarModal({ isOpen, onClose, editVehicle }: AddCarModa
             <div>
               <label className={labelCls}>Car Model</label>
               <div className="relative">
-                <select value={model} onChange={(e) => { setModel(e.target.value); setCustomModel(''); }} className={selectCls}>
+                <select value={model} onChange={(e) => {
+                  const val = e.target.value;
+                  setModel(val);
+                  setCustomModel('');
+                  if (val && val !== 'Other') {
+                    setCategory(getCategoryForModel(brand, val));
+                  }
+                }} className={selectCls}>
                   <option value="">Select model...</option>
                   {models.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>

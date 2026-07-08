@@ -8,6 +8,7 @@ import Input from '../../components/ui/Input';
 import { useUIStore } from '../../store/uiStore';
 import { formatTime } from '../../utils/formatters';
 import { useBrands, useModels } from '../../api/hooks/useVehicles';
+import { getCategoryForModel } from '../../utils/carData';
 import api from '../../api/axiosInstance';
 import { useAuthStore } from '../../store/authStore';
 import QrPaymentModal from '../../components/shared/QrPaymentModal';
@@ -122,7 +123,7 @@ export default function BookingPage() {
           if (primary.category) {
             setFilter(primary.category);
           } else {
-            setFilter('sedan');
+            setFilter(getCategoryForModel(primary.brand, primary.model));
           }
         } else {
           setManualEntry(true);
@@ -495,7 +496,7 @@ export default function BookingPage() {
                       if (v.category) {
                         setFilter(v.category);
                       } else {
-                        setFilter('sedan');
+                        setFilter(getCategoryForModel(v.brand, v.model));
                       }
                     }
                   }}
@@ -530,7 +531,7 @@ export default function BookingPage() {
                       if (primary.category) {
                         setFilter(primary.category);
                       } else {
-                        setFilter('sedan');
+                        setFilter(getCategoryForModel(primary.brand, primary.model));
                       }
                     }}
                     className="text-xs font-bold text-[#D32F2F] hover:underline mb-2"
