@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Check, Calendar, Clock, Car, Sparkles, Loader2, ArrowLeft, CreditCard, QrCode } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, Calendar, Clock, Car, Sparkles, Loader2, ArrowLeft, CreditCard, QrCode, Gift } from 'lucide-react';
 import { useSlots } from '../../api/hooks/useSlots';
 import { useCreateBooking } from '../../api/hooks/useBookings';
 import Button from '../../components/ui/Button';
@@ -40,6 +40,8 @@ export default function BookingPage() {
 
   const [step, setStep] = useState(0);
   const [filter, setFilter] = useState('sedan');
+  const [loyalty, setLoyalty] = useState<{ credits: number; free_washes: number; wax_count: number }>({ credits: 0, free_washes: 0, wax_count: 0 });
+  const [useFreeWash, setUseFreeWash] = useState(false);
 
   // QR Payment states
   const [showQrModal, setShowQrModal] = useState(false);
@@ -97,12 +99,13 @@ export default function BookingPage() {
       try {
         const initialVehicleId = new URLSearchParams(window.location.search).get('vehicle_id');
         const activePkgUrl = initialVehicleId ? `/user-packages/active?vehicle_id=${initialVehicleId}` : '/user-packages/active';
-        const [svcRes, pkgRes, myVehiclesRes, activePkgRes, settingsRes] = await Promise.all([
+        const [svcRes, pkgRes, myVehiclesRes, activePkgRes, settingsRes, dashboardRes] = await Promise.all([
           api.get('/services').catch(() => ({ data: { data: [] } })),
           api.get('/packages').catch(() => ({ data: { data: [] } })),
           api.get('/vehicles/my-vehicles').catch(() => ({ data: { data: [] } })),
           api.get(activePkgUrl).catch(() => ({ data: { data: [] } })),
           api.get('/settings').catch(() => ({ data: { data: {} } })),
+          api.get('/dashboard').catch(() => ({ data: {} })),
         ]);
         setServices(svcRes.data.data || []);
         setPackages(pkgRes.data.data || []);
@@ -136,6 +139,12 @@ export default function BookingPage() {
 
         if (settingsRes.data.success) {
           setSettings(settingsRes.data.data || {});
+        }
+
+        const loyaltyData = dashboardRes?.data?.loyalty || { credits: 0, free_washes: 0, wax_count: 0 };
+        setLoyalty(loyaltyData);
+        if (searchParams.get('free_wash') === 'true' && loyaltyData.free_washes > 0) {
+          setUseFreeWash(true);
         }
       } catch {} finally { setServicesLoading(false); }
     })();
@@ -222,16 +231,16 @@ export default function BookingPage() {
   }, [isPackageBooking, selectedPackageServiceNames, selectedServicesObjs, services]);
 
   const estimatedTotal = useMemo(() => {
-    if (isPackageBooking) return 0;
+    if (isPackageBooking || useFreeWash) return 0;
     const cat = filter !== 'all' ? filter : 'sedan';
     return selectedServicesObjs.reduce((sum, s) => {
       const priceKey = `price_${cat}`;
       return sum + (Number(s[priceKey]) || Number(s.price_sedan) || 0);
     }, 0);
-  }, [isPackageBooking, filter, selectedServicesObjs]);
+  }, [isPackageBooking, filter, selectedServicesObjs, useFreeWash]);
 
   const requiredAdvance = useMemo(() => {
-    if (isPackageBooking) return 0;
+    if (isPackageBooking || useFreeWash) return 0;
     const advType = settings.advance_type || 'none';
     const advVal = parseFloat(settings.advance_value || '0');
     if (advType === 'fixed') {
@@ -240,7 +249,7 @@ export default function BookingPage() {
       return (estimatedTotal * advVal) / 100;
     }
     return 0;
-  }, [isPackageBooking, settings, estimatedTotal]);
+  }, [isPackageBooking, settings, estimatedTotal, useFreeWash]);
 
 
   const loadRazorpayScript = () => {
@@ -354,6 +363,7 @@ export default function BookingPage() {
         vehicle_reg_no: regNo || undefined,
         vehicle_category: filter !== 'all' ? filter : undefined,
         use_package: isPackageBooking ? true : undefined,
+        is_free_wash: useFreeWash || undefined,
       });
 
       const bookingData = res.data;
@@ -722,6 +732,36 @@ export default function BookingPage() {
                           </button>
                         );})}
                       </div>
+                    </div>
+                  )}
+
+                  {/* Apply Free Wash Section */}
+                  {loyalty && loyalty.free_washes > 0 && (
+                    <div className="bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-xl p-4 flex items-center justify-between gap-3 mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-blue-200 flex items-center justify-center">
+                          <Gift size={16} className="text-blue-700" />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-xs font-bold text-blue-800">You have {loyalty.free_washes} free wash{loyalty.free_washes > 1 ? 'es' : ''} available!</p>
+                          <p className="text-[10px] text-blue-600 mt-0.5">Use it to get this booking completely free of charge.</p>
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={useFreeWash}
+                          onChange={(e) => {
+                            setUseFreeWash(e.target.checked);
+                            if (e.target.checked) {
+                              setSelectedPackage(null);
+                              setSelectedPackageServiceNames([]);
+                            }
+                          }}
+                          className="accent-blue-600 h-4.5 w-4.5 rounded border-gray-300 text-blue-600 focus:ring-blue-600 cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-blue-800">Apply</span>
+                      </label>
                     </div>
                   )}
 

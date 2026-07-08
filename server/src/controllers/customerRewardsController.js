@@ -39,21 +39,21 @@ const awardWelcomeRewardInternal = async (customerId, conn = pool) => {
 
   const [result] = await conn.query(
     `INSERT INTO customer_rewards (customer_id, reward_type, points_awarded, discount_pct, description, expires_at)
-     VALUES (?, 'welcome', 500, 10.00, 'Welcome to GK AutoHerb! Enjoy 500 points and 10% off your first service.', ?)`,
+     VALUES (?, 'welcome', 500, 10.00, 'Welcome to GK AutoHerb! Enjoy 1 Free Wash, 500 points and 10% off your first service.', ?)`,
     [customerId, expiresAt]
   );
 
   // Check if loyalty record exists
   const [existingLoyalty] = await conn.query('SELECT id FROM loyalty WHERE customer_id = ?', [customerId]);
   if (existingLoyalty.length > 0) {
-    await conn.query('UPDATE loyalty SET credits = credits + 500 WHERE customer_id = ?', [customerId]);
+    await conn.query('UPDATE loyalty SET credits = credits + 500, free_washes = free_washes + 1 WHERE customer_id = ?', [customerId]);
   } else {
-    await conn.query('INSERT INTO loyalty (customer_id, credits) VALUES (?, 500)', [customerId]);
+    await conn.query('INSERT INTO loyalty (customer_id, credits, free_washes) VALUES (?, 500, 1)', [customerId]);
   }
 
   // Also log in loyalty points transactions (loyalty_transactions)
   await conn.query(
-    `INSERT INTO loyalty_transactions (customer_id, type, amount, description) VALUES (?, 'earn', 500, 'Welcome Reward points awarded.')`,
+    `INSERT INTO loyalty_transactions (customer_id, type, amount, description) VALUES (?, 'earn', 500, 'Welcome Reward points and 1 Free Wash awarded.')`,
     [customerId]
   );
 

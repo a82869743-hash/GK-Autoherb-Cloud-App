@@ -33,9 +33,19 @@ exports.register = async (req, res) => {
     const cleanMobile = mobile.replace(/\D/g, '').slice(-10);
 
     // Check if mobile already exists
-    const [existing] = await conn.query('SELECT id FROM users WHERE mobile = ?', [cleanMobile]);
+    const [existing] = await conn.query('SELECT id, password_hash FROM users WHERE mobile = ?', [cleanMobile]);
+    
+    let isManualActivation = false;
+    let existingUserId = null;
+
     if (existing.length > 0) {
-      return res.status(409).json({ success: false, error: 'Mobile already registered' });
+      const userRec = existing[0];
+      if (userRec.password_hash === 'manual') {
+        isManualActivation = true;
+        existingUserId = userRec.id;
+      } else {
+        return res.status(409).json({ success: false, error: 'Mobile already registered' });
+      }
     }
 
     await conn.beginTransaction();
@@ -84,26 +94,39 @@ exports.register = async (req, res) => {
     // Generate unique referral code for new customer
     const userCode = 'GK' + Math.random().toString(36).substring(2, 8).toUpperCase();
 
-    // Insert user
-    const [result] = await conn.query(
-      'INSERT INTO users (name, mobile, password_hash, role, referral_code, referred_by) VALUES (?, ?, ?, ?, ?, ?)',
-      [name.trim(), cleanMobile, password_hash, role, userCode, referrerId]
-    );
-    console.log("DB INSERT RESULT:", result);
+    let userId;
+    if (isManualActivation) {
+      // Update existing manually created user record with hashed password, name, and referral code
+      await conn.query(
+        'UPDATE users SET name = ?, password_hash = ?, referral_code = IFNULL(referral_code, ?), referred_by = IFNULL(referred_by, ?) WHERE id = ?',
+        [name.trim(), password_hash, userCode, referrerId, existingUserId]
+      );
+      userId = existingUserId;
+      console.log(`[AUTH] Activated manually registered customer ${userId}`);
+    } else {
+      // Insert new user
+      const [result] = await conn.query(
+        'INSERT INTO users (name, mobile, password_hash, role, referral_code, referred_by) VALUES (?, ?, ?, ?, ?, ?)',
+        [name.trim(), cleanMobile, password_hash, role, userCode, referrerId]
+      );
+      userId = result.insertId;
+      console.log(`[AUTH] Created new customer ${userId}`);
+    }
 
-    const userId = result.insertId;
-
-    // Create unique referral code entry in referral_codes table
+    // Create unique referral code entry in referral_codes table (only if not exists)
     let referralPointsSetting = 100;
     const [settingRow] = await conn.query('SELECT value FROM settings WHERE key_name = "referral_referrer_points"');
     if (settingRow.length) {
       referralPointsSetting = parseInt(settingRow[0].value) || 100;
     }
 
-    await conn.query(
-      'INSERT INTO referral_codes (customer_id, code, reward_points, max_uses, current_uses, is_active) VALUES (?, ?, ?, 10, 0, 1)',
-      [userId, userCode, referralPointsSetting]
-    );
+    const [existingCodes] = await conn.query('SELECT id FROM referral_codes WHERE customer_id = ?', [userId]);
+    if (existingCodes.length === 0) {
+      await conn.query(
+        'INSERT INTO referral_codes (customer_id, code, reward_points, max_uses, current_uses, is_active) VALUES (?, ?, ?, 10, 0, 1)',
+        [userId, userCode, referralPointsSetting]
+      );
+    }
 
     // Save referral links if provided
     if (referrerId) {
@@ -128,14 +151,17 @@ exports.register = async (req, res) => {
       );
     }
 
-    // ─── Save car during registration (if provided) ─────────
+    // ─── Save car during registration (if provided and they don't already have one) ─────────
     if (car_brand && car_model) {
-      await conn.query(
-        `INSERT INTO vehicles (customer_id, brand, model, registration_no, is_primary)
-         VALUES (?, ?, ?, ?, 1)`,
-        [userId, car_brand.trim(), car_model.trim(), car_reg_no?.toUpperCase().trim() || null]
-      );
-      console.log(`Car saved for user ${userId}: ${car_brand} ${car_model}`);
+      const [existingVehicles] = await conn.query('SELECT id FROM vehicles WHERE customer_id = ?', [userId]);
+      if (existingVehicles.length === 0) {
+        await conn.query(
+          `INSERT INTO vehicles (customer_id, brand, model, registration_no, is_primary)
+           VALUES (?, ?, ?, ?, 1)`,
+          [userId, car_brand.trim(), car_model.trim(), car_reg_no?.toUpperCase().trim() || null]
+        );
+        console.log(`Car saved for user ${userId}: ${car_brand} ${car_model}`);
+      }
     }
 
     // Award Welcome Reward automatically
