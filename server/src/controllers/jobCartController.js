@@ -540,7 +540,7 @@ exports.complete = async (req, res) => {
         const msgText = `Dear ${c.name || 'Customer'}, thank you for choosing GK AutoHerb! We would love to hear your feedback. Please rate your experience here: ${feedbackUrl}`;
 
         await pool.query(
-          `INSERT INTO v2_notification_logs (customer_id, event_trigger, channel, recipient, message, status, response_data)
+          `INSERT INTO v2_notification_logs (customer_id, template_name, channel, mobile, message_body, status, response_data)
            VALUES (?, 'FEEDBACK_REQUEST', 'whatsapp', ?, ?, 'pending', ?)`,
           [
             customerId,

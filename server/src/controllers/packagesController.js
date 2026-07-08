@@ -32,9 +32,9 @@ exports.list = async (req, res) => {
 
     let where = 'is_custom = 0';
 
-    // Customer or unauthenticated: only show active + visible packages
+    // Customer or unauthenticated: only show active + visible + published packages
     if (userRole !== 'admin') {
-      where += ' AND is_active = 1 AND visible_to_customer = 1';
+      where += ' AND is_active = 1 AND is_published = 1 AND visible_to_customer = 1';
     }
 
     if (published_only === 'true') where += ' AND is_published = 1';

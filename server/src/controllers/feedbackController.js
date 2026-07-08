@@ -239,11 +239,9 @@ exports.requestFeedbackManual = async (req, res) => {
     // Construct Redirect URL for manual send
     const domain = process.env.CLIENT_URL || 'http://localhost:5173';
     const feedbackUrl = `${domain}/feedback/${token}`;
-    const message = `Dear ${cart.customer_name || 'Customer'}, thank you for choosing GK AutoHerb! We would love to hear your feedback. Please rate your experience here: ${feedbackUrl}`;
-
-    // Log Click-to-Chat notification
+    const message = `Dear ${cart.customer_name || 'Customer'}, thank you for choosing GK AutoHerb! We would love to hear your feedback. Please rate your experience here: ${feedbackUrl}`;    // Log Click-to-Chat notification
     await pool.query(
-      `INSERT INTO v2_notification_logs (customer_id, event_trigger, channel, recipient, message, status, response_data)
+      `INSERT INTO v2_notification_logs (customer_id, template_name, channel, mobile, message_body, status, response_data)
        VALUES (?, 'FEEDBACK_REQUEST', 'whatsapp', ?, ?, 'pending', ?)`,
       [
         cart.customer_id,
@@ -252,7 +250,6 @@ exports.requestFeedbackManual = async (req, res) => {
         JSON.stringify({ redirect_url: `https://api.whatsapp.com/send?phone=${cart.customer_mobile}&text=${encodeURIComponent(message)}` })
       ]
     );
-
     res.json({ success: true, message: 'Feedback request logged and ready to send via WhatsApp' });
   } catch (err) {
     console.error('Request feedback manual error:', err);
