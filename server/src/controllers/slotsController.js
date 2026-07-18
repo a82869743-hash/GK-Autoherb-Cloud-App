@@ -45,7 +45,8 @@ exports.list = async (req, res) => {
     if (user && user.role === 'admin') {
       sql = `
         SELECT s.*, DATE_FORMAT(s.slot_date, '%Y-%m-%d') as slot_date, 
-               (s.booked_count < s.max_capacity AND s.is_blocked = 0) AS is_available,
+               (s.booked_count < s.max_capacity AND s.is_blocked = 0 AND bs.id IS NULL) AS is_available,
+               (s.is_blocked OR bs.id IS NOT NULL) AS is_blocked,
                bs.reason AS blocked_reason
         FROM slots s
         LEFT JOIN v2_blocked_slots bs ON bs.blocked_date = s.slot_date AND bs.slot_time = s.start_time
@@ -54,10 +55,13 @@ exports.list = async (req, res) => {
       `;
     } else {
       sql = `
-        SELECT *, DATE_FORMAT(slot_date, '%Y-%m-%d') as slot_date, 
-               (booked_count < max_capacity AND is_blocked = 0) AS is_available
-        FROM slots WHERE ${where}
-        ORDER BY slot_date ASC, start_time ASC
+        SELECT s.*, DATE_FORMAT(s.slot_date, '%Y-%m-%d') as slot_date, 
+               (s.booked_count < s.max_capacity AND s.is_blocked = 0 AND bs.id IS NULL) AS is_available,
+               (s.is_blocked OR bs.id IS NOT NULL) AS is_blocked
+        FROM slots s
+        LEFT JOIN v2_blocked_slots bs ON bs.blocked_date = s.slot_date AND bs.slot_time = s.start_time
+        WHERE ${where} AND bs.id IS NULL
+        ORDER BY s.slot_date ASC, s.start_time ASC
       `;
     }
 
@@ -206,7 +210,8 @@ exports.update = async (req, res) => {
     // Sync is_blocked to v2_blocked_slots
     if (is_blocked !== undefined) {
       const slot = existing[0];
-      const slotDate = typeof slot.slot_date === 'string' ? slot.slot_date : slot.slot_date.toISOString().split('T')[0];
+      const d = slot.slot_date;
+      const slotDate = typeof d === 'string' ? d : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       
       // Delete old block records
       await conn.query('DELETE FROM v2_blocked_slots WHERE blocked_date = ? AND slot_time = ?', [slotDate, slot.start_time]);

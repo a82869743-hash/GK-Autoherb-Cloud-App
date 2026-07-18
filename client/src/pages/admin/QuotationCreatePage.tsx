@@ -311,7 +311,7 @@ export default function QuotationCreatePage() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '20px', alignItems: 'start' }}>
+      <form onSubmit={handleSubmit} className="quotation-form-grid" style={{ display: 'grid', gap: '20px', alignItems: 'start' }}>
         
         {/* Left Side Column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -322,7 +322,7 @@ export default function QuotationCreatePage() {
               Customer & Vehicle Details
             </h2>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 20px' }}>
+            <div className="quotation-fields-grid" style={{ display: 'grid', gap: '16px 20px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#5f5e5e', marginBottom: '6px' }}>Customer Name *</label>
                 <input
@@ -386,7 +386,7 @@ export default function QuotationCreatePage() {
                 />
               </div>
 
-              <div style={{ gridColumn: 'span 2' }}>
+              <div className="quotation-segment-col">
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#D32F2F', marginBottom: '6px' }}>
                   Vehicle Segment (Pricing Dictator) *
                 </label>
@@ -438,9 +438,9 @@ export default function QuotationCreatePage() {
                 {items.map((item, idx) => (
                   <div
                     key={item.id}
+                    className="quotation-item-row"
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '120px 1fr 100px 70px 100px 30px',
                       gap: '12px',
                       alignItems: 'center',
                       padding: '12px',
@@ -733,7 +733,19 @@ export default function QuotationCreatePage() {
         </div>
 
       </form>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .quotation-form-grid { grid-template-columns: 1fr 340px; }
+        .quotation-fields-grid { grid-template-columns: 1fr 1fr; }
+        .quotation-segment-col { grid-column: span 2; }
+        .quotation-item-row { grid-template-columns: 120px 1fr 100px 70px 100px 30px; }
+        @media (max-width: 768px) {
+          .quotation-form-grid { grid-template-columns: 1fr !important; }
+          .quotation-fields-grid { grid-template-columns: 1fr !important; }
+          .quotation-segment-col { grid-column: span 1; }
+          .quotation-item-row { grid-template-columns: 1fr 1fr !important; }
+        }
+      `}</style>
     </div>
   );
 }

@@ -14,7 +14,7 @@ import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 import { useNavigate } from 'react-router-dom';
 import { useJobCarts } from '../../api/hooks/useJobCarts';
-import { useBuySellList, useCompleteBuySell } from '../../api/hooks/useBuySell';
+import { useBuySellList, useCompleteBuySell, useCreateBuySell } from '../../api/hooks/useBuySell';
 import { useInventory } from '../../api/hooks/useInventory';
 import StatusBadge from '../../components/shared/StatusBadge';
 import { formatINR, formatDate } from '../../utils/formatters';
@@ -104,6 +104,59 @@ export default function AccountsPage() {
   // Mutations
   const createPurchaseMutation = useCreatePurchaseBill();
   const createReturnMutation = useCreateReturn();
+
+  // Product Sale Form State
+  const [saleModalOpen, setSaleModalOpen] = useState(false);
+  const [saleForm, setSaleForm] = useState({
+    party_name: '',
+    type: 'sell_b2c',
+    product_id: '',
+    quantity: '1',
+    unit_price: '0',
+    transaction_date: new Date().toISOString().slice(0, 10),
+    notes: ''
+  });
+
+  const createBuySellMutation = useCreateBuySell();
+
+  const handleSaleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!saleForm.party_name || !saleForm.product_id) {
+      alert('Please fill out all required fields.');
+      return;
+    }
+    const selectedProd = (inventory?.data || []).find((p: any) => p.id === Number(saleForm.product_id));
+    const productName = selectedProd ? selectedProd.product_name : `Product #${saleForm.product_id}`;
+    
+    try {
+      await createBuySellMutation.mutateAsync({
+        type: saleForm.type,
+        party_name: saleForm.party_name,
+        product_name: productName,
+        quantity: parseFloat(saleForm.quantity) || 1,
+        unit_price: parseFloat(saleForm.unit_price) || 0,
+        transaction_date: saleForm.transaction_date,
+        notes: saleForm.notes || undefined
+      } as any);
+      toast('success', 'Product sale recorded successfully');
+      setSaleModalOpen(false);
+      setSaleForm({
+        party_name: '',
+        type: 'sell_b2c',
+        product_id: '',
+        quantity: '1',
+        unit_price: '0',
+        transaction_date: new Date().toISOString().slice(0, 10),
+        notes: ''
+      });
+      refetchSummary();
+      refetchKPI();
+      refetchBuySell();
+      refetchTxns();
+    } catch (err: any) {
+      toast('error', err.response?.data?.error || 'Failed to record product sale');
+    }
+  };
 
   const handleAddPurchaseItem = () => {
     setPurchaseForm(prev => ({
@@ -473,7 +526,12 @@ export default function AccountsPage() {
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
                 <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
                   <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">B2B / B2C Trade Ledger</span>
-                  <FileText size={16} className="text-gray-400" />
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" onClick={() => setSaleModalOpen(true)} icon={<Plus size={14} />}>
+                      Record Product Sale
+                    </Button>
+                    <FileText size={16} className="text-gray-400" />
+                  </div>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-100 text-left text-sm">
@@ -1190,6 +1248,90 @@ export default function AccountsPage() {
           <div className="flex justify-end gap-3 pt-4 border-t">
             <Button variant="secondary" onClick={() => setReturnModalOpen(false)}>Cancel</Button>
             <Button variant="primary" type="submit" loading={createReturnMutation.isPending}>Log Note</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Record Product Sale Modal */}
+      <Modal open={saleModalOpen} onClose={() => setSaleModalOpen(false)} title="Record Product Sale">
+        <form onSubmit={handleSaleSubmit} className="space-y-4 py-2">
+          <Input
+            type="text"
+            label="Customer / Party Name *"
+            placeholder="e.g. John Doe / Auto Solutions"
+            value={saleForm.party_name}
+            onChange={e => setSaleForm({ ...saleForm, party_name: e.target.value })}
+            required
+          />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Select
+              label="Sale Type *"
+              value={saleForm.type}
+              onChange={e => setSaleForm({ ...saleForm, type: e.target.value })}
+              options={[
+                { value: 'sell_b2c', label: 'B2C (Retail Sale)' },
+                { value: 'sell_b2b', label: 'B2B (Business Sale)' }
+              ]}
+              required
+            />
+            <Select
+              label="Select Product *"
+              value={saleForm.product_id}
+              onChange={e => {
+                const val = e.target.value;
+                const selected = (inventory?.data || []).find((p: any) => p.id === Number(val)) as any;
+                setSaleForm(prev => ({
+                  ...prev,
+                  product_id: val,
+                  unit_price: selected ? String(selected.selling_price || selected.retail_price || 0) : '0'
+                }));
+              }}
+              options={[
+                { value: '', label: 'Select Product...' },
+                ...(inventory?.data || []).map((p: any) => ({ value: String(p.id), label: `${p.product_name} (${p.unit})` }))
+              ]}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Input
+              type="number"
+              label="Quantity *"
+              placeholder="1"
+              value={saleForm.quantity}
+              onChange={e => setSaleForm({ ...saleForm, quantity: e.target.value })}
+              required
+            />
+            <Input
+              type="number"
+              label="Unit Selling Price (₹) *"
+              placeholder="0.00"
+              value={saleForm.unit_price}
+              onChange={e => setSaleForm({ ...saleForm, unit_price: e.target.value })}
+              required
+            />
+            <Input
+              type="date"
+              label="Transaction Date *"
+              value={saleForm.transaction_date}
+              onChange={e => setSaleForm({ ...saleForm, transaction_date: e.target.value })}
+              required
+            />
+          </div>
+
+          <Input
+            type="text"
+            label="Internal Notes"
+            placeholder="e.g. Sold with warranty details"
+            value={saleForm.notes}
+            onChange={e => setSaleForm({ ...saleForm, notes: e.target.value })}
+          />
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="secondary" onClick={() => setSaleModalOpen(false)}>Cancel</Button>
+            <Button variant="primary" type="submit" loading={createBuySellMutation.isPending}>Record Sale</Button>
           </div>
         </form>
       </Modal>

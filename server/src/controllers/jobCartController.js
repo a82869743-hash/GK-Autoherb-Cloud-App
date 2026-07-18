@@ -114,22 +114,32 @@ exports.create = async (req, res) => {
 
     let bAdvanceAmount = 0;
     let bTotalAmount = 0;
+    let bPickupType = 'none';
+    let bPickupCharge = 0;
     if (booking_id) {
       const [bRows] = await conn.query(
-        'SELECT advance_amount, total_amount FROM bookings WHERE id = ?',
+        'SELECT advance_amount, total_amount, pickup_type, pickup_charge FROM bookings WHERE id = ?',
         [booking_id]
       );
       if (bRows.length) {
         bAdvanceAmount = parseFloat(bRows[0].advance_amount || 0);
         bTotalAmount = parseFloat(bRows[0].total_amount || 0);
+        bPickupType = bRows[0].pickup_type || 'none';
+        bPickupCharge = parseFloat(bRows[0].pickup_charge || 0);
       }
     }
 
     const bBalanceDue = Math.max(0, bTotalAmount - bAdvanceAmount);
 
     const [result] = await conn.query(
-      'INSERT INTO job_carts (vehicle_id, visit_date, visit_number, status, notes, created_by, booking_id, advance_amount, advance_paid, balance_due) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [vehicleId, visit_date || new Date(), visitRows[0].next_visit, 'draft', notes || null, req.user.id, booking_id || null, bAdvanceAmount, bAdvanceAmount, bBalanceDue]
+      `INSERT INTO job_carts 
+       (vehicle_id, visit_date, visit_number, status, notes, created_by, booking_id, 
+        advance_amount, advance_paid, balance_due, pickup_type, pickup_charge) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        vehicleId, visit_date || new Date(), visitRows[0].next_visit, 'draft', notes || null, req.user.id, booking_id || null, 
+        bAdvanceAmount, bAdvanceAmount, bBalanceDue, bPickupType, bPickupCharge
+      ]
     );
 
     // Update booking status if converted from slot
@@ -210,6 +220,13 @@ exports.list = async (req, res) => {
     `;
     const [rows] = await pool.query(dataQuery, [...params, parseInt(limit), offset]);
 
+    if (req.user.role === 'staff') {
+      rows.forEach(r => {
+        delete r.total_amount;
+        delete r.customer_mobile;
+      });
+    }
+
     res.json({
       success: true,
       data: rows,
@@ -278,9 +295,13 @@ exports.getOne = async (req, res) => {
     // Fetch photos
     const [photos] = await pool.query('SELECT * FROM job_photos WHERE job_cart_id = ? ORDER BY uploaded_at', [id]);
 
-    const totalAmount = req.user.role !== 'staff'
+    let totalAmount = req.user.role !== 'staff'
       ? services.reduce((sum, s) => sum + (s.subtotal || 0), 0)
       : undefined;
+
+    if (totalAmount !== undefined && cart.pickup_charge) {
+      totalAmount += parseFloat(cart.pickup_charge || 0);
+    }
 
     res.json({
       success: true,
@@ -306,6 +327,8 @@ exports.getOne = async (req, res) => {
         advance_amount: req.user.role === 'staff' ? undefined : cart.advance_amount,
         advance_paid: req.user.role === 'staff' ? undefined : cart.advance_paid,
         balance_due: req.user.role === 'staff' ? undefined : cart.balance_due,
+        pickup_type: req.user.role === 'staff' ? undefined : cart.pickup_type,
+        pickup_charge: req.user.role === 'staff' ? undefined : parseFloat(cart.pickup_charge || 0),
       },
     });
   } catch (err) {
@@ -474,7 +497,8 @@ exports.complete = async (req, res) => {
     } else if (cart[0].discount_type === 'fixed') {
       discountAmt = parseFloat(cart[0].discount_value || 0);
     }
-    grandTotal = Math.max(0, grandTotal - discountAmt);
+    const pickupCharge = parseFloat(cart[0].pickup_charge || 0);
+    grandTotal = Math.max(0, grandTotal - discountAmt + pickupCharge);
 
     const advancePaid = parseFloat(cart[0].advance_paid || 0);
     const amountCollectedNow = Math.max(0, grandTotal - advancePaid);
@@ -829,7 +853,6 @@ exports.getInvoice = async (req, res) => {
       [id]
     );
     if (!cart.length) return res.status(404).json({ success: false, error: 'Not found' });
-    if (cart[0].status !== 'complete') return res.status(422).json({ success: false, error: 'Invoice available only for completed carts' });
 
     // Customer can only download own
     if (req.user.role === 'customer' && cart[0].customer_id !== req.user.id) {

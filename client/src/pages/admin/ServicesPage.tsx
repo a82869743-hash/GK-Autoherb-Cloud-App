@@ -35,6 +35,7 @@ export default function ServicesPage() {
     price_hatchback: 0, price_medium_hatchback: 0, price_sedan: 0, price_premium_sedan: 0, price_suv: 0,
   });
   const [active, setActive] = useState(true);
+  const [durationMinutes, setDurationMinutes] = useState(60);
 
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -47,7 +48,7 @@ export default function ServicesPage() {
   const openAdd = () => {
     setEditItem(null); setName(''); setDesc('');
     setPrices({ price_hatchback: 0, price_medium_hatchback: 0, price_sedan: 0, price_premium_sedan: 0, price_suv: 0 });
-    setActive(true); setPremium(false); setModalOpen(true);
+    setActive(true); setPremium(false); setDurationMinutes(60); setModalOpen(true);
   };
 
   const openEdit = (svc: any) => {
@@ -59,13 +60,13 @@ export default function ServicesPage() {
       price_premium_sedan: parseFloat(svc.price_premium_sedan) || 0,
       price_suv: parseFloat(svc.price_suv) || 0,
     });
-    setActive(!!svc.is_active); setPremium(!!svc.is_premium); setModalOpen(true);
+    setActive(!!svc.is_active); setPremium(!!svc.is_premium); setDurationMinutes(svc.duration_minutes || 60); setModalOpen(true);
   };
 
   const handleSave = async () => {
     if (!name.trim()) { toast('error', 'Name is required'); return; }
     try {
-      const payload = { name, description: desc, ...prices, is_active: active, is_premium: premium };
+      const payload = { name, description: desc, ...prices, is_active: active, is_premium: premium, duration_minutes: durationMinutes };
       if (editItem) {
         await updateMut.mutateAsync({ id: editItem.id, ...payload });
         toast('success', 'Service updated');
@@ -107,7 +108,10 @@ export default function ServicesPage() {
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <h3 className="font-bold text-[#1c1b1b] text-sm">{svc.name}</h3>
-                  {svc.is_premium ? <span className="text-[8px] font-extrabold uppercase tracking-widest px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded mt-1 inline-block">Premium</span> : null}
+                  <div className="flex items-center gap-2 mt-1">
+                    {svc.is_premium ? <span className="text-[8px] font-extrabold uppercase tracking-widest px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded inline-block">Premium</span> : null}
+                    {svc.duration_minutes ? <span className="text-[10px] font-semibold text-gray-500">⏱️ {svc.duration_minutes} mins</span> : null}
+                  </div>
                   {svc.description && <p className="text-xs text-[#5f5e5e] mt-1 line-clamp-2">{svc.description}</p>}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
@@ -138,9 +142,10 @@ export default function ServicesPage() {
         <div className="space-y-4">
           <Input label="Service Name" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Interior Cleaning" />
           <Input label="Description" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Brief description" />
+          <Input label="Duration (Minutes) *" type="number" value={durationMinutes || ''} onChange={e => setDurationMinutes(parseInt(e.target.value) || 0)} placeholder="60" />
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2">Pricing by Vehicle Category</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {CATEGORY_LABELS.map(cat => (
                 <Input key={cat.key} label={cat.label} type="number" value={prices[cat.key] || ''} onChange={e => updatePrice(cat.key, parseFloat(e.target.value) || 0)} />
               ))}

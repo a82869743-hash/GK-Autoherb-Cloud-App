@@ -1,35 +1,48 @@
 const pool = require('../config/db');
 const messagingService = require('../services/messagingService');
 
+// ─── GET LAST PICKUP ADDRESS ──────────────────────────────────────────────
+exports.getLastAddress = async (req, res) => {
+  try {
+    const customerId = req.user.id;
+    const [rows] = await pool.query(
+      'SELECT address FROM v2_pickup_requests WHERE customer_id = ? ORDER BY id DESC LIMIT 1',
+      [customerId]
+    );
+    res.json({ success: true, address: rows.length > 0 ? rows[0].address : '' });
+  } catch (err) {
+    console.error('Get last pickup address error:', err);
+    res.status(500).json({ success: false, error: 'Failed to fetch last address' });
+  }
+};
+
 // ─── CREATE PICKUP REQUEST ────────────────────────────────────────────────
 exports.create = async (req, res) => {
   try {
-    const { booking_id, address, scheduled_time, notes } = req.body;
+    const { booking_id, address, scheduled_time, notes, request_type } = req.body;
 
     if (!booking_id || !address) {
       return res.status(400).json({ success: false, error: 'Booking ID and address are required' });
     }
 
-    // Verify booking and get customer_id
-    const [bookings] = await pool.query('SELECT customer_id FROM bookings WHERE id = ?', [booking_id]);
+    // Verify booking and get customer_id and pickup_charge
+    const [bookings] = await pool.query('SELECT customer_id, pickup_charge, pickup_type FROM bookings WHERE id = ?', [booking_id]);
     if (!bookings.length) {
       return res.status(404).json({ success: false, error: 'Booking not found' });
     }
     const customerId = bookings[0].customer_id;
+    const pickupCharges = bookings[0].pickup_charge || 0;
+    const resolvedRequestType = request_type || bookings[0].pickup_type || 'pickup';
 
     // Check permissions: only customer who owns the booking or admin can create pickup
     if (req.user.role === 'customer' && customerId !== req.user.id) {
       return res.status(403).json({ success: false, error: 'Not authorized to request pickup for this booking' });
     }
 
-    // Get pickup charge from settings
-    const [settings] = await pool.query("SELECT value FROM settings WHERE key_name = 'pickup_charge_amount'");
-    const pickupCharges = settings.length ? parseFloat(settings[0].value) || 0 : 0;
-
     const [result] = await pool.query(
-      `INSERT INTO v2_pickup_requests (booking_id, customer_id, address, scheduled_time, notes, pickup_charges, status)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
-      [booking_id, customerId, address, scheduled_time || null, notes || null, pickupCharges]
+      `INSERT INTO v2_pickup_requests (booking_id, customer_id, address, scheduled_time, notes, pickup_charges, status, request_type)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
+      [booking_id, customerId, address, scheduled_time || null, notes || null, pickupCharges, resolvedRequestType]
     );
 
     res.status(201).json({
@@ -201,5 +214,51 @@ exports.getOne = async (req, res) => {
   } catch (err) {
     console.error('Get pickup details error:', err);
     res.status(500).json({ success: false, error: 'Failed to fetch pickup details' });
+  }
+};
+
+// ─── GET CUSTOMER SAVED ADDRESSES ──────────────────────────────────────────
+exports.getAddresses = async (req, res) => {
+  try {
+    const customerId = req.user.role === 'admin' && req.query.customer_id
+      ? req.query.customer_id
+      : req.user.id;
+
+    const [rows] = await pool.query(
+      'SELECT * FROM v2_customer_addresses WHERE customer_id = ? ORDER BY is_default DESC, created_at DESC',
+      [customerId]
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('Get customer addresses error:', err);
+    res.status(500).json({ success: false, error: 'Failed to fetch saved addresses' });
+  }
+};
+
+// ─── SAVE NEW CUSTOMER ADDRESS ─────────────────────────────────────────────
+exports.createAddress = async (req, res) => {
+  try {
+    const customerId = req.user.id;
+    const { address, landmark, city, state, pincode, latitude, longitude, is_default } = req.body;
+
+    if (!address || !city || !state || !pincode) {
+      return res.status(400).json({ success: false, error: 'Address, city, state and pincode are required' });
+    }
+
+    if (is_default) {
+      await pool.query('UPDATE v2_customer_addresses SET is_default = 0 WHERE customer_id = ?', [customerId]);
+    }
+
+    const [result] = await pool.query(
+      `INSERT INTO v2_customer_addresses 
+       (customer_id, address, landmark, city, state, pincode, latitude, longitude, is_default)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [customerId, address, landmark || null, city, state, pincode, latitude || null, longitude || null, is_default ? 1 : 0]
+    );
+
+    res.status(201).json({ success: true, message: 'Address saved successfully', data: { id: result.insertId } });
+  } catch (err) {
+    console.error('Create customer address error:', err);
+    res.status(500).json({ success: false, error: 'Failed to save address' });
   }
 };

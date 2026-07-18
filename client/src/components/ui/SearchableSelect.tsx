@@ -1,0 +1,122 @@
+import { useState, useEffect, useRef } from 'react';
+import { Search, ChevronDown, X } from 'lucide-react';
+
+interface Option {
+  value: string;
+  label: string;
+}
+
+interface SearchableSelectProps {
+  label?: string;
+  options: Option[];
+  value: string;
+  onChange: (e: { target: { value: string; name?: string } }) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  name?: string;
+  error?: string;
+}
+
+export default function SearchableSelect({
+  label,
+  options,
+  value,
+  onChange,
+  placeholder = 'Select...',
+  disabled = false,
+  name,
+  error,
+}: SearchableSelectProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const selectedOption = options.find((o) => o.value === value);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredOptions = options.filter((o) =>
+    o.label.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="w-full relative animate-fade-in-up" ref={containerRef}>
+      {label && (
+        <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#5f5e5e] mb-2">
+          {label}
+        </label>
+      )}
+      <div
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className={`w-full px-4 py-3 bg-[#f6f3f2] rounded-lg text-[#1c1b1b] font-medium flex items-center justify-between cursor-pointer text-base md:text-sm ${
+          disabled ? 'opacity-50 cursor-not-allowed' : ''
+        } ${isOpen ? 'ring-2 ring-[#D32F2F]/20 bg-white border border-[#D32F2F]/30' : ''} ${
+          error ? 'ring-2 ring-red-400' : ''
+        }`}
+      >
+        <span className={selectedOption ? 'text-[#1c1b1b]' : 'text-gray-400'}>
+          {selectedOption ? selectedOption.label : placeholder}
+        </span>
+        <ChevronDown size={16} className={`text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </div>
+
+      {isOpen && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+          <div className="p-2 border-b border-gray-100 flex items-center gap-2">
+            <Search size={14} className="text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search..."
+              className="w-full text-base md:text-sm border-none focus:ring-0 p-1"
+              autoFocus
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSearch('');
+                }}
+                className="p-1 hover:bg-gray-100 rounded text-gray-400"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+          <div className="py-1">
+            {filteredOptions.length === 0 ? (
+              <div className="px-4 py-2 text-xs text-gray-400">No matches found</div>
+            ) : (
+              filteredOptions.map((opt) => (
+                <div
+                  key={opt.value}
+                  onClick={() => {
+                    onChange({ target: { value: opt.value, name } });
+                    setIsOpen(false);
+                    setSearch('');
+                  }}
+                  className={`px-4 py-2 text-sm cursor-pointer hover:bg-red-50 hover:text-[#D32F2F] ${
+                    opt.value === value ? 'bg-red-50/50 text-[#D32F2F] font-semibold' : 'text-gray-700'
+                  }`}
+                >
+                  {opt.label}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+      {error && <p className="text-[11px] text-red-600 mt-1.5 font-medium">{error}</p>}
+    </div>
+  );
+}

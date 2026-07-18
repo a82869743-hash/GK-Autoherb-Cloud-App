@@ -292,6 +292,8 @@ function CreateQuickWashModal({ onClose }: { onClose: () => void }) {
   const [customerQuery, setCustomerQuery] = useState('');
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [selectedCustomerName, setSelectedCustomerName] = useState('');
+  const [customBrand, setCustomBrand] = useState('');
+  const [customModel, setCustomModel] = useState('');
 
   // Data hooks
   const { data: searchResults = [] } = useCustomerSearch(customerQuery);
@@ -340,9 +342,14 @@ function CreateQuickWashModal({ onClose }: { onClose: () => void }) {
       return;
     }
 
+    const finalBrand = form.vehicle_brand === 'Others' ? customBrand : form.vehicle_brand;
+    const finalModel = (form.vehicle_brand === 'Others' || form.vehicle_model === 'Other') ? customModel : form.vehicle_model;
+
     try {
       const payload = {
         ...form,
+        vehicle_brand: finalBrand,
+        vehicle_model: finalModel,
         service_id: form.service_id || undefined,
         vehicle_id: form.vehicle_id || undefined,
         customer_id: form.customer_id || undefined,
@@ -428,13 +435,18 @@ function CreateQuickWashModal({ onClose }: { onClose: () => void }) {
               <div className="relative">
                 <select
                   value={form.vehicle_brand}
-                  onChange={(e) => setForm((f) => ({ ...f, vehicle_brand: e.target.value, vehicle_model: '' }))}
+                  onChange={(e) => {
+                    setForm((f) => ({ ...f, vehicle_brand: e.target.value, vehicle_model: '' }));
+                    setCustomBrand('');
+                    setCustomModel('');
+                  }}
                   className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-red-100 focus:border-red-300 outline-none appearance-none cursor-pointer"
                 >
                   <option value="">Select Brand</option>
                   {brands.map((b: string) => (
                     <option key={b} value={b}>{b}</option>
                   ))}
+                  <option value="Others">Others (Enter Manually)</option>
                 </select>
                 <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
@@ -444,19 +456,54 @@ function CreateQuickWashModal({ onClose }: { onClose: () => void }) {
               <div className="relative">
                 <select
                   value={form.vehicle_model}
-                  onChange={(e) => setForm((f) => ({ ...f, vehicle_model: e.target.value }))}
-                  disabled={!form.vehicle_brand}
+                  onChange={(e) => {
+                    setForm((f) => ({ ...f, vehicle_model: e.target.value }));
+                    setCustomModel('');
+                  }}
+                  disabled={!form.vehicle_brand || form.vehicle_brand === 'Others'}
                   className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-red-100 focus:border-red-300 outline-none appearance-none cursor-pointer disabled:bg-gray-50 disabled:text-gray-400"
                 >
                   <option value="">Select Model</option>
                   {models.map((m: string) => (
                     <option key={m} value={m}>{m}</option>
                   ))}
+                  <option value="Other">Other (Enter Manually)</option>
                 </select>
                 <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
             </div>
           </div>
+
+          {(form.vehicle_brand === 'Others' || form.vehicle_model === 'Other') && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2 text-left">
+              {form.vehicle_brand === 'Others' && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wider">Enter Brand Name</label>
+                  <input
+                    type="text"
+                    value={customBrand}
+                    onChange={(e) => setCustomBrand(e.target.value)}
+                    placeholder="e.g. Porsche"
+                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-red-100 focus:border-red-300 outline-none"
+                    required
+                  />
+                </div>
+              )}
+              {(form.vehicle_brand === 'Others' || form.vehicle_model === 'Other') && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wider">Enter Model Name</label>
+                  <input
+                    type="text"
+                    value={customModel}
+                    onChange={(e) => setCustomModel(e.target.value)}
+                    placeholder="e.g. Cayenne"
+                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-red-100 focus:border-red-300 outline-none"
+                    required
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Vehicle Category */}
           <div>

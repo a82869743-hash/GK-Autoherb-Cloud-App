@@ -207,7 +207,8 @@ exports.create = async (req, res) => {
     const {
       slot_id, service_id, service_ids, package_id,
       vehicle_id, vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category,
-      is_free_wash = false, use_package = false, notes
+      is_free_wash = false, use_package = false, notes, pay_advance,
+      pickup_type = 'none', pickup_address_details = null
     } = req.body;
     let package_service_name = req.body.package_service_name;
 
@@ -274,6 +275,43 @@ exports.create = async (req, res) => {
       totalDuration = durations[0]?.total || null;
     }
 
+    // Determine package free pickup eligibility
+    let hasFreePickup = false;
+    if (use_package) {
+      const [pkgRows] = await conn.query(
+        `SELECT p.pickup_enabled 
+         FROM user_packages up
+         JOIN packages p ON up.package_id = p.id
+         WHERE up.user_id = ? AND up.package_status = 'active'
+           AND (up.end_date IS NULL OR up.end_date > NOW())
+         ORDER BY up.start_date DESC LIMIT 1`,
+        [customerId]
+      );
+      if (pkgRows.length && pkgRows[0].pickup_enabled === 1) {
+        hasFreePickup = true;
+      }
+    }
+
+    // Calculate pickup charges
+    let calculatedPickupCharge = 0;
+    if (pickup_type && pickup_type !== 'none' && !hasFreePickup) {
+      const [chargeSettings] = await conn.query(
+        `SELECT key_name, value FROM settings WHERE key_name IN ('pickup_charge', 'drop_charge', 'pickup_drop_charge')`
+      );
+      const cSettings = chargeSettings.reduce((acc, curr) => {
+        acc[curr.key_name] = curr.value;
+        return acc;
+      }, {});
+      
+      if (pickup_type === 'pickup') {
+        calculatedPickupCharge = parseFloat(cSettings.pickup_charge || '150');
+      } else if (pickup_type === 'drop') {
+        calculatedPickupCharge = parseFloat(cSettings.drop_charge || '150');
+      } else if (pickup_type === 'both') {
+        calculatedPickupCharge = parseFloat(cSettings.pickup_drop_charge || '250');
+      }
+    }
+
     let calculatedTotal = 0;
     let advanceAmount = 0;
     const isAdvanceEligible = !is_free_wash && !use_package;
@@ -285,18 +323,25 @@ exports.create = async (req, res) => {
         `SELECT price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv FROM services WHERE id IN (?)`,
         [allServiceIds]
       );
-      calculatedTotal = servicesList.reduce((sum, s) => {
+      let servicesTotal = servicesList.reduce((sum, s) => {
         return sum + (Number(s[priceKey]) || Number(s.price_sedan) || 0);
       }, 0);
 
-      const advType = settings.advance_type || 'none';
-      const advVal = parseFloat(settings.advance_value || '0');
-
-      if (advType === 'fixed') {
-        advanceAmount = Math.min(calculatedTotal, advVal);
-      } else if (advType === 'percentage') {
-        advanceAmount = (calculatedTotal * advVal) / 100;
+      // Calculate totals based on payment selection (full advance with 10% discount, part advance of ₹200, or none)
+      if (pay_advance === 'full' || pay_advance === true) {
+        servicesTotal = Math.round(servicesTotal * 0.90);
+        calculatedTotal = servicesTotal + calculatedPickupCharge;
+        advanceAmount = calculatedTotal;
+      } else if (pay_advance === 'part') {
+        calculatedTotal = servicesTotal + calculatedPickupCharge;
+        advanceAmount = Math.min(200, calculatedTotal);
+      } else {
+        // Proceed without advance (pay full standard amount at studio)
+        advanceAmount = 0;
+        calculatedTotal = servicesTotal + calculatedPickupCharge;
       }
+    } else {
+      calculatedTotal = calculatedPickupCharge;
     }
 
     // 4. Free wash validation
@@ -393,21 +438,52 @@ exports.create = async (req, res) => {
       expiresAt = req.user.role === 'admin' ? null : new Date(Date.now() + 5 * 60 * 1000);
     }
 
+    // ─── Save Address Details dynamically if provided ───
+    if (pickup_type && pickup_type !== 'none' && pickup_address_details) {
+      const { address, landmark, city, state, pincode, latitude, longitude } = pickup_address_details;
+      if (address && city && state && pincode) {
+        const [existing] = await conn.query('SELECT id FROM v2_customer_addresses WHERE customer_id = ?', [customerId]);
+        if (existing.length === 0) {
+          await conn.query(
+            `INSERT INTO v2_customer_addresses 
+             (customer_id, address, landmark, city, state, pincode, latitude, longitude, is_default)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+            [customerId, address, landmark || null, city, state, pincode, latitude || null, longitude || null]
+          );
+          console.log('[BOOKING] Saved first customer address under profile:', address);
+        } else {
+          const [dupe] = await conn.query(
+            'SELECT id FROM v2_customer_addresses WHERE customer_id = ? AND address = ? AND pincode = ?',
+            [customerId, address, pincode]
+          );
+          if (dupe.length === 0) {
+            await conn.query(
+              `INSERT INTO v2_customer_addresses 
+               (customer_id, address, landmark, city, state, pincode, latitude, longitude, is_default)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+              [customerId, address, landmark || null, city, state, pincode, latitude || null, longitude || null]
+            );
+            console.log('[BOOKING] Saved new customer address under profile:', address);
+          }
+        }
+      }
+    }
+
     // 7. Insert booking
     console.log('[BOOKING] Inserting booking — type:', bookingType, 'status:', targetStatus, 'advance_amount:', advanceAmount);
     const [result] = await conn.query(
       `INSERT INTO bookings 
        (customer_id, vehicle_id, slot_id, service_id, package_id, 
         vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category, total_duration,
-        status, is_free_wash, notes, booking_type, user_package_id, package_service_name, expires_at, advance_amount, total_amount)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        status, is_free_wash, notes, booking_type, user_package_id, package_service_name, expires_at, advance_amount, total_amount, pickup_type, pickup_charge)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         customerId, resolvedVehicleId, slot_id,
         primaryServiceId || null, package_id || null,
         resolvedBrand, resolvedModel, resolvedRegNo, vehicle_category || null, totalDuration,
         targetStatus, is_free_wash ? 1 : 0, notes || null,
         bookingType, resolvedUserPackageId, package_service_name || null,
-        expiresAt, advanceAmount, calculatedTotal
+        expiresAt, advanceAmount, calculatedTotal, pickup_type, calculatedPickupCharge
       ]
     );
 
@@ -616,7 +692,7 @@ exports.approve = async (req, res) => {
           }
 
           await conn.query(
-            `INSERT INTO loyalty_transactions (customer_id, type, amount, description) VALUES (?, 'earn', ?, 'Referral reward points awarded.')`,
+            `INSERT INTO loyalty_transactions (customer_id, type, points, description) VALUES (?, 'earn', ?, 'Referral reward points awarded.')`,
             [ref.referrer_id, referrerPoints]
           );
         }
@@ -683,7 +759,7 @@ exports.approve = async (req, res) => {
           }
 
           await conn.query(
-            `INSERT INTO loyalty_transactions (customer_id, type, amount, description) VALUES (?, 'earn', ?, 'New customer welcome bonus points')`,
+            `INSERT INTO loyalty_transactions (customer_id, type, points, description) VALUES (?, 'earn', ?, 'New customer welcome bonus points')`,
             [booking.customer_id, welcomeValue]
           );
         } else if (welcomeType === 'discount') {
@@ -1341,7 +1417,7 @@ exports.createManual = async (req, res) => {
             await conn.query('INSERT INTO loyalty (customer_id, credits) VALUES (?, ?)', [ref.referrer_id, referrerPoints]);
           }
           await conn.query(
-            `INSERT INTO loyalty_transactions (customer_id, type, amount, description) VALUES (?, 'earn', ?, 'Referral reward points awarded.')`,
+            `INSERT INTO loyalty_transactions (customer_id, type, points, description) VALUES (?, 'earn', ?, 'Referral reward points awarded.')`,
             [ref.referrer_id, referrerPoints]
           );
         }
@@ -1402,7 +1478,7 @@ exports.createManual = async (req, res) => {
             await conn.query('INSERT INTO loyalty (customer_id, credits) VALUES (?, ?)', [customer_id, welcomeValue]);
           }
           await conn.query(
-            `INSERT INTO loyalty_transactions (customer_id, type, amount, description) VALUES (?, 'earn', ?, 'New customer welcome bonus points')`,
+            `INSERT INTO loyalty_transactions (customer_id, type, points, description) VALUES (?, 'earn', ?, 'New customer welcome bonus points')`,
             [customer_id, welcomeValue]
           );
         } else if (welcomeType === 'discount') {
@@ -1469,5 +1545,24 @@ exports.createManual = async (req, res) => {
     res.status(500).json({ success: false, error: err.sqlMessage || err.message || 'Server error' });
   } finally {
     conn.release();
+  }
+};
+
+exports.downloadInvoice = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { generateBookingInvoicePDF } = require('../services/invoiceService');
+    const { pdfBuffer, invoiceNumber } = await generateBookingInvoicePDF(id);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${invoiceNumber}.pdf"`,
+      'Content-Length': pdfBuffer.length
+    });
+
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error('Download booking invoice error:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to generate invoice PDF' });
   }
 };

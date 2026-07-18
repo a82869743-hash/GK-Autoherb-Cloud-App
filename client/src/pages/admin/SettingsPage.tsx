@@ -87,6 +87,38 @@ export default function SettingsPage() {
             </div>
           </section>
 
+          {/* Pickup & Drop Settings Section */}
+          <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+            <div className="flex items-center gap-2 mb-4 text-[#D32F2F] border-b border-gray-100 pb-2">
+              <Settings size={20} />
+              <h2 className="font-bold text-lg text-[#1c1b1b]">Pickup & Drop Charges</h2>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Input 
+                label="Pickup Charge (₹)" 
+                type="number" 
+                value={form.pickup_charge || ''} 
+                onChange={e => handleChange('pickup_charge', e.target.value)} 
+                placeholder="e.g. 150" 
+              />
+              <Input 
+                label="Drop Charge (₹)" 
+                type="number" 
+                value={form.drop_charge || ''} 
+                onChange={e => handleChange('drop_charge', e.target.value)} 
+                placeholder="e.g. 150" 
+              />
+              <Input 
+                label="Pickup + Drop Charge (₹)" 
+                type="number" 
+                value={form.pickup_drop_charge || ''} 
+                onChange={e => handleChange('pickup_drop_charge', e.target.value)} 
+                placeholder="e.g. 250" 
+              />
+            </div>
+          </section>
+
           {/* Booking & Advance Payment Settings */}
           <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
             <div className="flex items-center gap-2 mb-4 text-[#D32F2F] border-b border-gray-100 pb-2">

@@ -26,12 +26,13 @@ interface InvoiceRecord {
 }
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; icon: typeof FileText }> = {
-  job_cart:      { label: 'Job Card',    color: '#1565C0', bg: '#E3F2FD', icon: ClipboardList },
-  manual_bill:   { label: 'Manual Bill', color: '#2E7D32', bg: '#E8F5E9', icon: Receipt },
-  salary:        { label: 'Salary Slip', color: '#6A1B9A', bg: '#F3E5F5', icon: Wallet },
-  buy_sell_buy:  { label: 'Purchase',    color: '#E65100', bg: '#FFF3E0', icon: ShoppingCart },
-  buy_sell_sell: { label: 'Sale',        color: '#00695C', bg: '#E0F2F1', icon: ShoppingCart },
-  quick_wash:    { label: 'Quick Wash',  color: '#0277BD', bg: '#E1F5FE', icon: Receipt },
+  job_cart:          { label: 'Job Card',    color: '#1565C0', bg: '#E3F2FD', icon: ClipboardList },
+  manual_bill:       { label: 'Manual Bill', color: '#2E7D32', bg: '#E8F5E9', icon: Receipt },
+  salary:            { label: 'Salary Slip', color: '#6A1B9A', bg: '#F3E5F5', icon: Wallet },
+  buy_sell_buy:      { label: 'Purchase',    color: '#E65100', bg: '#FFF3E0', icon: ShoppingCart },
+  buy_sell_sell:     { label: 'Sale',        color: '#00695C', bg: '#E0F2F1', icon: ShoppingCart },
+  quick_wash:        { label: 'Quick Wash',  color: '#0277BD', bg: '#E1F5FE', icon: Receipt },
+  package_purchase:  { label: 'Package',     color: '#AD1457', bg: '#FCE4EC', icon: Receipt },
 };
 
 const TAB_FILTERS: { key: BillType | 'quick_wash'; label: string; icon: typeof FileText }[] = [
@@ -109,10 +110,11 @@ export default function AllInvoicesPage() {
       if (rec.type === 'manual_bill') path = `/billing/${rec.id}/invoice`;
       if (rec.type === 'salary')      path = `/salary/${rec.id}/slip`;
       if (rec.type === 'quick_wash')  path = `/quick-wash/${rec.id}/invoice`;
+      if (rec.type === 'package_purchase') path = `/packages/requests/${rec.id}/invoice`;
       if (rec.type.startsWith('buy_sell')) path = `/buy-sell/${rec.id}/invoice`;
 
-      if (!path) return;
-      const resp = await api.get(path, { responseType: 'blob' });
+      if (!path) { toast.error('PDF not available for this record type'); return; }
+      const resp = await api.get(path, { responseType: 'blob', timeout: 30000 });
       const blob = new Blob([resp.data], { type: 'application/pdf' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
@@ -120,7 +122,7 @@ export default function AllInvoicesPage() {
       link.click();
       URL.revokeObjectURL(link.href);
     } catch (e) {
-      alert('Could not generate invoice. Please try again.');
+      toast.error('Could not generate invoice. Please try again.');
     } finally {
       setDownloading(null);
     }

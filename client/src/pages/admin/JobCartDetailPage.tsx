@@ -605,7 +605,10 @@ export default function JobCartDetailPage() {
                 </div>
               ) : (
                 <div className="text-sm text-[#5f5e5e] space-y-0.5">
-                  <p><span className="font-semibold">Customer:</span> {(cart as any).customer?.name || 'N/A'} · {(cart as any).customer?.mobile}</p>
+                  <p>
+                    <span className="font-semibold">Customer:</span> {(cart as any).customer?.name || 'N/A'}
+                    {!isStaff && (cart as any).customer?.mobile && ` · ${(cart as any).customer?.mobile}`}
+                  </p>
                   {cart.vehicle && (
                     <p><span className="font-semibold">Vehicle:</span> {cart.vehicle.brand} {cart.vehicle.model}{cart.vehicle.car_year || cart.vehicle.manufacture_year ? ' (' + (cart.vehicle.car_year || cart.vehicle.manufacture_year) + ')' : ''}</p>
                   )}
@@ -618,10 +621,15 @@ export default function JobCartDetailPage() {
 
             {/* Total */}
             {!isStaff && cart.total_amount !== undefined && (
-              <div className="text-right shrink-0 space-y-1.5">
+              <div className="text-left sm:text-right shrink-0 space-y-1.5">
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e]">Total Amount</p>
                   <p className="text-3xl font-black text-[#1c1b1b] tracking-tight">{formatINR(cart.total_amount)}</p>
+                  {(cart as any).pickup_charge > 0 && (
+                    <p className="text-[10px] text-gray-500 font-medium mt-0.5">
+                      Includes ₹{(cart as any).pickup_charge} Pickup & Drop ({(cart as any).pickup_type})
+                    </p>
+                  )}
                 </div>
                 {((cart as any).advance_paid || 0) > 0 ? (
                   <>
@@ -737,7 +745,7 @@ export default function JobCartDetailPage() {
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2">Before</p>
                 {beforePhotos.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+                  <div className="grid grid-cols-3 gap-2 mb-4">
                     {beforePhotos.map((p: JobPhoto) => (
                       <div key={p.id} className="relative group/photo aspect-square w-full">
                         <img src={p.url} alt="Before" className="rounded-lg object-cover w-full h-full" />
@@ -777,7 +785,7 @@ export default function JobCartDetailPage() {
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2">After</p>
                 {afterPhotos.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+                  <div className="grid grid-cols-3 gap-2 mb-4">
                     {afterPhotos.map((p: JobPhoto) => (
                       <div key={p.id} className="relative group/photo aspect-square w-full">
                         <img src={p.url} alt="After" className="rounded-lg object-cover w-full h-full" />

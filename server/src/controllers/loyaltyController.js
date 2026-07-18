@@ -436,3 +436,66 @@ exports.updateSettings = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to update settings' });
   }
 };
+
+// ═══════════════════════════════════════════════════════════
+// REDEEM POINTS TO WASH
+// POST /loyalty/redeem-wash
+// ═══════════════════════════════════════════════════════════
+exports.redeemPointsToWash = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const targetCustomer = req.user.id;
+    const pointsNeeded = 1000;
+
+    await ensureLoyaltyRow(conn, targetCustomer);
+
+    const [current] = await conn.query(
+      'SELECT points, free_washes FROM loyalty WHERE customer_id = ? FOR UPDATE', [targetCustomer]
+    );
+    const currentPoints = current[0]?.points || 0;
+    const currentWashes = current[0]?.free_washes || 0;
+
+    if (currentPoints < pointsNeeded) {
+      await conn.rollback();
+      return res.status(400).json({
+        success: false,
+        error: `Insufficient points. 1000 points required to redeem a free wash. You have ${currentPoints} points.`
+      });
+    }
+
+    const newPoints = currentPoints - pointsNeeded;
+    const newWashes = currentWashes + 1;
+
+    await conn.query(
+      'UPDATE loyalty SET points = ?, free_washes = ? WHERE customer_id = ?',
+      [newPoints, newWashes, targetCustomer]
+    );
+
+    await conn.query(
+      `INSERT INTO loyalty_transactions
+       (customer_id, type, points, balance_after, reference_type, description, created_by)
+       VALUES (?, 'redeem', ?, ?, 'manual', 'Redeemed 1000 points for 1 Free Wash', ?)`,
+      [targetCustomer, -pointsNeeded, newPoints, req.user.id]
+    );
+
+    await conn.commit();
+
+    res.json({
+      success: true,
+      data: {
+        points_redeemed: pointsNeeded,
+        new_points_balance: newPoints,
+        new_washes_balance: newWashes
+      },
+      message: 'Successfully redeemed 1000 points for 1 Free Wash!',
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Redeem points to wash error:', err);
+    res.status(500).json({ success: false, error: 'Failed to redeem points to wash' });
+  } finally {
+    conn.release();
+  }
+};

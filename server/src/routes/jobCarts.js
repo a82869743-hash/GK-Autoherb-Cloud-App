@@ -10,7 +10,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 router.get('/vehicles/lookup/:regNo', auth, role(['admin']), ctrl.lookup);
 
 // Job cart CRUD
-router.get('/',         auth, role(['admin', 'customer']), ctrl.list);
+router.get('/',         auth, role(['admin', 'customer', 'staff']), ctrl.list);
 router.post('/',        auth, role(['admin', 'staff']), ctrl.create);
 router.get('/:id',      auth, role(['admin', 'customer', 'staff']), ctrl.getOne);
 router.put('/:id',      auth, role(['admin', 'staff']), ctrl.update);

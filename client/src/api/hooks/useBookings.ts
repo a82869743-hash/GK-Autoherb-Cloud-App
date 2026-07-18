@@ -47,6 +47,9 @@ export const useCreateBooking = () => {
       vehicle_brand?: string; vehicle_model?: string; vehicle_reg_no?: string;
       vehicle_category?: string;
       is_free_wash?: boolean; use_package?: boolean; notes?: string;
+      pay_advance?: boolean | 'full' | 'part' | 'none';
+      pickup_type?: string;
+      pickup_address_details?: any;
     }) => {
       const res = await api.post('/bookings', payload);
       return res.data;

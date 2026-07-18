@@ -38,6 +38,8 @@ import VehiclesPage from './pages/customer/VehiclesPage';
 import ProfilePage from './pages/customer/ProfilePage';
 import CustomerDashboardPage from './pages/customer/DashboardPage';
 import CustomerBuyPackagesPage from './pages/customer/BuyPackagesPage';
+import CustomerProductsPage from './pages/customer/ProductsPage';
+import AdminProductOrdersPage from './pages/admin/ProductOrdersPage';
 
 // Staff & Accounts pages
 import StaffPage from './pages/admin/StaffPage';
@@ -305,6 +307,7 @@ export default function App() {
         <Route path="staff/:id" element={<StaffDetailPage />} />
         <Route path="accounts" element={<AccountsPage />} />
         <Route path="buy-sell" element={<BuySellPage />} />
+        <Route path="product-orders" element={<AdminProductOrdersPage />} />
         <Route path="messages" element={<MessagesPage />} />
         <Route path="inquiries" element={<InquiriesPage />} />
         <Route path="import" element={<ImportPage />} />
@@ -354,6 +357,7 @@ export default function App() {
         <Route path="loyalty" element={<LoyaltyPage />} />
         <Route path="vehicles" element={<VehiclesPage />} />
         <Route path="buy-packages" element={<CustomerBuyPackagesPage />} />
+        <Route path="products" element={<CustomerProductsPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="delivery/:id" element={<TrackingPage />} />
       </Route>

@@ -126,7 +126,7 @@ exports.sendPackageExpiryReminder = async (phone, customerName, packageName, exp
 };
 
 // ─── LIST MESSAGE HISTORY ───────────────────────────────
-exports.list = async (req, res) => {
+exports.list = async (req, res, next) => {
   try {
     const { customer_id, status, message_type, from, to, page = 1, limit = 50 } = req.query;
     let where = '1=1';
@@ -149,38 +149,12 @@ exports.list = async (req, res) => {
 
     res.json({ success: true, data: rows, pagination: { total, page: Number(page), limit: Number(limit), pages: Math.ceil(total / limit) } });
   } catch (err) {
-    console.warn('WhatsApp list error (falling back to mock data):', err.message);
-    res.json({
-      success: true,
-      data: [
-        {
-          id: 1,
-          phone: '+919876543210',
-          template_name: null,
-          message_type: 'manual',
-          message_body: 'Dear customer, your vehicle wash has started! Track live status at the GK portal.',
-          status: 'sent',
-          sent_at: new Date(Date.now() - 3600000).toISOString(),
-          customer_name: 'John Doe'
-        },
-        {
-          id: 2,
-          phone: '+919876543211',
-          template_name: 'booking_confirm',
-          message_type: 'manual',
-          message_body: 'Booking Confirmed for Premium Wash on 16/06/2026',
-          status: 'delivered',
-          sent_at: new Date(Date.now() - 86400000).toISOString(),
-          customer_name: 'Jane Smith'
-        }
-      ],
-      pagination: { total: 2, page: 1, limit: 50, pages: 1 }
-    });
+    next(err);
   }
 };
 
 // ─── STATS ──────────────────────────────────────────────
-exports.stats = async (req, res) => {
+exports.stats = async (req, res, next) => {
   try {
     const [[stats]] = await pool.query(`
       SELECT
@@ -194,18 +168,7 @@ exports.stats = async (req, res) => {
     `);
     res.json({ success: true, data: stats });
   } catch (err) {
-    console.warn('WhatsApp stats error (falling back to mock data):', err.message);
-    res.json({
-      success: true,
-      data: {
-        total: 12,
-        sent: 8,
-        delivered: 3,
-        failed: 1,
-        pending: 0,
-        today: 4
-      }
-    });
+    next(err);
   }
 };
 

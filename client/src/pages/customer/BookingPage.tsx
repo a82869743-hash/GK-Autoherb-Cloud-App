@@ -5,6 +5,8 @@ import { useSlots } from '../../api/hooks/useSlots';
 import { useCreateBooking } from '../../api/hooks/useBookings';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
+import Select from '../../components/ui/Select';
+import SearchableSelect from '../../components/ui/SearchableSelect';
 import { useUIStore } from '../../store/uiStore';
 import { formatTime } from '../../utils/formatters';
 import { useBrands, useModels } from '../../api/hooks/useVehicles';
@@ -70,6 +72,8 @@ export default function BookingPage() {
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
   const [regNo, setRegNo] = useState('');
+  const [customBrand, setCustomBrand] = useState('');
+  const [customModel, setCustomModel] = useState('');
 
   // Step 3: Date
   const [selectedDate, setSelectedDate] = useState('');
@@ -83,11 +87,18 @@ export default function BookingPage() {
   const [bookingResult, setBookingResult] = useState<any>(null);
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [submittingOnline, setSubmittingOnline] = useState(false);
+  const [payAdvance, setPayAdvance] = useState<'full' | 'part' | 'none'>('full');
 
   // Pickup options
-  const [requestPickup, setRequestPickup] = useState(false);
+  const [pickupOption, setPickupOption] = useState<'none' | 'pickup' | 'drop' | 'both'>('none');
   const [pickupAddress, setPickupAddress] = useState('');
   const [pickupTime, setPickupTime] = useState('');
+  const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<number | 'new'>('new');
+  const [landmark, setLandmark] = useState('');
+  const [city, setCity] = useState('');
+  const [stateName, setStateName] = useState('Gujarat');
+  const [pincode, setPincode] = useState('');
 
   // Autocomplete data
   const { data: brandsRes } = useBrands();
@@ -99,13 +110,15 @@ export default function BookingPage() {
       try {
         const initialVehicleId = new URLSearchParams(window.location.search).get('vehicle_id');
         const activePkgUrl = initialVehicleId ? `/user-packages/active?vehicle_id=${initialVehicleId}` : '/user-packages/active';
-        const [svcRes, pkgRes, myVehiclesRes, activePkgRes, settingsRes, dashboardRes] = await Promise.all([
+        const [svcRes, pkgRes, myVehiclesRes, activePkgRes, settingsRes, dashboardRes, lastAddressRes, addressesRes] = await Promise.all([
           api.get('/services').catch(() => ({ data: { data: [] } })),
           api.get('/packages').catch(() => ({ data: { data: [] } })),
           api.get('/vehicles/my-vehicles').catch(() => ({ data: { data: [] } })),
           api.get(activePkgUrl).catch(() => ({ data: { data: [] } })),
           api.get('/settings').catch(() => ({ data: { data: {} } })),
           api.get('/dashboard').catch(() => ({ data: {} })),
+          api.get('/pickup-requests/last-address').catch(() => ({ data: { address: '' } })),
+          api.get('/pickup-requests/addresses').catch(() => ({ data: { success: false, data: [] } })),
         ]);
         setServices(svcRes.data.data || []);
         setPackages(pkgRes.data.data || []);
@@ -141,10 +154,29 @@ export default function BookingPage() {
           setSettings(settingsRes.data.data || {});
         }
 
-        const loyaltyData = dashboardRes?.data?.loyalty || { credits: 0, free_washes: 0, wax_count: 0 };
+        const loyaltyData = dashboardRes?.data?.data?.loyalty || { credits: 0, free_washes: 0, wax_count: 0 };
         setLoyalty(loyaltyData);
         if (searchParams.get('free_wash') === 'true' && loyaltyData.free_washes > 0) {
           setUseFreeWash(true);
+        }
+
+        const addrRes = addressesRes || { data: { success: false, data: [] } };
+        if (addrRes?.data?.success && addrRes?.data?.data) {
+          const addrs = addressesRes.data.data;
+          setSavedAddresses(addrs);
+          if (addrs.length > 0) {
+            const defAddr = addrs.find((a: any) => a.is_default) || addrs[0];
+            setSelectedAddressId(defAddr.id);
+            setPickupAddress(defAddr.address);
+            setLandmark(defAddr.landmark || '');
+            setCity(defAddr.city || '');
+            setStateName(defAddr.state || 'Gujarat');
+            setPincode(defAddr.pincode || '');
+          } else if (lastAddressRes.data?.success && lastAddressRes.data?.address) {
+            setPickupAddress(lastAddressRes.data.address);
+          }
+        } else if (lastAddressRes.data?.success && lastAddressRes.data?.address) {
+          setPickupAddress(lastAddressRes.data.address);
         }
       } catch {} finally { setServicesLoading(false); }
     })();
@@ -177,12 +209,17 @@ export default function BookingPage() {
 
   const canNext = useMemo(() => {
     switch (step) {
-      case 0: return (isPackageBooking ? selectedPackageServiceNames.length > 0 : selectedServices.length > 0) && brand.trim().length > 0 && model.trim().length > 0;
+      case 0: {
+        const brandValid = brand === 'Others' ? customBrand.trim().length > 0 : brand.trim().length > 0;
+        const modelValid = (brand === 'Others' || model === 'Other') ? customModel.trim().length > 0 : model.trim().length > 0;
+        const servicesValid = isPackageBooking ? selectedPackageServiceNames.length > 0 : selectedServices.length > 0;
+        return servicesValid && brandValid && modelValid;
+      }
       case 1: return selectedDate.length > 0;
       case 2: return selectedSlot !== null;
       default: return true;
     }
-  }, [step, selectedServices, selectedPackage, selectedPackageServiceNames, isPackageBooking, brand, model, selectedDate, selectedSlot]);
+  }, [step, selectedServices, selectedPackage, selectedPackageServiceNames, isPackageBooking, brand, model, customBrand, customModel, selectedDate, selectedSlot]);
 
   const selectedServicesObjs = services.filter((s) => selectedServices.includes(s.id));
   const selectedPackageObj = activePackages.find((p) => p.package_id === selectedPackage) || packages.find((p) => p.id === selectedPackage);
@@ -215,7 +252,7 @@ export default function BookingPage() {
           const sName = s.name.toLowerCase();
           const uName = name.toLowerCase();
           if (sName === uName) return true;
-          if ((uName === 'foam wash' || uName === 'car foam wash') && (sName.includes('foam wash') || sName.includes('car wash'))) return true;
+          if ((uName === 'foam wash' || uName === 'car foam wash' || uName === 'full foam wash') && (sName.includes('foam wash') || sName.includes('car wash'))) return true;
           if ((uName === 'wax coat' || uName === 'body wax coat') && (sName.includes('teflon') || sName.includes('wax') || sName.includes('ceramic'))) return true;
           if (uName === 'deep cleaning' && sName.includes('interior cleaning')) return true;
           if (uName === 'two wheeler wash' && sName.includes('bike wash')) return true;
@@ -239,17 +276,38 @@ export default function BookingPage() {
     }, 0);
   }, [isPackageBooking, filter, selectedServicesObjs, useFreeWash]);
 
-  const requiredAdvance = useMemo(() => {
-    if (isPackageBooking || useFreeWash) return 0;
-    const advType = settings.advance_type || 'none';
-    const advVal = parseFloat(settings.advance_value || '0');
-    if (advType === 'fixed') {
-      return Math.min(estimatedTotal, advVal);
-    } else if (advType === 'percentage') {
-      return (estimatedTotal * advVal) / 100;
-    }
+  const activePackageHasFreePickup = useMemo(() => {
+    return activePackages.length > 0 && activePackages[0].pickup_enabled === 1;
+  }, [activePackages]);
+
+  const pickupCharge = useMemo(() => {
+    if (pickupOption === 'none') return 0;
+    if (activePackageHasFreePickup) return 0;
+    if (pickupOption === 'pickup') return parseFloat(settings.pickup_charge || '150');
+    if (pickupOption === 'drop') return parseFloat(settings.drop_charge || '150');
+    if (pickupOption === 'both') return parseFloat(settings.pickup_drop_charge || '250');
     return 0;
-  }, [isPackageBooking, settings, estimatedTotal, useFreeWash]);
+  }, [pickupOption, activePackageHasFreePickup, settings]);
+
+  const discountAmount = useMemo(() => {
+    if (isPackageBooking || useFreeWash || payAdvance !== 'full') return 0;
+    return Math.round(estimatedTotal * 0.10);
+  }, [isPackageBooking, useFreeWash, payAdvance, estimatedTotal]);
+
+  const finalTotal = useMemo(() => {
+    return estimatedTotal - discountAmount + pickupCharge;
+  }, [estimatedTotal, discountAmount, pickupCharge]);
+
+  const requiredAdvancePossible = useMemo(() => {
+    if (isPackageBooking || useFreeWash) return 0;
+    return estimatedTotal + pickupCharge;
+  }, [isPackageBooking, estimatedTotal, useFreeWash, pickupCharge]);
+
+  const requiredAdvance = useMemo(() => {
+    if (payAdvance === 'full') return finalTotal;
+    if (payAdvance === 'part') return Math.min(200, finalTotal);
+    return 0;
+  }, [payAdvance, finalTotal]);
 
 
   const loadRazorpayScript = () => {
@@ -358,21 +416,31 @@ export default function BookingPage() {
         package_service_name: isPackageBooking && selectedPackageServiceNames.length > 0 ? selectedPackageServiceNames.join(',') : undefined,
         package_id: selectedPackage || undefined,
         vehicle_id: selectedVehicleId || undefined,
-        vehicle_brand: brand,
-        vehicle_model: model,
+        vehicle_brand: brand === 'Others' ? customBrand : brand,
+        vehicle_model: (brand === 'Others' || model === 'Other') ? customModel : model,
         vehicle_reg_no: regNo || undefined,
         vehicle_category: filter !== 'all' ? filter : undefined,
         use_package: isPackageBooking ? true : undefined,
         is_free_wash: useFreeWash || undefined,
+        pay_advance: !isPackageBooking && !useFreeWash ? payAdvance : undefined,
+        pickup_type: pickupOption,
+        pickup_address_details: pickupOption !== 'none' ? {
+          address: pickupAddress,
+          landmark,
+          city,
+          state: stateName,
+          pincode
+        } : undefined
       });
 
       const bookingData = res.data;
 
-      if (bookingData && bookingData.id && requestPickup) {
+      if (bookingData && bookingData.id && (pickupOption === 'pickup' || pickupOption === 'both')) {
         await api.post('/pickup-requests', {
           booking_id: bookingData.id,
-          address: pickupAddress,
-          scheduled_time: pickupTime || undefined
+          address: `${pickupAddress}${landmark ? ', Landmark: ' + landmark : ''}, ${city}, ${stateName} - ${pincode}`,
+          scheduled_time: pickupTime || undefined,
+          request_type: pickupOption
         });
       }
 
@@ -549,10 +617,67 @@ export default function BookingPage() {
                     ← Back to saved vehicles
                   </button>
                 )}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <Input label="Car Brand *" placeholder="e.g. Hyundai" value={brand} onChange={(e) => setBrand(e.target.value)} listOptions={brandsRes?.data} />
-                  <Input label="Car Model *" placeholder="e.g. Creta" value={model} onChange={(e) => setModel(e.target.value)} listOptions={modelsRes?.data} />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-left">
+                  <SearchableSelect
+                    label="Car Brand *"
+                    options={[
+                      ...(brandsRes?.data || []).map((b: string) => ({ value: b, label: b })),
+                      { value: 'Others', label: 'Others (Enter Manually)' }
+                    ]}
+                    value={brand}
+                    onChange={(e) => {
+                      setBrand(e.target.value);
+                      setModel('');
+                      setCustomBrand('');
+                      setCustomModel('');
+                    }}
+                    placeholder="Select Brand"
+                  />
+                  <SearchableSelect
+                    label="Car Model *"
+                    options={[
+                      ...(modelsRes?.data || []).map((m: string) => ({ value: m, label: m })),
+                      { value: 'Other', label: 'Other (Enter Manually)' }
+                    ]}
+                    value={model}
+                    onChange={(e) => {
+                      setModel(e.target.value);
+                      setCustomModel('');
+                    }}
+                    placeholder={brand ? "Select Model" : "Select brand first"}
+                    disabled={!brand || brand === 'Others'}
+                  />
                 </div>
+                {(brand === 'Others' || model === 'Other') && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-left mt-2">
+                    {brand === 'Others' && (
+                      <div>
+                        <label className="block text-xs font-bold text-[#5f5e5e] mb-1.5 uppercase tracking-wide">Enter Brand Name *</label>
+                        <input
+                          type="text"
+                          value={customBrand}
+                          onChange={(e) => setCustomBrand(e.target.value)}
+                          placeholder="e.g. Porsche"
+                          className="w-full px-4 py-3 bg-[#f6f3f2] border border-transparent rounded-lg text-[#1c1b1b] font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white focus:border-[#D32F2F]/30 transition-all duration-200 text-sm"
+                          required
+                        />
+                      </div>
+                    )}
+                    {(brand === 'Others' || model === 'Other') && (
+                      <div>
+                        <label className="block text-xs font-bold text-[#5f5e5e] mb-1.5 uppercase tracking-wide">Enter Model Name *</label>
+                        <input
+                          type="text"
+                          value={customModel}
+                          onChange={(e) => setCustomModel(e.target.value)}
+                          placeholder="e.g. Cayenne"
+                          className="w-full px-4 py-3 bg-[#f6f3f2] border border-transparent rounded-lg text-[#1c1b1b] font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white focus:border-[#D32F2F]/30 transition-all duration-200 text-sm"
+                          required
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <Input label="Registration No (Optional)" placeholder="e.g. GJ01AB1234" value={regNo} onChange={(e) => setRegNo(e.target.value.toUpperCase())} />
                   <div>
@@ -617,7 +742,7 @@ export default function BookingPage() {
                           const sName = s.name.toLowerCase();
                           const uName = usage.service_name.toLowerCase();
                           if (sName === uName) return true;
-                          if ((uName === 'foam wash' || uName === 'car foam wash') && (sName.includes('foam wash') || sName.includes('car wash'))) return true;
+                          if ((uName === 'foam wash' || uName === 'car foam wash' || uName === 'full foam wash') && (sName.includes('foam wash') || sName.includes('car wash'))) return true;
                           if ((uName === 'wax coat' || uName === 'body wax coat') && (sName.includes('teflon') || sName.includes('wax') || sName.includes('ceramic'))) return true;
                           if (uName === 'deep cleaning' && sName.includes('interior cleaning')) return true;
                           if (uName === 'two wheeler wash' && sName.includes('bike wash')) return true;
@@ -705,7 +830,7 @@ export default function BookingPage() {
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-3">Services</p>
                       <div className="grid gap-3">
-                        {sortServicesByPriority(services.filter(s => s.is_active)).map((svc) => {
+                        {sortServicesByPriority(services.filter(s => s.is_active && (!useFreeWash || s.name.toLowerCase().includes('wash')))).map((svc) => {
                           const isSelected = selectedServices.includes(svc.id);
                           return (
                             <button
@@ -727,7 +852,11 @@ export default function BookingPage() {
                               </div>
                             {svc.description && <p className="text-xs text-[#5f5e5e] mt-1 line-clamp-2">{svc.description}</p>}
                             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-[#5f5e5e]">
-                              <span className="font-bold text-[#D32F2F]">₹{svc[`price_${filter}`] || svc.price_sedan}</span>
+                              <span className="font-bold text-[#D32F2F]">
+                                {parseFloat(String(svc[`price_${filter}`] || svc.price_sedan || 0)) === 0 
+                                  ? 'Free' 
+                                  : `₹${svc[`price_${filter}`] || svc.price_sedan}`}
+                              </span>
                             </div>
                           </button>
                         );})}
@@ -756,6 +885,7 @@ export default function BookingPage() {
                             if (e.target.checked) {
                               setSelectedPackage(null);
                               setSelectedPackageServiceNames([]);
+                              setSelectedServices([]);
                             }
                           }}
                           className="accent-blue-600 h-4.5 w-4.5 rounded border-gray-300 text-blue-600 focus:ring-blue-600 cursor-pointer"
@@ -934,26 +1064,113 @@ export default function BookingPage() {
                 <span className="ml-auto font-bold text-[#1c1b1b]">~{totalBookingDuration} mins</span>
               </div>
             )}
-            {!isPackageBooking && (
-              <>
-                <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-gray-700">
-                  <span className="text-[#5f5e5e] font-normal">Total Price</span>
-                  <span className="ml-auto">₹{estimatedTotal}</span>
+            {/* Payment Option Selection */}
+            {!isPackageBooking && !useFreeWash && requiredAdvancePossible > 0 && (
+              <div className="mt-4 space-y-3 pb-4 border-b border-gray-100">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] text-left">Select Payment Option</p>
+                <div className="flex flex-col gap-3 text-left">
+
+                  {/* Part Advance — Priority */}
+                  <button
+                    type="button"
+                    onClick={() => setPayAdvance('part')}
+                    className={`p-4 rounded-xl border-2 text-left transition-all relative overflow-hidden ${
+                      payAdvance === 'part' ? 'border-[#D32F2F] bg-red-50/30 shadow-md' : 'border-gray-200 bg-white hover:border-gray-300'
+                    }`}
+                  >
+                    {payAdvance === 'part' && <div className="absolute top-0 left-0 w-1 h-full bg-[#D32F2F] rounded-r" />}
+                    <div className="flex flex-wrap justify-between items-center w-full gap-2">
+                      <span className="font-extrabold text-sm text-[#1c1b1b]">₹200 Part Advance</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="bg-emerald-100 text-emerald-700 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">⚡ 1st Priority</span>
+                        <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-full">Part Pay</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-[#5f5e5e] mt-1.5 leading-relaxed font-medium">Pay ₹200 online now to secure your slot with <strong className="text-emerald-700">first priority</strong>. Pay remaining balance at the studio.</p>
+                  </button>
+
+                  {/* Full Advance — Priority + Discount */}
+                  <button
+                    type="button"
+                    onClick={() => setPayAdvance('full')}
+                    className={`p-4 rounded-xl border-2 text-left transition-all relative overflow-hidden ${
+                      payAdvance === 'full' ? 'border-[#D32F2F] bg-red-50/30 shadow-md' : 'border-gray-200 bg-white hover:border-gray-300'
+                    }`}
+                  >
+                    {payAdvance === 'full' && <div className="absolute top-0 left-0 w-1 h-full bg-[#D32F2F] rounded-r" />}
+                    <div className="flex flex-wrap justify-between items-center w-full gap-2">
+                      <span className="font-extrabold text-sm text-[#1c1b1b]">Full Advance</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="bg-emerald-100 text-emerald-700 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">⚡ 1st Priority</span>
+                        <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2.5 py-0.5 rounded-full">Save 10%</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-[#5f5e5e] mt-1.5 leading-relaxed font-medium">Pay full amount online now — get <strong className="text-green-700">10% discount</strong> and <strong className="text-emerald-700">first priority</strong> service.</p>
+                  </button>
+
+                  {/* Pay at Studio — No Priority */}
+                  <button
+                    type="button"
+                    onClick={() => setPayAdvance('none')}
+                    className={`p-4 rounded-xl border-2 text-left transition-all relative overflow-hidden ${
+                      payAdvance === 'none' ? 'border-[#D32F2F] bg-red-50/30 shadow-md' : 'border-gray-200 bg-white hover:border-gray-300'
+                    }`}
+                  >
+                    {payAdvance === 'none' && <div className="absolute top-0 left-0 w-1 h-full bg-[#D32F2F] rounded-r" />}
+                    <div className="flex flex-wrap justify-between items-center w-full gap-2">
+                      <span className="font-extrabold text-sm text-[#1c1b1b]">Pay at Studio</span>
+                      <span className="bg-gray-100 text-gray-500 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">No Priority</span>
+                    </div>
+                    <p className="text-xs text-[#5f5e5e] mt-1.5 leading-relaxed font-medium">Book your slot without paying advance. Pay full price at studio after service.</p>
+                    <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
+                      <p className="text-[10px] text-amber-700 font-bold leading-snug">⚠️ Advance-paying customers will be given first priority. Your service may be delayed if the studio is busy.</p>
+                    </div>
+                  </button>
+
                 </div>
-                {requiredAdvance > 0 && (
-                  <>
-                    <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-base text-[#D32F2F]">
-                      <span className="text-[#5f5e5e] font-normal text-sm">Advance Required</span>
-                      <span className="ml-auto">₹{requiredAdvance}</span>
-                    </div>
-                    <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-gray-700">
-                      <span className="text-[#5f5e5e] font-normal">Balance Due at Studio</span>
-                      <span className="ml-auto">₹{estimatedTotal - requiredAdvance}</span>
-                    </div>
-                  </>
-                )}
-              </>
+              </div>
             )}
+
+            <div className="space-y-2 border-t border-gray-100 pt-4">
+              {!isPackageBooking && (
+                <>
+                  <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-gray-700">
+                    <span className="text-[#5f5e5e] font-normal">Original Total Price</span>
+                    <span className="ml-auto">₹{estimatedTotal}</span>
+                  </div>
+                  {discountAmount > 0 && (
+                    <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-green-600">
+                      <span className="text-green-600 font-normal">Advance Discount (10% Off)</span>
+                      <span className="ml-auto">-₹{discountAmount}</span>
+                    </div>
+                  )}
+                </>
+              )}
+              {pickupOption !== 'none' && (
+                <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-gray-700">
+                  <span className="text-[#5f5e5e] font-normal">Pickup & Drop ({pickupOption})</span>
+                  <span className="ml-auto text-gray-800">
+                    {pickupCharge > 0 ? `₹${pickupCharge}` : 'Free (Waived)'}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-gray-700">
+                <span className="text-[#5f5e5e] font-normal">Total Price</span>
+                <span className="ml-auto">₹{finalTotal}</span>
+              </div>
+              {requiredAdvance > 0 && (
+                <>
+                  <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-base text-[#D32F2F]">
+                    <span className="text-[#5f5e5e] font-normal text-sm">Advance Required</span>
+                    <span className="ml-auto">₹{requiredAdvance}</span>
+                  </div>
+                  <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-gray-700">
+                    <span className="text-[#5f5e5e] font-normal">Balance Due at Studio</span>
+                    <span className="ml-auto">₹{finalTotal - requiredAdvance}</span>
+                  </div>
+                </>
+              )}
+            </div>
             {isPackageBooking && (
               <div className="py-2 bg-purple-50 rounded-lg px-3 mt-2 space-y-1">
                 <div className="flex items-center gap-3">
@@ -965,45 +1182,145 @@ export default function BookingPage() {
               </div>
             )}
 
-            {/* Pickup Request Section */}
-            <div className="mt-4 p-4 rounded-xl border border-gray-100 bg-gray-50/50 space-y-3">
-              <label className="flex items-center justify-between cursor-pointer">
-                <div>
-                  <span className="font-bold text-[#1c1b1b] text-sm">Request Vehicle Pickup</span>
-                  <p className="text-[11px] text-[#5f5e5e] mt-0.5">
-                    We will pick up the vehicle from your location. {parseFloat(settings.pickup_charge_amount || '0') > 0 ? `Charge: ₹${settings.pickup_charge_amount}` : 'Free of charge'}
-                  </p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={requestPickup}
-                  onChange={(e) => setRequestPickup(e.target.checked)}
-                  className="accent-[#D32F2F] h-4.5 w-4.5 rounded border-gray-300 text-[#D32F2F] focus:ring-[#D32F2F]"
-                />
-              </label>
+            {/* Pickup & Drop Option Section */}
+            <div className="mt-4 p-4 rounded-xl border border-gray-100 bg-gray-50/50 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[#5f5e5e] mb-1.5 uppercase tracking-wide">Pickup & Drop Option</label>
+                <select
+                  value={pickupOption}
+                  onChange={(e) => setPickupOption(e.target.value as any)}
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-bold text-[#1c1b1b] focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 transition-all cursor-pointer"
+                >
+                  <option value="none">None (No Pickup/Drop)</option>
+                  <option value="pickup">Pickup Only</option>
+                  <option value="drop">Drop Only</option>
+                  <option value="both">Pickup + Drop</option>
+                </select>
+                <p className="text-[11px] text-[#5f5e5e] mt-1">
+                  {pickupOption === 'none' ? 'No extra charges apply.' :
+                   activePackageHasFreePickup ? '🎉 Free Pickup & Drop under your active package!' :
+                   pickupOption === 'pickup' ? `Pickup charge: ₹${settings.pickup_charge || 150}` :
+                   pickupOption === 'drop' ? `Drop charge: ₹${settings.drop_charge || 150}` :
+                   `Pickup + Drop charge: ₹${settings.pickup_drop_charge || 250}`}
+                </p>
+              </div>
 
-              {requestPickup && (
+              {pickupOption !== 'none' && (
                 <div className="space-y-3 pt-2 border-t border-gray-200/50 animate-fade-in-up">
+                  {savedAddresses.length > 0 && (
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Select Saved Address</label>
+                      <select
+                        value={selectedAddressId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedAddressId(val === 'new' ? 'new' : parseInt(val));
+                          if (val !== 'new') {
+                            const addr = savedAddresses.find(a => a.id === parseInt(val));
+                            if (addr) {
+                              setPickupAddress(addr.address);
+                              setLandmark(addr.landmark || '');
+                              setCity(addr.city || '');
+                              setStateName(addr.state || 'Gujarat');
+                              setPincode(addr.pincode || '');
+                            }
+                          } else {
+                            setPickupAddress('');
+                            setLandmark('');
+                            setCity('');
+                            setStateName('Gujarat');
+                            setPincode('');
+                          }
+                        }}
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-800"
+                      >
+                        {savedAddresses.map((addr) => (
+                          <option key={addr.id} value={addr.id}>
+                            📍 {addr.address}, {addr.city} {addr.is_default ? '(Default)' : ''}
+                          </option>
+                        ))}
+                        <option value="new">+ Add New Address</option>
+                      </select>
+                    </div>
+                  )}
+
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Pickup Address *</label>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Address *</label>
                     <textarea
                       rows={2}
                       value={pickupAddress}
                       onChange={(e) => setPickupAddress(e.target.value)}
-                      placeholder="Enter full address..."
+                      placeholder="Street address, building, apartment..."
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white"
                       required
+                      disabled={selectedAddressId !== 'new'}
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Preferred Pickup Time (Optional)</label>
-                    <input
-                      type="datetime-local"
-                      value={pickupTime}
-                      onChange={(e) => setPickupTime(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white"
-                    />
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Landmark</label>
+                      <input
+                        type="text"
+                        value={landmark}
+                        onChange={(e) => setLandmark(e.target.value)}
+                        placeholder="Near mall..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white"
+                        disabled={selectedAddressId !== 'new'}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">City *</label>
+                      <input
+                        type="text"
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        placeholder="Vadodara"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white"
+                        required
+                        disabled={selectedAddressId !== 'new'}
+                      />
+                    </div>
                   </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">State *</label>
+                      <input
+                        type="text"
+                        value={stateName}
+                        onChange={(e) => setStateName(e.target.value)}
+                        placeholder="Gujarat"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white"
+                        required
+                        disabled={selectedAddressId !== 'new'}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Pincode *</label>
+                      <input
+                        type="text"
+                        value={pincode}
+                        onChange={(e) => setPincode(e.target.value)}
+                        placeholder="390001"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white"
+                        required
+                        disabled={selectedAddressId !== 'new'}
+                      />
+                    </div>
+                  </div>
+
+                  {(pickupOption === 'pickup' || pickupOption === 'both') && (
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Preferred Pickup Time (Optional)</label>
+                      <input
+                        type="datetime-local"
+                        value={pickupTime}
+                        onChange={(e) => setPickupTime(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1013,7 +1330,7 @@ export default function BookingPage() {
             className="w-full" 
             onClick={handleBook} 
             loading={createMut.isPending || submittingOnline}
-            disabled={requestPickup && !pickupAddress.trim()}
+            disabled={pickupOption !== 'none' && !pickupAddress.trim()}
           >
             {requiredAdvance > 0 ? `Pay Advance (₹${requiredAdvance})` : 'Confirm Booking'}
           </Button>

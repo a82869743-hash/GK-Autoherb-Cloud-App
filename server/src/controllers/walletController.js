@@ -1,7 +1,7 @@
 const pool = require('../config/db');
 
 // ─── Wallet Balance & Stats ───────────────────────────────
-exports.getWallet = async (req, res) => {
+exports.getWallet = async (req, res, next) => {
   try {
     const { customer_id } = req.params;
     const [rows] = await pool.query('SELECT * FROM wallets WHERE customer_id = ?', [customer_id]);
@@ -11,23 +11,12 @@ exports.getWallet = async (req, res) => {
     }
     res.json({ success: true, data: rows[0] });
   } catch (err) {
-    console.warn('getWallet error (falling back to mock data):', err.message);
-    res.json({
-      success: true,
-      data: {
-        id: 1,
-        customer_id: Number(req.params.customer_id),
-        balance: 750.00,
-        total_earned: 1500.00,
-        total_spent: 750.00,
-        created_at: new Date().toISOString()
-      }
-    });
+    next(err);
   }
 };
 
 // ─── Wallet Transactions History ───────────────────────────
-exports.getTransactions = async (req, res) => {
+exports.getTransactions = async (req, res, next) => {
   try {
     const { customer_id } = req.params;
     const { limit = 50, offset = 0 } = req.query;
@@ -42,47 +31,12 @@ exports.getTransactions = async (req, res) => {
 
     res.json({ success: true, data: rows });
   } catch (err) {
-    console.warn('getTransactions error (falling back to mock data):', err.message);
-    res.json({
-      success: true,
-      data: [
-        {
-          id: 1,
-          wallet_id: 1,
-          customer_id: Number(req.params.customer_id),
-          amount: 500.00,
-          type: 'credit',
-          source: 'referral',
-          description: 'Referral signup bonus for inviting Jack',
-          created_at: new Date(Date.now() - 86400000 * 2).toISOString()
-        },
-        {
-          id: 2,
-          wallet_id: 1,
-          customer_id: Number(req.params.customer_id),
-          amount: 250.00,
-          type: 'debit',
-          source: 'payment',
-          description: 'Paid for Premium Wash Job Card #201',
-          created_at: new Date(Date.now() - 86400000).toISOString()
-        },
-        {
-          id: 3,
-          wallet_id: 1,
-          customer_id: Number(req.params.customer_id),
-          amount: 500.00,
-          type: 'credit',
-          source: 'admin',
-          description: 'Loyalty campaign points credit',
-          created_at: new Date().toISOString()
-        }
-      ]
-    });
+    next(err);
   }
 };
 
 // ─── Admin: Add/Deduct Wallet Balance ──────────────────────
-exports.adjustBalance = async (req, res) => {
+exports.adjustBalance = async (req, res, next) => {
   let connection;
   try {
     const { customer_id } = req.params;
@@ -148,14 +102,7 @@ exports.adjustBalance = async (req, res) => {
     if (connection) {
       try { await connection.rollback(); } catch(e) {}
     }
-    console.warn('adjustBalance error (falling back to mock data):', err.message);
-    const amountVal = parseFloat(req.body.amount || 0);
-    const mockNewBalance = req.body.type === 'credit' ? 750 + amountVal : 750 - amountVal;
-    res.json({
-      success: true,
-      message: `Balance ${req.body.type === 'credit' ? 'added' : 'deducted'} successfully (Mock Mode)`,
-      data: { new_balance: mockNewBalance }
-    });
+    next(err);
   } finally {
     if (connection) connection.release();
   }

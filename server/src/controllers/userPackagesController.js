@@ -20,97 +20,146 @@
 
 const pool = require('../config/db');
 
+// Helper for dynamic package duration calculation
+function getPackageDurationMonths(packageName) {
+  const nameLower = (packageName || '').toLowerCase();
+  if (nameLower.includes('bronze')) return 3;
+  if (nameLower.includes('silver')) return 5;
+  return 12; // 12 months default
+}
+
+exports.getPackageDurationMonths = getPackageDurationMonths;
+
 // ─── AutoHerb Annual Car Care V2 — TOTAL service entitlements (paid + complimentary) ──────────────
 // Each package includes PAID washes + COMPLIMENTARY services.
 // The total_count here is the COMBINED entitlement that customers can use.
 //
-// BRONZE:    3 paid + 1 comp = 4 Car Foam Wash, 1 Body Wax Coat
-// SILVER:    5 paid + 2 comp = 7 Car Foam Wash, 2 Body Wax Coat, 1 Two Wheeler Wash
-// GOLD:      8 paid + 4 comp = 12 Car Foam Wash, 3 Body Wax Coat, 1 Two Wheeler Wash, 1 Two Wheeler Wax Coat
-// DIAMOND:  10 paid + 6 comp = 16 Car Foam Wash, 2 Body Wax Coat, 2 Two Wheeler Wash, 1 Two Wheeler Wax Coat, 1 Body Hybrid Ceramic Wax Coat
-// PLATINUM: 12 paid + 8 comp = 20 Car Foam Wash, 3 Body Wax Coat, 2 Two Wheeler Wash, 1 Two Wheeler Wax Coat, 1 Body Hybrid Ceramic Wax Coat, 1 Deep Cleaning
+// BRONZE:    3 paid + 1 comp = 4 Full Foam Wash, 1 Body Wax Coat
+// SILVER:    5 paid + 2 comp = 7 Full Foam Wash, 2 Body Wax Coat, 1 Two Wheeler Wash
+// GOLD:      8 paid + 4 comp = 12 Full Foam Wash, 3 Body Wax Coat, 1 Two Wheeler Wash, 1 Two Wheeler Wax Coat
+// DIAMOND:  10 paid + 6 comp = 16 Full Foam Wash, 2 Body Wax Coat, 2 Two Wheeler Wash, 1 Two Wheeler Wax Coat, 1 Body Hybrid Ceramic Wax Coat
+// PLATINUM: 12 paid + 8 comp = 20 Full Foam Wash, 3 Body Wax Coat, 2 Two Wheeler Wash, 1 Two Wheeler Wax Coat, 1 Body Hybrid Ceramic Wax Coat, 1 Deep Cleaning
 
 const PACKAGE_SERVICE_MAP = {
   'Bronze Package': [
-    { service_name: 'Car Foam Wash', total_count: 4 },
-    { service_name: 'Body Wax Coat', total_count: 1 },
+    { service_name: 'Full Foam Wash', total_count: 4, complimentary: 0, display_order: 1 },
+    { service_name: 'Body Wax Coat', total_count: 1, complimentary: 0, display_order: 2 },
   ],
   'Silver Package': [
-    { service_name: 'Car Foam Wash', total_count: 7 },
-    { service_name: 'Body Wax Coat', total_count: 2 },
-    { service_name: 'Two Wheeler Wash', total_count: 1 },
+    { service_name: 'Full Foam Wash', total_count: 7, complimentary: 0, display_order: 1 },
+    { service_name: 'Body Wax Coat', total_count: 2, complimentary: 0, display_order: 2 },
+    { service_name: 'Two Wheeler Wash', total_count: 1, complimentary: 0, display_order: 3 },
   ],
   'Gold Package': [
-    { service_name: 'Car Foam Wash', total_count: 12 },
-    { service_name: 'Body Wax Coat', total_count: 3 },
-    { service_name: 'Two Wheeler Wash', total_count: 1 },
-    { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
+    { service_name: 'Full Foam Wash', total_count: 12, complimentary: 0, display_order: 1 },
+    { service_name: 'Body Wax Coat', total_count: 3, complimentary: 0, display_order: 2 },
+    { service_name: 'Two Wheeler Wash', total_count: 1, complimentary: 0, display_order: 3 },
+    { service_name: 'Two Wheeler Wax Coat', total_count: 1, complimentary: 0, display_order: 4 },
   ],
   'Diamond Package': [
-    { service_name: 'Car Foam Wash', total_count: 16 },
-    { service_name: 'Body Wax Coat', total_count: 2 },
-    { service_name: 'Two Wheeler Wash', total_count: 2 },
-    { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
-    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1 },
+    { service_name: 'Full Foam Wash', total_count: 16, complimentary: 0, display_order: 1 },
+    { service_name: 'Body Wax Coat', total_count: 2, complimentary: 0, display_order: 2 },
+    { service_name: 'Two Wheeler Wash', total_count: 2, complimentary: 0, display_order: 3 },
+    { service_name: 'Two Wheeler Wax Coat', total_count: 1, complimentary: 0, display_order: 4 },
+    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1, complimentary: 0, display_order: 5 },
   ],
   'Platinum Package': [
-    { service_name: 'Car Foam Wash', total_count: 20 },
-    { service_name: 'Body Wax Coat', total_count: 3 },
-    { service_name: 'Two Wheeler Wash', total_count: 2 },
-    { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
-    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1 },
-    { service_name: 'Deep Cleaning', total_count: 1 },
+    { service_name: 'Full Foam Wash', total_count: 20, complimentary: 0, display_order: 1 },
+    { service_name: 'Body Wax Coat', total_count: 3, complimentary: 0, display_order: 2 },
+    { service_name: 'Two Wheeler Wash', total_count: 2, complimentary: 0, display_order: 3 },
+    { service_name: 'Two Wheeler Wax Coat', total_count: 1, complimentary: 0, display_order: 4 },
+    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1, complimentary: 0, display_order: 5 },
+    { service_name: 'Deep Cleaning', total_count: 1, complimentary: 0, display_order: 6 },
   ],
-  // Legacy aliases for backward compatibility
+  // Legacy aliases
   'Bronze': [
-    { service_name: 'Car Foam Wash', total_count: 4 },
-    { service_name: 'Body Wax Coat', total_count: 1 },
+    { service_name: 'Full Foam Wash', total_count: 4, complimentary: 0, display_order: 1 },
+    { service_name: 'Body Wax Coat', total_count: 1, complimentary: 0, display_order: 2 },
   ],
   'Silver': [
-    { service_name: 'Car Foam Wash', total_count: 7 },
-    { service_name: 'Body Wax Coat', total_count: 2 },
-    { service_name: 'Two Wheeler Wash', total_count: 1 },
+    { service_name: 'Full Foam Wash', total_count: 7, complimentary: 0, display_order: 1 },
+    { service_name: 'Body Wax Coat', total_count: 2, complimentary: 0, display_order: 2 },
+    { service_name: 'Two Wheeler Wash', total_count: 1, complimentary: 0, display_order: 3 },
   ],
   'Gold': [
-    { service_name: 'Car Foam Wash', total_count: 12 },
-    { service_name: 'Body Wax Coat', total_count: 3 },
-    { service_name: 'Two Wheeler Wash', total_count: 1 },
-    { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
+    { service_name: 'Full Foam Wash', total_count: 12, complimentary: 0, display_order: 1 },
+    { service_name: 'Body Wax Coat', total_count: 3, complimentary: 0, display_order: 2 },
+    { service_name: 'Two Wheeler Wash', total_count: 1, complimentary: 0, display_order: 3 },
+    { service_name: 'Two Wheeler Wax Coat', total_count: 1, complimentary: 0, display_order: 4 },
   ],
   'Diamond': [
-    { service_name: 'Car Foam Wash', total_count: 16 },
-    { service_name: 'Body Wax Coat', total_count: 2 },
-    { service_name: 'Two Wheeler Wash', total_count: 2 },
-    { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
-    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1 },
+    { service_name: 'Full Foam Wash', total_count: 16, complimentary: 0, display_order: 1 },
+    { service_name: 'Body Wax Coat', total_count: 2, complimentary: 0, display_order: 2 },
+    { service_name: 'Two Wheeler Wash', total_count: 2, complimentary: 0, display_order: 3 },
+    { service_name: 'Two Wheeler Wax Coat', total_count: 1, complimentary: 0, display_order: 4 },
+    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1, complimentary: 0, display_order: 5 },
   ],
   'Platinum': [
-    { service_name: 'Car Foam Wash', total_count: 20 },
-    { service_name: 'Body Wax Coat', total_count: 3 },
-    { service_name: 'Two Wheeler Wash', total_count: 2 },
-    { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
-    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1 },
-    { service_name: 'Deep Cleaning', total_count: 1 },
+    { service_name: 'Full Foam Wash', total_count: 20, complimentary: 0, display_order: 1 },
+    { service_name: 'Body Wax Coat', total_count: 3, complimentary: 0, display_order: 2 },
+    { service_name: 'Two Wheeler Wash', total_count: 2, complimentary: 0, display_order: 3 },
+    { service_name: 'Two Wheeler Wax Coat', total_count: 1, complimentary: 0, display_order: 4 },
+    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1, complimentary: 0, display_order: 5 },
+    { service_name: 'Deep Cleaning', total_count: 1, complimentary: 0, display_order: 6 },
   ],
 };
 
-// ─── Package breakdown for display purposes (paid vs complimentary) ──────────────
-// Used by the API to send structured info to the frontend for card rendering
-const PACKAGE_BREAKDOWN = {
-  'Bronze Package':   { paid_washes: 3, complimentary: [{ service_name: 'Car Foam Wash', count: 1 }, { service_name: 'Body Wax Coat', count: 1 }] },
-  'Silver Package':   { paid_washes: 5, complimentary: [{ service_name: 'Car Foam Wash', count: 2 }, { service_name: 'Body Wax Coat', count: 2 }, { service_name: 'Two Wheeler Wash', count: 1 }] },
-  'Gold Package':     { paid_washes: 8, complimentary: [{ service_name: 'Car Foam Wash', count: 4 }, { service_name: 'Body Wax Coat', count: 3 }, { service_name: 'Two Wheeler Wash', count: 1 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }] },
-  'Diamond Package':  { paid_washes: 10, complimentary: [{ service_name: 'Car Foam Wash', count: 6 }, { service_name: 'Body Wax Coat', count: 2 }, { service_name: 'Two Wheeler Wash', count: 2 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 }] },
-  'Platinum Package': { paid_washes: 12, complimentary: [{ service_name: 'Car Foam Wash', count: 8 }, { service_name: 'Body Wax Coat', count: 3 }, { service_name: 'Two Wheeler Wash', count: 2 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 }, { service_name: 'Deep Cleaning', count: 1 }] },
-};
-
-exports.PACKAGE_BREAKDOWN = PACKAGE_BREAKDOWN;
+exports.PACKAGE_SERVICE_MAP = PACKAGE_SERVICE_MAP;
+exports.PACKAGE_BREAKDOWN = PACKAGE_SERVICE_MAP;
+exports.getServiceBreakdown = getServiceBreakdown;
 
 /**
  * getServiceBreakdown — DB-first with legacy fallback
  */
 async function getServiceBreakdown(conn, packageId, packageName) {
-  // 1. Try to match base tier for new packages (e.g. "Bronze Package - Basic Wash")
+  if (!packageName) {
+    try {
+      const [p] = await conn.query('SELECT name FROM packages WHERE id = ?', [packageId]);
+      if (p.length) packageName = p[0].name;
+    } catch (err) {
+      console.warn('Failed package name query in getServiceBreakdown:', err.message);
+    }
+  }
+
+  // 1. Fallback to database first
+  try {
+    const [dbServices] = await conn.query(
+      `SELECT s.name AS service_name, MAX(ps.total_count) AS total_count, MAX(ps.complimentary) AS complimentary, MAX(ps.display_order) AS display_order
+       FROM package_services ps
+       JOIN services s ON ps.service_id = s.id
+       WHERE ps.package_id = ?
+       GROUP BY s.name
+       ORDER BY display_order ASC`,
+      [packageId]
+    );
+
+    if (dbServices.length > 0) {
+      const [pkg] = await conn.query('SELECT paid_wash_count FROM packages WHERE id = ?', [packageId]);
+      if (pkg.length && pkg[0].paid_wash_count > 0) {
+        const paidCount = pkg[0].paid_wash_count;
+        let washFound = false;
+        for (const svc of dbServices) {
+          if (svc.service_name === 'Full Foam Wash') {
+            svc.total_count = Number(svc.total_count || 0) + Number(paidCount);
+            washFound = true;
+          }
+        }
+        if (!washFound) {
+          dbServices.push({
+            service_name: 'Full Foam Wash',
+            total_count: paidCount,
+            complimentary: 0,
+            display_order: 1
+          });
+        }
+      }
+      return dbServices;
+    }
+  } catch (dbErr) {
+    console.warn('Failed dbServices query in getServiceBreakdown:', dbErr.message);
+  }
+
+  // 2. Try to match base tier for legacy fallback
   let baseTier = '';
   const lowerName = (packageName || '').toLowerCase();
   if (lowerName.includes('bronze')) baseTier = 'Bronze Package';
@@ -123,33 +172,25 @@ async function getServiceBreakdown(conn, packageId, packageName) {
     return PACKAGE_SERVICE_MAP[baseTier];
   }
 
-  // 2. Exact match on package name
   if (PACKAGE_SERVICE_MAP[packageName]) return PACKAGE_SERVICE_MAP[packageName];
 
-  // 3. Fallback to database
-  const [dbServices] = await conn.query(
-    `SELECT s.name AS service_name, ps.total_count
-     FROM package_services ps
-     JOIN services s ON ps.service_id = s.id
-     WHERE ps.package_id = ?`,
-    [packageId]
-  );
-
-  if (dbServices.length > 0) return dbServices;
-
-
-  const [pkgDetails] = await conn.query(
-    'SELECT wash_count, wax_count FROM packages WHERE id = ?',
-    [packageId]
-  );
+  // 3. Fallback to wash_count and wax_count
   const fallback = [];
-  if (pkgDetails.length) {
-    if (pkgDetails[0].wash_count > 0) {
-      fallback.push({ service_name: 'Foam Wash', total_count: pkgDetails[0].wash_count });
+  try {
+    const [pkgDetails] = await conn.query(
+      'SELECT wash_count, wax_count FROM packages WHERE id = ?',
+      [packageId]
+    );
+    if (pkgDetails.length) {
+      if (pkgDetails[0].wash_count > 0) {
+        fallback.push({ service_name: 'Full Foam Wash', total_count: pkgDetails[0].wash_count, complimentary: 0, display_order: 1 });
+      }
+      if (pkgDetails[0].wax_count > 0) {
+        fallback.push({ service_name: 'Body Wax Coat', total_count: pkgDetails[0].wax_count, complimentary: 0, display_order: 2 });
+      }
     }
-    if (pkgDetails[0].wax_count > 0) {
-      fallback.push({ service_name: 'Wax Coat', total_count: pkgDetails[0].wax_count });
-    }
+  } catch (fallbackErr) {
+    console.warn('Failed fallback query in getServiceBreakdown:', fallbackErr.message);
   }
   return fallback;
 }
@@ -163,7 +204,7 @@ exports.assignPackage = async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    const { user_id, package_id, vehicle_id, vehicle_segment, price_paid, duration_months = 12, package_custom_services } = req.body;
+    const { user_id, package_id, vehicle_id, vehicle_segment, price_paid, package_custom_services } = req.body;
 
     if (!user_id || !package_id) {
       await conn.rollback();
@@ -178,24 +219,35 @@ exports.assignPackage = async (req, res) => {
     }
 
     // Verify package exists
-    const [packages] = await conn.query('SELECT id, name FROM packages WHERE id = ?', [package_id]);
+    const [packages] = await conn.query('SELECT id, name, package_validity FROM packages WHERE id = ?', [package_id]);
     if (!packages.length) {
       await conn.rollback();
       return res.status(404).json({ success: false, error: 'Package not found' });
     }
 
-    // Check for existing active package (prevent duplicates)
-    const [activeExisting] = await conn.query(
-      `SELECT id FROM user_packages
-       WHERE user_id = ? AND package_status = 'active'
-       AND (end_date IS NULL OR end_date > NOW())`,
-      [user_id]
-    );
+    const defaultDuration = packages[0].package_validity !== null ? packages[0].package_validity : 12;
+    const finalDurationMonths = req.body.duration_months !== undefined ? req.body.duration_months : defaultDuration;
+
+    // Check for existing active package for the SAME vehicle (prevent duplicates)
+    let activeExistingQuery = `
+      SELECT id FROM user_packages
+      WHERE user_id = ? AND package_status = 'active'
+        AND (end_date IS NULL OR end_date > NOW())
+    `;
+    const checkParams = [user_id];
+    if (vehicle_id) {
+      activeExistingQuery += ' AND vehicle_id = ?';
+      checkParams.push(vehicle_id);
+    } else {
+      activeExistingQuery += ' AND vehicle_id IS NULL';
+    }
+
+    const [activeExisting] = await conn.query(activeExistingQuery, checkParams);
     if (activeExisting.length) {
       await conn.rollback();
       return res.status(409).json({
         success: false,
-        error: 'User already has an active package. Renew instead.',
+        error: 'This vehicle already has an active package. Renew instead.',
         existing_package_id: activeExisting[0].id
       });
     }
@@ -205,7 +257,7 @@ exports.assignPackage = async (req, res) => {
       `INSERT INTO user_packages
        (user_id, package_id, end_date, payment_status, package_status, price_paid, vehicle_segment, vehicle_id)
        VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? MONTH), 'paid', 'active', ?, ?, ?)`,
-      [user_id, package_id, duration_months, price_paid || null, vehicle_segment || null, vehicle_id || null]
+      [user_id, package_id, finalDurationMonths, price_paid || null, vehicle_segment || null, vehicle_id || null]
     );
     const userPackageId = result.insertId;
 
@@ -310,11 +362,13 @@ exports._renewPackageInternal = async (conn, { user_package_id, package_id, paym
     );
 
     // Calculate new end_date: extend from current end_date if still active, else from NOW
-    const baseDate = currentPkg.end_date && new Date(currentPkg.end_date) > new Date()
-      ? currentPkg.end_date
-      : new Date();
+    const [pkgDetails] = await conn.query('SELECT package_validity FROM packages WHERE id = ?', [targetPackageId]);
+    const duration_months = pkgDetails.length && pkgDetails[0].package_validity !== null ? pkgDetails[0].package_validity : 12;
 
-    const duration_months = 12;
+    let baseDate = new Date();
+    if (currentPkg.package_status === 'active' && currentPkg.end_date && new Date(currentPkg.end_date) > new Date()) {
+      baseDate = new Date(currentPkg.end_date);
+    }
 
     const [newResult] = await conn.query(
       `INSERT INTO user_packages
@@ -818,6 +872,8 @@ exports.getActivePackage = async (req, res) => {
         total_count: svc.total_count,
         used_count: usedCount,
         remaining: svc.total_count - usedCount,
+        complimentary: svc.complimentary || 0,
+        display_order: svc.display_order || 0
       };
     });
 
@@ -870,6 +926,8 @@ exports.listUserPackages = async (req, res) => {
           total_count: svc.total_count,
           used_count: usedCount,
           remaining: svc.total_count - usedCount,
+          complimentary: svc.complimentary || 0,
+          display_order: svc.display_order || 0
         };
       });
 
@@ -881,8 +939,7 @@ exports.listUserPackages = async (req, res) => {
 
     res.json({ success: true, data: packages });
   } catch (err) {
-    console.error('List user packages error:', err);
-    res.status(500).json({ success: false, error: 'Failed to fetch package history' });
+    next(err);
   }
 };
 
@@ -890,81 +947,31 @@ exports.listUserPackages = async (req, res) => {
 // EXPORT PACKAGE HISTORY (EXCEL)
 // GET /user-packages/export
 // ═══════════════════════════════════════════════════════════
-exports.exportUserPackages = async (req, res) => {
+exports.exportUserPackages = async (req, res, next) => {
   try {
     const userId = req.user.role === 'admin' && req.query.user_id
       ? req.query.user_id
       : req.user.id;
 
-    let packages;
-    try {
-      [packages] = await pool.query(`
-        SELECT up.id, up.package_id, up.start_date, up.end_date, up.created_at,
-               up.package_status, up.payment_status, up.price_paid,
-               up.vehicle_segment, up.renewed_from_id, up.renewed_at,
-               p.name AS package_name, p.description
-        FROM user_packages up
-        JOIN packages p ON up.package_id = p.id
-        WHERE up.user_id = ?
-        ORDER BY up.created_at DESC
-      `, [userId]);
-    } catch (dbErr) {
-      console.warn('SQL error in exportUserPackages, falling back to mock data:', dbErr.message);
-      packages = [
-        {
-          id: 9001,
-          package_id: 3,
-          start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-          end_date: new Date(Date.now() + 335 * 24 * 60 * 60 * 1000),
-          created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-          package_status: 'active',
-          payment_status: 'paid',
-          price_paid: 4000,
-          vehicle_segment: 'SEDAN_SUV',
-          package_name: 'Gold Package',
-          description: 'Premium annual gold detailing package'
-        },
-        {
-          id: 9002,
-          package_id: 1,
-          start_date: new Date(Date.now() - 400 * 24 * 60 * 60 * 1000),
-          end_date: new Date(Date.now() - 35 * 24 * 60 * 60 * 1000),
-          created_at: new Date(Date.now() - 400 * 24 * 60 * 60 * 1000),
-          package_status: 'expired',
-          payment_status: 'paid',
-          price_paid: 1200,
-          vehicle_segment: 'SMALL_HATCHBACK',
-          package_name: 'Bronze Package',
-          description: 'Basic annual bronze detailing package'
-        }
-      ];
-    }
+    const [packages] = await pool.query(`
+      SELECT up.id, up.package_id, up.start_date, up.end_date, up.created_at,
+             up.package_status, up.payment_status, up.price_paid,
+             up.vehicle_segment, up.renewed_from_id, up.renewed_at,
+             p.name AS package_name, p.description
+      FROM user_packages up
+      JOIN packages p ON up.package_id = p.id
+      WHERE up.user_id = ?
+      ORDER BY up.created_at DESC
+    `, [userId]);
 
     const format = req.query.format || 'excel';
 
     for (const pkg of packages) {
-      let serviceMap = [];
-      let usageRows = [];
-      try {
-        serviceMap = await getServiceBreakdown(pool, pkg.package_id, pkg.package_name);
-        [usageRows] = await pool.query(
-          'SELECT service_name, used_count FROM package_usage WHERE user_package_id = ?',
-          [pkg.id]
-        );
-      } catch (err) {
-        serviceMap = [
-          { service_name: 'Car Foam Wash', total_count: 8 },
-          { service_name: 'Body Wax Coat', total_count: 3 },
-          { service_name: 'Two Wheeler Wash', total_count: 1 },
-          { service_name: 'Two Wheeler Wax Coat', total_count: 1 }
-        ];
-        usageRows = [
-          { service_name: 'Car Foam Wash', used_count: 3 },
-          { service_name: 'Body Wax Coat', used_count: 1 },
-          { service_name: 'Two Wheeler Wash', used_count: 0 },
-          { service_name: 'Two Wheeler Wax Coat', used_count: 0 }
-        ];
-      }
+      const serviceMap = await getServiceBreakdown(pool, pkg.package_id, pkg.package_name);
+      const [usageRows] = await pool.query(
+        'SELECT service_name, used_count FROM package_usage WHERE user_package_id = ?',
+        [pkg.id]
+      );
       
       let usageStr = [];
       for (const svc of serviceMap) {
@@ -1102,6 +1109,8 @@ exports.getDashboardPackageData = async (userId) => {
           total_count: svc.total_count,
           used_count: usedCount,
           remaining: svc.total_count - usedCount,
+          complimentary: svc.complimentary || 0,
+          display_order: svc.display_order || 0
         };
       }),
       days_remaining: pkg.end_date
@@ -1192,6 +1201,8 @@ exports.getAllUserPackages = async (req, res) => {
           total_count: svc.total_count,
           used_count: usedCount,
           remaining: svc.total_count - usedCount,
+          complimentary: svc.complimentary || 0,
+          display_order: svc.display_order || 0
         };
       });
 
@@ -1244,12 +1255,13 @@ exports.adjustCredits = async (req, res) => {
 
     // Log the adjustment event in v2_audit_logs
     await conn.query(
-      `INSERT INTO v2_audit_logs (user_id, action, target_type, target_id, details)
-       VALUES (?, 'adjust_package_credits', 'user_package', ?, ?)`,
+      `INSERT INTO v2_audit_logs (user_id, user_type, action, resource, resource_id, old_value, new_value)
+       VALUES (?, 'admin', 'adjust_package_credits', 'user_package', ?, ?, ?)`,
       [
         req.user.id,
         id,
-        `Adjusted service '${service_name}' used count to ${new_used_count} (was ${oldUsedCount}) for subscription ID ${id}`
+        JSON.stringify({ used_count: oldUsedCount }),
+        JSON.stringify({ used_count: new_used_count })
       ]
     );
 

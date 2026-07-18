@@ -321,11 +321,24 @@ export default function PaymentsPage() {
                     <td className="py-3 px-4 text-right text-red-500 font-bold">₹{parseFloat(ap.balance_due).toLocaleString('en-IN')}</td>
                     <td className="py-3 px-4 text-gray-500 text-xs">{ap.due_date ? new Date(ap.due_date).toLocaleDateString('en-IN') : '—'}</td>
                     <td className="py-3 px-4 text-right">
-                      {parseFloat(ap.balance_due) > 0 && (
-                        <RippleButton variant="ghost" className="text-green-600 hover:bg-green-50 px-3 py-1.5 text-xs font-medium" onClick={() => handleSendReminder(ap.id)}>
-                          <MessageCircle size={14} className="mr-1 inline" /> Remind
-                        </RippleButton>
-                      )}
+                      <div className="flex justify-end gap-1 items-center">
+                        {ap.advance_payment_id && (
+                          <div title="Download Receipt" className="inline-block">
+                            <RippleButton 
+                              variant="ghost" 
+                              className="text-blue-600 hover:bg-blue-50 p-2" 
+                              onClick={() => handleDownloadInvoice(ap.advance_payment_id)}
+                            >
+                              <Download size={16} />
+                            </RippleButton>
+                          </div>
+                        )}
+                        {parseFloat(ap.balance_due) > 0 && (
+                          <RippleButton variant="ghost" className="text-green-600 hover:bg-green-50 px-3 py-1.5 text-xs font-medium" onClick={() => handleSendReminder(ap.id)}>
+                            <MessageCircle size={14} className="mr-1 inline" /> Remind
+                          </RippleButton>
+                        )}
+                      </div>
                     </td>
                   </motion.tr>
                 ))
@@ -376,7 +389,7 @@ export default function PaymentsPage() {
                     </div>
                     <div className="bg-white p-2 rounded-lg shadow-sm">
                       <img 
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`upi://pay?pa=paytm.s2do639@pty&pn=GK%20AUTO%20HERB&am=${payForm.amount || 0}&cu=INR`)}`} 
+                        src="/qr.jpg" 
                         alt="UPI QR Code"
                         className="w-20 h-20 sm:w-24 sm:h-24 object-contain"
                       />

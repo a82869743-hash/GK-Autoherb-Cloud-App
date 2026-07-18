@@ -65,6 +65,8 @@ export default function JobCartCreatePage() {
   const [customerEmail, setCustomerEmail] = useState(prefill?.customer_email || '');
   const [carBrand, setCarBrand] = useState(prefill?.car_brand || '');
   const [carModel, setCarModel] = useState(prefill?.car_model || '');
+  const [customBrand, setCustomBrand] = useState('');
+  const [customModel, setCustomModel] = useState('');
   const [carVariant, setCarVariant] = useState(prefill?.car_variant || '');
   const [carRegYear, setCarRegYear] = useState(prefill?.car_registration_year?.toString() || '');
   // Fix timezone: use local date instead of toISOString() which shifts dates in IST
@@ -82,8 +84,14 @@ export default function JobCartCreatePage() {
   const { data: variantsRes } = useVariants(carBrand, carModel);
 
   // Build dropdown options from API data
-  const brandOptions = (brandsRes?.data || []).map((b: string) => ({ value: b, label: b }));
-  const modelOptions = (modelsRes?.data || []).map((m: string) => ({ value: m, label: m }));
+  const brandOptions = [
+    ...(brandsRes?.data || []).map((b: string) => ({ value: b, label: b })),
+    { value: 'Others', label: 'Others (Enter Manually)' }
+  ];
+  const modelOptions = [
+    ...(modelsRes?.data || []).map((m: string) => ({ value: m, label: m })),
+    { value: 'Other', label: 'Other (Enter Manually)' }
+  ];
   const variantOptions = (variantsRes?.data || []).map((v: string) => ({ value: v, label: v }));
 
   const currentYear = new Date().getFullYear();
@@ -228,8 +236,11 @@ export default function JobCartCreatePage() {
 
   const handleSave = async (submitAfter: boolean) => {
     const cleanReg = regNo.toUpperCase().replace(/\s/g, '');
+    const finalBrand = carBrand === 'Others' ? customBrand : carBrand;
+    const finalModel = (carBrand === 'Others' || carModel === 'Other') ? customModel : carModel;
+
     if (!cleanReg) { toast('error', 'Registration number is required'); return; }
-    if (!carBrand || !carModel) { toast('error', 'Brand and model are required'); return; }
+    if (!finalBrand || !finalModel) { toast('error', 'Brand and model are required'); return; }
     if (!customerName && !customerId) { toast('error', 'Customer name is required'); return; }
     if (!customerMobile && !customerId) { toast('error', 'Customer mobile is required'); return; }
 
@@ -242,8 +253,8 @@ export default function JobCartCreatePage() {
         customer_name: customerName,
         customer_mobile: customerMobile,
         customer_email: customerEmail,
-        car_brand: carBrand,
-        car_model: carModel,
+        car_brand: finalBrand,
+        car_model: finalModel,
         car_registration_year: carRegYear ? parseInt(carRegYear) : null,
         visit_date: visitDate,
         notes,
@@ -351,7 +362,13 @@ export default function JobCartCreatePage() {
               label="Car Brand"
               options={brandOptions}
               value={carBrand}
-              onChange={e => { setCarBrand(e.target.value); setCarModel(''); setCarVariant(''); }}
+              onChange={e => {
+                setCarBrand(e.target.value);
+                setCarModel('');
+                setCarVariant('');
+                setCustomBrand('');
+                setCustomModel('');
+              }}
               placeholder="Select brand..."
               disabled={!!customerId}
             />
@@ -359,10 +376,34 @@ export default function JobCartCreatePage() {
               label="Car Model"
               options={modelOptions}
               value={carModel}
-              onChange={e => { setCarModel(e.target.value); setCarVariant(''); }}
+              onChange={e => {
+                setCarModel(e.target.value);
+                setCarVariant('');
+                setCustomModel('');
+              }}
               placeholder={carBrand ? 'Select model...' : 'Select brand first'}
-              disabled={!!customerId || !carBrand}
+              disabled={!!customerId || !carBrand || carBrand === 'Others'}
             />
+            {(carBrand === 'Others' || carModel === 'Other') && (
+              <>
+                {carBrand === 'Others' && (
+                  <Input
+                    label="Enter Brand Name"
+                    value={customBrand}
+                    onChange={e => setCustomBrand(e.target.value)}
+                    placeholder="e.g. Porsche"
+                    required
+                  />
+                )}
+                <Input
+                  label="Enter Model Name"
+                  value={customModel}
+                  onChange={e => setCustomModel(e.target.value)}
+                  placeholder="e.g. Cayenne"
+                  required
+                />
+              </>
+            )}
             <Select
               label="Registration Year"
               options={yearOptions}

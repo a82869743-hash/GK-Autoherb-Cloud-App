@@ -30,6 +30,8 @@ const emptyPrices = () => ({
 interface ServiceRow {
   service_id: number | '';
   total_count: number;
+  complimentary?: boolean;
+  display_order?: number;
 }
 
 // Tier colors for visual distinction
@@ -43,13 +45,54 @@ const TIER_COLORS: Record<string, { border: string; headerBg: string; badge: str
 
 // All 6 service names from the flyer
 const ALL_SERVICES = [
-  'Car Foam Wash',
+  'Full Foam Wash',
   'Body Wax Coat',
   'Two Wheeler Wash',
   'Two Wheeler Wax Coat',
   'Body Hybrid Ceramic Wax Coat',
   'Deep Cleaning',
 ];
+
+const INCLUDED_SERVICES: Record<string, { service_name: string, count: number }[]> = {
+  'bronze': [
+    { service_name: 'Full Foam Wash', count: 4 },
+    { service_name: 'Body Wax Coat', count: 1 },
+  ],
+  'silver': [
+    { service_name: 'Full Foam Wash', count: 7 },
+    { service_name: 'Body Wax Coat', count: 2 },
+    { service_name: 'Two Wheeler Wash', count: 1 },
+  ],
+  'gold': [
+    { service_name: 'Full Foam Wash', count: 12 },
+    { service_name: 'Body Wax Coat', count: 3 },
+    { service_name: 'Two Wheeler Wash', count: 1 },
+    { service_name: 'Two Wheeler Wax Coat', count: 1 },
+  ],
+  'diamond': [
+    { service_name: 'Full Foam Wash', count: 16 },
+    { service_name: 'Body Wax Coat', count: 2 },
+    { service_name: 'Two Wheeler Wash', count: 2 },
+    { service_name: 'Two Wheeler Wax Coat', count: 1 },
+    { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 },
+  ],
+  'platinum': [
+    { service_name: 'Full Foam Wash', count: 20 },
+    { service_name: 'Body Wax Coat', count: 3 },
+    { service_name: 'Two Wheeler Wash', count: 2 },
+    { service_name: 'Two Wheeler Wax Coat', count: 1 },
+    { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 },
+    { service_name: 'Deep Cleaning', count: 1 },
+  ],
+};
+
+const PACKAGE_BREAKDOWN: Record<string, { paid_washes: number, complimentary: { service_name: string, count: number }[] }> = {
+  'bronze':   { paid_washes: 3, complimentary: [{ service_name: 'Full Foam Wash', count: 1 }, { service_name: 'Body Wax Coat', count: 1 }] },
+  'silver':   { paid_washes: 5, complimentary: [{ service_name: 'Full Foam Wash', count: 2 }, { service_name: 'Body Wax Coat', count: 2 }, { service_name: 'Two Wheeler Wash', count: 1 }] },
+  'gold':     { paid_washes: 8, complimentary: [{ service_name: 'Full Foam Wash', count: 4 }, { service_name: 'Body Wax Coat', count: 3 }, { service_name: 'Two Wheeler Wash', count: 1 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }] },
+  'diamond':  { paid_washes: 10, complimentary: [{ service_name: 'Full Foam Wash', count: 6 }, { service_name: 'Body Wax Coat', count: 2 }, { service_name: 'Two Wheeler Wash', count: 2 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 }] },
+  'platinum': { paid_washes: 12, complimentary: [{ service_name: 'Full Foam Wash', count: 8 }, { service_name: 'Body Wax Coat', count: 3 }, { service_name: 'Two Wheeler Wash', count: 2 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 }, { service_name: 'Deep Cleaning', count: 1 }] },
+};
 
 function getTierKey(name: string): string {
   const lower = name.toLowerCase();
@@ -85,6 +128,10 @@ export default function PackagesPage() {
   // Dynamic services list for custom package builder
   const [serviceRows, setServiceRows] = useState<ServiceRow[]>([]);
   
+  // Custom package settings
+  const [packageValidity, setPackageValidity] = useState(12);
+  const [pickupEnabled, setPickupEnabled] = useState(false);
+  
   // Legacy: selected products (checkboxes, no count)
   const [selectedProducts, setSelectedProducts] = useState<any[]>([]);
 
@@ -98,7 +145,7 @@ export default function PackagesPage() {
   const updatePrice = (key: string, val: number) => setPrices(prev => ({ ...prev, [key]: val }));
 
   const addServiceRow = () => {
-    setServiceRows([...serviceRows, { service_id: '', total_count: 1 }]);
+    setServiceRows([...serviceRows, { service_id: '', total_count: 1, complimentary: false, display_order: 0 }]);
   };
 
   const removeServiceRow = (idx: number) => {
@@ -116,8 +163,10 @@ export default function PackagesPage() {
     setName(''); setDesc(''); setPrices(emptyPrices()); 
     setWashCount(0); setWaxCount(0); setActive(true);
     setVisibleToCustomer(true);
-    setServiceRows([{ service_id: '', total_count: 1 }]);
+    setServiceRows([{ service_id: '', total_count: 1, complimentary: false, display_order: 0 }]);
     setSelectedProducts([]);
+    setPackageValidity(12);
+    setPickupEnabled(false);
     setModalOpen(true);
   };
 
@@ -139,6 +188,8 @@ export default function PackagesPage() {
     const svcRows: ServiceRow[] = (pkg.services || []).map((s: any) => ({
       service_id: s.id,
       total_count: s.total_count || 1,
+      complimentary: !!s.complimentary,
+      display_order: s.display_order || 0,
     }));
     setServiceRows(svcRows.length > 0 ? svcRows : []);
     
@@ -146,6 +197,8 @@ export default function PackagesPage() {
     const pArr = (pkg.products || []).map((p: any) => ({ product_id: p.product_id, quantity: p.quantity }));
     setSelectedProducts(pArr);
     
+    setPackageValidity(pkg.package_validity || 12);
+    setPickupEnabled(!!pkg.pickup_enabled);
     setModalOpen(true);
   };
 
@@ -169,6 +222,8 @@ export default function PackagesPage() {
         is_published: active,
         visible_to_customer: visibleToCustomer,
         products: selectedProducts,
+        package_validity: packageValidity,
+        pickup_enabled: pickupEnabled,
       };
 
       // Use new format: services with total_count
@@ -176,6 +231,8 @@ export default function PackagesPage() {
         payload.services = validServiceRows.map(r => ({
           service_id: r.service_id,
           total_count: r.total_count,
+          complimentary: r.complimentary ? 1 : 0,
+          display_order: r.display_order || 0,
         }));
       } else {
         payload.services = [];
@@ -215,7 +272,7 @@ export default function PackagesPage() {
         const dbName = s.name?.toLowerCase() || '';
         const uiName = serviceName.toLowerCase();
         
-        if (uiName === 'car foam wash' && dbName.includes('foam wash')) return true;
+        if ((uiName === 'car foam wash' || uiName === 'full foam wash') && dbName.includes('foam wash')) return true;
         if (uiName === 'body wax coat' && dbName.includes('wax coat') && !dbName.includes('two wheeler') && !dbName.includes('ceramic')) return true;
         if (uiName === 'two wheeler wash' && dbName.includes('two wheeler wash')) return true;
         if (uiName === 'two wheeler wax coat' && dbName.includes('two wheeler wax')) return true;
@@ -228,7 +285,7 @@ export default function PackagesPage() {
     }
 
     // Hardcoded fallback for specific services based on package tier
-    if (serviceName.toLowerCase() === 'car foam wash') {
+    if (serviceName.toLowerCase() === 'car foam wash' || serviceName.toLowerCase() === 'full foam wash') {
       const pkgName = pkg.name.toLowerCase();
       let overrideCount = 0;
       if (pkgName.includes('bronze')) overrideCount = 1;
@@ -262,7 +319,7 @@ export default function PackagesPage() {
             const colors = TIER_COLORS[tierKey] || { border: 'border-l-red-500', headerBg: 'bg-gray-50', badge: 'bg-gray-100 text-gray-700' };
 
             // Extract "Pay For X" from description
-            const paidMatch = pkg.description?.match(/Pay\s+(?:For\s+)?(\d+)\s+Car\s+Foam\s+Wash/i);
+            const paidMatch = pkg.description?.match(/Pay\s+(?:For\s+)?(\d+)\s+(?:Car|Full)\s+Foam\s+Wash/i);
             const paidWashCount = paidMatch ? parseInt(paidMatch[1]) : (pkg.wash_count || 0);
 
             return (
@@ -275,7 +332,7 @@ export default function PackagesPage() {
                     </h3>
                     {paidWashCount > 0 && (
                       <p className="text-[10px] font-semibold text-gray-500 mt-0.5">
-                        Pay For {paidWashCount} Car Foam Wash
+                        Pay For {paidWashCount} Full Foam Wash
                       </p>
                     )}
                   </div>
@@ -300,32 +357,49 @@ export default function PackagesPage() {
                   </div>
                 )}
 
-                {/* ─── Complementary Services ─── */}
+                {/* ─── Included Services ─── */}
                 <div className="px-4 py-3">
-                  <p className="text-[8px] font-extrabold uppercase tracking-[0.15em] text-gray-400 mb-2">Complementary Services</p>
+                  <p className="text-[8px] font-extrabold uppercase tracking-[0.15em] text-gray-400 mb-2">Included Services</p>
                   <div className="space-y-1.5">
-                    {ALL_SERVICES.map(svcName => {
-                      const count = getServiceCount(pkg, svcName);
-                      const included = count > 0;
-                      return (
-                        <div key={svcName} className="flex items-center gap-1.5">
-                          {included ? (
+                    {pkg.paid_wash_count > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-4 h-4 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                          <Check className="w-2.5 h-2.5 text-blue-600" strokeWidth={3} />
+                        </div>
+                        <span className="text-[11px] leading-tight text-gray-800 font-bold">
+                          Pay For {pkg.paid_wash_count} Full Foam Wash (Mandatory)
+                        </span>
+                      </div>
+                    )}
+                    {(() => {
+                      const tierKey = getTierKey(pkg.name);
+                      const breakdown = PACKAGE_BREAKDOWN[tierKey];
+                      if (breakdown && breakdown.complimentary && breakdown.complimentary.length > 0) {
+                        return breakdown.complimentary.map((s: any, idx: number) => (
+                          <div key={s.service_name + idx} className="flex items-center gap-1.5">
                             <div className="w-4 h-4 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
                               <Check className="w-2.5 h-2.5 text-green-600" strokeWidth={3} />
                             </div>
-                          ) : (
-                            <div className="w-4 h-4 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
-                              <XIcon className="w-2.5 h-2.5 text-red-400" strokeWidth={3} />
+                            <span className="text-[11px] leading-tight text-gray-600 font-medium">
+                              {s.count} {s.service_name} (Free)
+                            </span>
+                          </div>
+                        ));
+                      }
+                      if (pkg.services && pkg.services.length > 0) {
+                        return pkg.services.map((s: any) => (
+                          <div key={s.id || s.name} className="flex items-center gap-1.5">
+                            <div className="w-4 h-4 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                              <Check className="w-2.5 h-2.5 text-green-600" strokeWidth={3} />
                             </div>
-                          )}
-                          <span className={`text-[11px] leading-tight ${included ? 'text-gray-800 font-medium' : 'text-gray-400 line-through'}`}>
-                            {svcName === 'Car Foam Wash'
-                              ? (included ? `+${count} Complimentary Foam Wash${count > 1 ? 'es' : ''}` : 'Complimentary Foam Wash')
-                              : (included && count > 1 ? `${count} ` : '') + svcName}
-                          </span>
-                        </div>
-                      );
-                    })}
+                            <span className="text-[11px] leading-tight text-gray-600 font-medium">
+                              {s.total_count} {s.name} (Free)
+                            </span>
+                          </div>
+                        ));
+                      }
+                      return <p className="text-xs text-gray-400 italic">No services specified</p>;
+                    })()}
                   </div>
                 </div>
 
@@ -379,7 +453,7 @@ export default function PackagesPage() {
             
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2">Pricing by Vehicle Category</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {CATEGORY_LABELS.map(cat => (
                   <Input key={cat.key} label={cat.label} type="number" value={prices[cat.key] || ''} onChange={e => updatePrice(cat.key, parseFloat(e.target.value) || 0)} />
                 ))}
@@ -389,6 +463,19 @@ export default function PackagesPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input label="Included Free Washes" type="number" value={washCount || ''} onChange={e => setWashCount(parseInt(e.target.value) || 0)} />
               <Input label="Included Free Waxes" type="number" value={waxCount || ''} onChange={e => setWaxCount(parseInt(e.target.value) || 0)} />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input label="Package Validity (Months)" type="number" value={packageValidity || ''} onChange={e => setPackageValidity(parseInt(e.target.value) || 12)} />
+              <div className="flex flex-col justify-end">
+                {/* Free Pickup toggle */}
+                <label className="flex items-center gap-3 cursor-pointer pb-2">
+                  <button type="button" onClick={() => setPickupEnabled(!pickupEnabled)} className={`w-10 h-5 rounded-full transition-colors ${pickupEnabled ? 'bg-indigo-500' : 'bg-gray-300'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform ${pickupEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                  </button>
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#5f5e5e]">{pickupEnabled ? 'Free Pickup Eligible' : 'No Free Pickup'}</span>
+                </label>
+              </div>
             </div>
 
             {/* Published toggle */}
@@ -437,16 +524,36 @@ export default function PackagesPage() {
                       ))}
                     </select>
                     {/* Count input */}
-                    <div className="relative w-24 shrink-0">
+                    <div className="relative w-20 shrink-0">
                       <input
                         type="number"
                         min="1"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 transition-all"
+                        className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 transition-all"
                         placeholder="Count"
                         value={row.total_count}
                         onChange={e => updateServiceRow(idx, 'total_count', parseInt(e.target.value) || 1)}
                       />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-gray-400 font-bold">×</span>
+                      <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-gray-400 font-bold">×</span>
+                    </div>
+                    {/* Complimentary checkbox */}
+                    <label className="flex items-center gap-1 shrink-0 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!row.complimentary}
+                        onChange={e => updateServiceRow(idx, 'complimentary', e.target.checked)}
+                        className="accent-[#D32F2F] h-4 w-4 rounded border-gray-300"
+                      />
+                      <span className="text-[10px] text-gray-500 font-bold uppercase">Free</span>
+                    </label>
+                    {/* Display Order input */}
+                    <div className="relative w-16 shrink-0">
+                      <input
+                        type="number"
+                        className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30"
+                        placeholder="Seq"
+                        value={row.display_order || 0}
+                        onChange={e => updateServiceRow(idx, 'display_order', parseInt(e.target.value) || 0)}
+                      />
                     </div>
                     {/* Remove button */}
                     <button

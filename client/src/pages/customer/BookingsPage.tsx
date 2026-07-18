@@ -1,19 +1,57 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Clock, ArrowRight, CalendarPlus, Car, Sparkles, X, Loader2 } from 'lucide-react';
+import { Calendar, Clock, ArrowRight, CalendarPlus, Car, Sparkles, X, Loader2, CreditCard, QrCode } from 'lucide-react';
 import AdminTopBar from '../../components/layout/AdminTopBar';
 import EmptyState from '../../components/shared/EmptyState';
+import ErrorState from '../../components/shared/ErrorState';
 import Button from '../../components/ui/Button';
 import { useBookings, useCancelBooking, useChangeBookingServices } from '../../api/hooks/useBookings';
 import { useServices } from '../../api/hooks/useServices';
 import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '../../store/uiStore';
 import { formatTime } from '../../utils/formatters';
+import api from '../../api/axiosInstance';
+import { useAuthStore } from '../../store/authStore';
+import QrPaymentModal from '../../components/shared/QrPaymentModal';
+import Modal from '../../components/ui/Modal';
+
+function BookingCountdown({ expiresAt, onExpire }: { expiresAt: string; onExpire: () => void }) {
+  const [timeLeft, setTimeLeft] = useState<string>('');
+
+  useEffect(() => {
+    const calculateTime = () => {
+      const difference = new Date(expiresAt).getTime() - new Date().getTime();
+      if (difference <= 0) {
+        setTimeLeft('Expired');
+        onExpire();
+        return false;
+      }
+      const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((difference % (1000 * 60)) / 1000);
+      setTimeLeft(`${minutes}:${seconds < 10 ? '0' : ''}${seconds}`);
+      return true;
+    };
+
+    calculateTime();
+    const interval = setInterval(() => {
+      const active = calculateTime();
+      if (!active) clearInterval(interval);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [expiresAt, onExpire]);
+
+  return (
+    <span className="text-[10px] sm:text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-lg animate-pulse whitespace-nowrap">
+      ⏳ Pay in {timeLeft}
+    </span>
+  );
+}
 
 export default function BookingsPage() {
   const navigate = useNavigate();
   const toast = useUIStore((s) => s.toast);
   const [page, setPage] = useState(1);
-  const { data, isLoading, refetch } = useBookings({ page, limit: 20 });
+  const { data, isLoading, isError, refetch } = useBookings({ page, limit: 20 });
   const cancelMut = useCancelBooking();
   const changeServicesMut = useChangeBookingServices();
   const { data: servicesRes } = useServices({ active_only: true });
@@ -21,13 +59,103 @@ export default function BookingsPage() {
   const [changeTargetBooking, setChangeTargetBooking] = useState<any>(null);
   const [selectedServiceIds, setSelectedServiceIds] = useState<number[]>([]);
 
-  useEffect(() => {
-    if (changeTargetBooking) {
-      setSelectedServiceIds(changeTargetBooking.service_ids || (changeTargetBooking.service_id ? [changeTargetBooking.service_id] : []));
-    } else {
-      setSelectedServiceIds([]);
+  const [choiceBookingData, setChoiceBookingData] = useState<any>(null);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [qrAmount, setQrAmount] = useState(0);
+  const [activeBookingId, setActiveBookingId] = useState<number | null>(null);
+  const [submittingOnline, setSubmittingOnline] = useState(false);
+
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handlePayOnline = async (bookingId: number, advanceAmt: number) => {
+    setSubmittingOnline(true);
+    try {
+      const sdkLoaded = await loadRazorpayScript();
+      if (!sdkLoaded) {
+        toast('error', 'Razorpay SDK failed to load. Are you online?');
+        setSubmittingOnline(false);
+        return;
+      }
+
+      const resOrder = await api.post('/payments/razorpay/order', {
+        amount: advanceAmt,
+        booking_id: bookingId
+      });
+
+      if (!resOrder.data.success) {
+        throw new Error(resOrder.data.error || 'Failed to create payment order');
+      }
+
+      const orderData = resOrder.data.data;
+
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_123',
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: 'GK AutoHerb',
+        description: `Booking Advance Payment (Booking #${bookingId})`,
+        order_id: orderData.id,
+        prefill: {
+          name: useAuthStore.getState().user?.name || '',
+          email: useAuthStore.getState().user?.email || '',
+          contact: useAuthStore.getState().user?.mobile || ''
+        },
+        handler: async function (response: any) {
+          try {
+            await api.post('/payments/razorpay/verify', {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature
+            });
+            toast('success', 'Payment successful! Your booking is now pending approval.');
+            setChoiceBookingData(null);
+            refetch();
+          } catch (err: any) {
+            console.error(err);
+            toast('error', err.response?.data?.error || 'Payment verification failed');
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            toast('warning', 'Razorpay checkout dismissed.');
+          }
+        },
+        theme: { color: '#D32F2F' }
+      };
+
+      if (orderData.id.startsWith('order_mock_')) {
+        const confirmSimulate = window.confirm(
+          "RAZORPAY SANDBOX MODE (Keys Missing)\n\nWould you like to simulate a successful online payment?"
+        );
+        if (confirmSimulate) {
+          await options.handler({
+            razorpay_order_id: orderData.id,
+            razorpay_payment_id: 'pay_mock_' + Date.now(),
+            razorpay_signature: 'sig_mock_' + Date.now()
+          });
+        } else {
+          options.modal.ondismiss();
+        }
+        return;
+      }
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
+    } catch (err: any) {
+      console.error('RAZORPAY ERROR:', err);
+      toast('error', err.message || 'An error occurred during Razorpay checkout.');
+    } finally {
+      setSubmittingOnline(false);
     }
-  }, [changeTargetBooking]);
+  };
 
   const bookings = data?.data || [];
   const pagination = data?.pagination;
@@ -75,7 +203,12 @@ export default function BookingsPage() {
       />
 
       <div className="max-w-4xl">
-        {isLoading ? (
+        {isError ? (
+          <ErrorState
+            message="Failed to load bookings. Please check your connection and try again."
+            onRetry={() => refetch()}
+          />
+        ) : isLoading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 size={24} className="animate-spin text-[#D32F2F]" />
           </div>
@@ -109,8 +242,15 @@ export default function BookingsPage() {
                 return (
                   <div
                     key={b.id}
-                    className={`bg-white p-6 rounded-xl border shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 group card-premium opacity-0 animate-fade-in-up ${
-                      b.status === 'cancelled' ? 'border-red-100 bg-red-50/20' : 'border-gray-100'
+                    onClick={() => {
+                      if (b.status === 'pending_payment') {
+                        setChoiceBookingData(b);
+                      }
+                    }}
+                    className={`bg-white p-6 rounded-xl border shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 group card-premium opacity-0 animate-fade-in-up transition-all ${
+                      b.status === 'cancelled' ? 'border-red-100 bg-red-50/20' : 
+                      b.status === 'pending_payment' ? 'border-amber-200 bg-amber-50/5 hover:border-amber-400 cursor-pointer hover:shadow-md' :
+                      'border-gray-100'
                     }`}
                     style={{ animationDelay: `${idx * 0.05}s`, animationFillMode: 'forwards' }}
                   >
@@ -161,13 +301,31 @@ export default function BookingsPage() {
                           📍 Pickup: {b.pickup_status === 'picked_up' ? 'Picked Up' : b.pickup_status}
                         </span>
                       )}
-                      <span className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider border ${
-                        b.status === 'confirmed' ? 'bg-green-50 text-green-700 border-green-200' :
-                        b.status === 'completed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                        'bg-red-50 text-red-700 border-red-200'
-                      }`}>
-                        {b.status}
-                      </span>
+                      {b.status === 'pending_payment' ? (
+                        <div className="flex items-center gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                          {b.expires_at && (
+                            <BookingCountdown expiresAt={b.expires_at} onExpire={refetch} />
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setChoiceBookingData(b);
+                            }}
+                            className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-extrabold rounded-lg text-xs shadow-md shadow-amber-500/10 transition-all flex items-center gap-1 shrink-0"
+                          >
+                            Pay Now
+                          </button>
+                        </div>
+                      ) : (
+                        <span className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider border ${
+                          b.status === 'confirmed' ? 'bg-green-50 text-green-700 border-green-200' :
+                          b.status === 'completed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          b.status === 'pending_approval' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                          'bg-red-50 text-red-700 border-red-200'
+                        }`}>
+                          {b.status === 'pending_approval' ? 'Pending Approval' : b.status}
+                        </span>
+                      )}
                       {['confirmed', 'pending_approval'].includes(b.status) && canChange && (
                         <button
                           onClick={() => setChangeTargetBooking(b)}
@@ -294,6 +452,63 @@ export default function BookingsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showQrModal && (
+        <QrPaymentModal
+          open={showQrModal}
+          onClose={() => {
+            setShowQrModal(false);
+            toast('warning', 'Payment cancelled. Your booking slot is reserved for 10 minutes.');
+          }}
+          amount={qrAmount}
+          bookingId={activeBookingId || undefined}
+          onSuccess={() => {
+            setShowQrModal(false);
+            toast('success', 'Your QR Payment confirmation request has been submitted for admin verification.');
+            refetch();
+          }}
+        />
+      )}
+
+      {choiceBookingData && (
+        <Modal 
+          open={!!choiceBookingData} 
+          onClose={() => setChoiceBookingData(null)} 
+          title="Choose Advance Payment Method"
+          size="sm"
+        >
+          <div className="flex flex-col gap-3 py-2 text-center">
+            <p className="text-sm text-gray-600 mb-2">
+              An advance payment of <span className="font-extrabold text-[#D32F2F]">₹{choiceBookingData.advance_amount}</span> is required to reserve your slot.
+            </p>
+            <button
+              onClick={() => handlePayOnline(choiceBookingData.id, choiceBookingData.advance_amount)}
+              className="w-full py-3 px-4 bg-[#D32F2F] text-white rounded-xl font-extrabold text-sm hover:bg-[#b71c1c] shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+            >
+              <CreditCard size={16} />
+              Pay Online (Razorpay)
+            </button>
+            <button
+              onClick={() => {
+                setQrAmount(choiceBookingData.advance_amount);
+                setActiveBookingId(choiceBookingData.id);
+                setShowQrModal(true);
+                setChoiceBookingData(null);
+              }}
+              className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-extrabold text-sm hover:from-emerald-700 hover:to-teal-700 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+            >
+              <QrCode size={16} />
+              Scan & Pay (UPI QR)
+            </button>
+            <button
+              onClick={() => setChoiceBookingData(null)}
+              className="w-full py-2.5 bg-gray-100 text-gray-700 rounded-xl font-semibold text-sm hover:bg-gray-200 transition-all"
+            >
+              Cancel
+            </button>
+          </div>
+        </Modal>
       )}
     </>
   );

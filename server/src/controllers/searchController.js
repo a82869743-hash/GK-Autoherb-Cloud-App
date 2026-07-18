@@ -79,12 +79,12 @@ exports.inventory = async (req, res) => {
         (quantity <= low_stock_threshold) AS is_low_stock
       FROM inventory
       WHERE (is_deleted = 0 OR is_deleted IS NULL)
-        AND (product_name LIKE ? OR unit LIKE ?)
+        AND (product_name LIKE ? OR unit LIKE ? OR sku LIKE ? OR barcode LIKE ? OR brand LIKE ? OR category LIKE ?)
       ORDER BY
         CASE WHEN product_name LIKE ? THEN 0 ELSE 1 END,
         product_name ASC
       LIMIT ?
-    `, [search, search, `${q}%`, parseInt(limit)]);
+    `, [search, search, search, search, search, search, `${q}%`, parseInt(limit)]);
 
     res.json({ success: true, data: rows });
   } catch (err) {

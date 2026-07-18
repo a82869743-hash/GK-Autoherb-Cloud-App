@@ -5,6 +5,7 @@ import { useServices } from '../../api/hooks/useServices';
 import { useLoyalty } from '../../api/hooks/useLoyalty';
 import Button from '../../components/ui/Button';
 import { SkeletonCard } from '../../components/ui/SkeletonLoader';
+import ErrorState from '../../components/shared/ErrorState';
 import { formatINR } from '../../utils/formatters';
 
 const FILTERS = ['all', 'hatchback', 'medium_hatchback', 'sedan', 'premium_sedan', 'suv'] as const;
@@ -29,11 +30,23 @@ function sortServicesByPriority(services: any[]): any[] {
 export default function CustomerServicesPage() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('all');
-  const { data: svcData, isLoading: svcLoading } = useServices({ active_only: true });
+  const { data: svcData, isLoading: svcLoading, isError, refetch } = useServices({ active_only: true });
   const { data: loyalty } = useLoyalty('mine');
 
   const services = sortServicesByPriority(svcData?.data || []);
   const isLoading = svcLoading;
+  const renderPrice = (val: any) => Number(val || 0) === 0 ? 'Free' : formatINR(val);
+
+  if (isError) {
+    return (
+      <div className="pt-4">
+        <ErrorState
+          message="Failed to load services. Please check your connection and try again."
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
+  }
 
   const getPriceKey = (f: Filter) => f === 'all' ? null : `price_${f}`;
 
@@ -148,27 +161,27 @@ export default function CustomerServicesPage() {
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1.5 text-center">
                           <div className="bg-[#faf7f5] rounded-lg py-2">
                             <p className="text-[8px] font-bold uppercase text-[#5f5e5e]">Hatch</p>
-                            <p className="text-xs font-extrabold text-[#1c1b1b]">{formatINR(svc.price_hatchback)}</p>
+                            <p className="text-xs font-extrabold text-[#1c1b1b]">{renderPrice(svc.price_hatchback)}</p>
                           </div>
                           <div className="bg-[#faf7f5] rounded-lg py-2">
                             <p className="text-[8px] font-bold uppercase text-[#5f5e5e]">Med Hatch</p>
-                            <p className="text-xs font-extrabold text-[#1c1b1b]">{formatINR(svc.price_medium_hatchback)}</p>
+                            <p className="text-xs font-extrabold text-[#1c1b1b]">{renderPrice(svc.price_medium_hatchback)}</p>
                           </div>
                           <div className="bg-[#faf7f5] rounded-lg py-2">
                             <p className="text-[8px] font-bold uppercase text-[#5f5e5e]">Sedan</p>
-                            <p className="text-xs font-extrabold text-[#1c1b1b]">{formatINR(svc.price_sedan)}</p>
+                            <p className="text-xs font-extrabold text-[#1c1b1b]">{renderPrice(svc.price_sedan)}</p>
                           </div>
                           <div className="bg-[#faf7f5] rounded-lg py-2">
                             <p className="text-[8px] font-bold uppercase text-[#5f5e5e]">Prem Sedan</p>
-                            <p className="text-xs font-extrabold text-[#1c1b1b]">{formatINR(svc.price_premium_sedan)}</p>
+                            <p className="text-xs font-extrabold text-[#1c1b1b]">{renderPrice(svc.price_premium_sedan)}</p>
                           </div>
                           <div className="bg-[#faf7f5] rounded-lg py-2">
                             <p className="text-[8px] font-bold uppercase text-[#5f5e5e]">SUV</p>
-                            <p className="text-xs font-extrabold text-[#1c1b1b]">{formatINR(svc.price_suv)}</p>
+                            <p className="text-xs font-extrabold text-[#1c1b1b]">{renderPrice(svc.price_suv)}</p>
                           </div>
                         </div>
                       ) : (
-                        <p className="text-lg font-black text-[#D32F2F]">{formatINR(svc[getPriceKey(filter)!])}</p>
+                        <p className="text-lg font-black text-[#D32F2F]">{renderPrice(svc[getPriceKey(filter)!])}</p>
                       )}
                     </div>
 

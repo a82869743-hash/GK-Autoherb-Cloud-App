@@ -25,6 +25,7 @@ export default function CustomerDetailPage() {
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
   const [pricePaid, setPricePaid] = useState('');
   const [packageServices, setPackageServices] = useState<any[]>([]);
+  const [durationMonths, setDurationMonths] = useState('12');
   const [assigning, setAssigning] = useState(false);
 
   // Package renewal states
@@ -211,7 +212,7 @@ export default function CustomerDetailPage() {
         vehicle_id: Number(selectedVehicleId),
         vehicle_segment: vehicle?.category || 'sedan',
         price_paid: Number(pricePaid) || 0,
-        duration_months: 12,
+        duration_months: Number(durationMonths) || 12,
         package_custom_services: packageServices
       };
       const res = await api.post('/packages/assign', payload);
@@ -221,6 +222,7 @@ export default function CustomerDetailPage() {
         setSelectedPackageId('');
         setSelectedVehicleId('');
         setPricePaid('');
+        setDurationMonths('12');
         setPackageServices([]);
         fetchDetail();
       }
@@ -433,7 +435,9 @@ export default function CustomerDetailPage() {
                     {activePackage.usage.map((u: any) => (
                       <div key={u.service_name} className="flex justify-between text-xs">
                         <span className="text-gray-600">{u.service_name}</span>
-                        <span className={`font-bold ${u.remaining > 0 ? 'text-emerald-600' : 'text-red-500'}`}>{u.remaining} left</span>
+                        <span className={`font-bold ${u.complimentary === 1 ? 'text-purple-600' : u.remaining > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                          {u.complimentary === 1 ? 'Complimentary' : `${u.remaining} left`}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -678,6 +682,22 @@ export default function CustomerDetailPage() {
             onChange={(e) => setPricePaid(e.target.value)}
             placeholder="0"
           />
+
+          {/* Duration Months */}
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1">Duration (Months) *</label>
+            <select
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+              value={durationMonths}
+              onChange={(e) => setDurationMonths(e.target.value)}
+            >
+              <option value="1">1 Month</option>
+              <option value="3">3 Months</option>
+              <option value="6">6 Months</option>
+              <option value="12">12 Months (1 Year)</option>
+              <option value="24">24 Months (2 Years)</option>
+            </select>
+          </div>
 
           {/* Service Balances List */}
           {packageServices.length > 0 && (

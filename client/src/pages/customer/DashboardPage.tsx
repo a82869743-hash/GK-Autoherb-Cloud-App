@@ -7,6 +7,7 @@ import {
 import { useCustomerDashboard } from '../../api/hooks/useDashboard';
 import { useAuthStore } from '../../store/authStore';
 import { SkeletonCard } from '../../components/ui/SkeletonLoader';
+import ErrorState from '../../components/shared/ErrorState';
 import Button from '../../components/ui/Button';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { formatINR, formatDate, formatTime } from '../../utils/formatters';
@@ -15,12 +16,23 @@ import AddCarModal from '../../components/shared/AddCarModal';
 export default function CustomerDashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { data, isLoading } = useCustomerDashboard();
+  const { data, isLoading, isError, refetch } = useCustomerDashboard();
   const [showAddCar, setShowAddCar] = useState(false);
 
   const firstName = user?.name?.split(' ')[0] || 'there';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
+
+  if (isError) {
+    return (
+      <div className="pt-4">
+        <ErrorState
+          message="Failed to load dashboard. Please check your connection and try again."
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -181,13 +193,13 @@ export default function CustomerDashboardPage() {
             activePackages.map((pkg: any, index: number) => (
               <div key={pkg.id || index} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 relative overflow-hidden">
                 <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 to-purple-400" />
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-50 to-purple-100 flex items-center justify-center text-purple-600">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-50 to-purple-100 flex items-center justify-center text-purple-600 shrink-0">
                       <Package size={20} />
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Active Package</span>
                         {pkg.vehicle_reg_no ? (
                           <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-[9px] font-extrabold uppercase tracking-wider rounded-md">
@@ -213,7 +225,7 @@ export default function CustomerDashboardPage() {
                   </div>
                   <button
                     onClick={() => navigate(`/customer/bookings/new?from_package=1&vehicle_id=${pkg.vehicle_id || ''}`)}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg hover:bg-purple-700 transition-colors"
+                    className="flex items-center justify-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg hover:bg-purple-700 transition-colors w-full sm:w-auto"
                   >
                     Book from Package
                   </button>
@@ -238,7 +250,9 @@ export default function CustomerDashboardPage() {
                     {pkg.usage.map((u: any) => (
                       <div key={u.service_name} className="flex items-center justify-between text-xs">
                         <span className="text-gray-600">{u.service_name}</span>
-                        <span className={`font-bold ${u.remaining > 0 ? 'text-emerald-600' : 'text-red-500'}`}>{u.remaining} / {u.total_count}</span>
+                        <span className={`font-bold ${u.complimentary === 1 ? 'text-purple-600' : u.remaining > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                          {u.complimentary === 1 ? `${u.remaining} / ${u.total_count} (Complimentary)` : `${u.remaining} / ${u.total_count}`}
+                        </span>
                       </div>
                     ))}
                   </div>

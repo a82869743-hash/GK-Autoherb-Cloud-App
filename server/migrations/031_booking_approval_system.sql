@@ -12,7 +12,7 @@
 
 -- Step 1: Expand status ENUM
 ALTER TABLE bookings
-  MODIFY COLUMN status ENUM('pending_approval','confirmed','cancelled','completed','expired','rejected')
+  MODIFY COLUMN status ENUM('pending_approval','confirmed','cancelled','completed','expired','rejected','pending_payment')
     NOT NULL DEFAULT 'pending_approval';
 
 -- Step 2: Add vehicle_id FK (nullable — existing bookings don't have it)

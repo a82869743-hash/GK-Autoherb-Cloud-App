@@ -14,7 +14,7 @@
 | **Total Updates** | 31 Feature Updates / Modules |
 | **Date** | June 15, 2026 |
 
-> [!IMPORTANT]
+> [!IMPORTANT]![alt text](image.png)
 > **IMPORTANT NOTE FOR AI CODING AGENT:**
 > All new backend features must follow:
 > 1. New migration file in `server/migrations/` with next sequential prefix.

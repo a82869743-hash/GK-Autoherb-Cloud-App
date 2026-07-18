@@ -530,9 +530,10 @@ exports.getAdvancePayments = async (req, res) => {
   try {
     const { status = 'advance_paid' } = req.query;
     const [rows] = await pool.query(`
-      SELECT ap.*, u.name as customer_name, u.mobile as customer_mobile
+      SELECT ap.*, u.name as customer_name, u.mobile as customer_mobile, b.advance_payment_id
       FROM advance_payments ap
       LEFT JOIN users u ON u.id = ap.customer_id
+      LEFT JOIN bookings b ON b.id = ap.booking_id
       WHERE ap.status = ?
       ORDER BY ap.created_at DESC
     `, [status]);

@@ -4,14 +4,27 @@ import { useJobCarts } from '../../api/hooks/useJobCarts';
 import { useAuthStore } from '../../store/authStore';
 import StatusBadge from '../../components/shared/StatusBadge';
 import EmptyState from '../../components/shared/EmptyState';
+import ErrorState from '../../components/shared/ErrorState';
 import { SkeletonCard } from '../../components/ui/SkeletonLoader';
 import { formatINR, formatDate } from '../../utils/formatters';
 import type { JobPhoto } from '../../types';
 
 export default function CustomerJobCartsPage() {
-  const { data, isLoading } = useJobCarts({ page: 1, limit: 100 });
+  const { data, isLoading, isError, refetch } = useJobCarts({ page: 1, limit: 100 });
   const [expanded, setExpanded] = useState<number | null>(null);
   const token = useAuthStore((s) => s.token);
+
+  if (isError) {
+    return (
+      <div className="pt-4">
+        <h2 className="text-2xl font-extrabold text-[#1c1b1b] tracking-tight mb-6">My Job Carts</h2>
+        <ErrorState
+          message="Failed to load job carts. Please check your connection and try again."
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

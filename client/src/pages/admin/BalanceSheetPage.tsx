@@ -36,7 +36,7 @@ export default function BalanceSheetPage() {
         iconColor="#4CAF50"
         accentGradient="from-emerald-600 to-emerald-500"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <input type="date" value={dateRange.from} onChange={e => setDateRange(p => ({ ...p, from: e.target.value }))} className="text-xs border border-gray-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500" />
             <span className="text-gray-400 text-xs">to</span>
             <input type="date" value={dateRange.to} onChange={e => setDateRange(p => ({ ...p, to: e.target.value }))} className="text-xs border border-gray-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500" />

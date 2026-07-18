@@ -1,12 +1,13 @@
 import { IndianRupee, History, TrendingUp } from 'lucide-react';
 import AdminTopBar from '../../components/layout/AdminTopBar';
 import EmptyState from '../../components/shared/EmptyState';
+import ErrorState from '../../components/shared/ErrorState';
 import { SkeletonCard } from '../../components/ui/SkeletonLoader';
 import { useMyPayments } from '../../api/hooks/useStaff';
 import { formatDate } from '../../utils/formatters';
 
 export default function StaffBenefitsPage() {
-  const { data, isLoading } = useMyPayments();
+  const { data, isLoading, isError, refetch } = useMyPayments();
   const benefits = data?.data || [];
 
   const pendingAmount = benefits.filter((b: any) => b.status === 'pending').reduce((sum: number, b: any) => sum + Number(b.amount), 0);
@@ -15,7 +16,14 @@ export default function StaffBenefitsPage() {
     <>
       <AdminTopBar title="My Benefits & Incentives" subtitle="Track your bonuses and compensation" />
 
-      {isLoading ? (
+      {isError ? (
+        <div className="pt-4">
+          <ErrorState
+            message="Failed to load benefits history. Please check your connection and try again."
+            onRetry={() => refetch()}
+          />
+        </div>
+      ) : isLoading ? (
         <div className="space-y-4">
           <SkeletonCard />
           <SkeletonCard />

@@ -1,6 +1,54 @@
 const pool = require('../config/db');
 const path = require('path');
 const fs = require('fs');
+const puppeteer = require('puppeteer');
+
+// ─── Puppeteer Browser Singleton ───────────────────────────────
+// Reuse a single browser instance across all PDF requests to avoid
+// cold-starting Chrome for every single invoice (the #1 cause of slow PDFs).
+let _browser = null;
+let _browserLaunchPromise = null;
+
+async function getBrowser() {
+  if (_browser && _browser.isConnected()) return _browser;
+  if (_browserLaunchPromise) return _browserLaunchPromise;
+  _browserLaunchPromise = (async () => {
+    try {
+      const launchOptions = {
+        headless: 'new',
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+      };
+      if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+        launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+      }
+      _browser = await puppeteer.launch(launchOptions);
+      _browser.on('disconnected', () => { _browser = null; _browserLaunchPromise = null; });
+      return _browser;
+    } catch (e) {
+      _browserLaunchPromise = null;
+      throw e;
+    }
+  })();
+  return _browserLaunchPromise;
+}
+
+async function htmlToPdfBuffer(html, pdfOptions = {}) {
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+  try {
+    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 15000 });
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '8mm', right: '8mm', bottom: '8mm', left: '8mm' },
+      ...pdfOptions,
+    });
+    return pdfBuffer;
+  } finally {
+    await page.close();
+  }
+}
+
 
 // â”€â”€â”€ Number-to-Words Converter (Indian format) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
@@ -136,7 +184,12 @@ async function generateInvoicePDF(jobCartId) {
     } else if (cart.discount_type === 'fixed') {
       discountAmt = parseFloat(cart.discount_value || 0);
     }
-    const finalTotal = Math.max(0, grandTotal - discountAmt);
+    const finalTotal = Math.max(0, grandTotal - discountAmt + parseFloat(cart.pickup_charge || 0));
+    const isJobPaid = cart.payment_status === 'paid';
+    const advancePaid = parseFloat(cart.advance_paid) || 0;
+    const receivedStudio = isJobPaid ? Math.max(0, finalTotal - advancePaid) : 0;
+    const balanceDue = isJobPaid ? 0 : Math.max(0, finalTotal - advancePaid);
+    const paymentStatusText = isJobPaid ? 'PAID' : 'PENDING';
 
     // 6. Format date
     const invoiceDate = cart.completed_at
@@ -565,21 +618,31 @@ async function generateInvoicePDF(jobCartId) {
             <span class="amount-value">- ₹ ${formatINR(discountAmt)}</span>
           </div>
           ` : ''}
+          ${parseFloat(cart.pickup_charge || 0) > 0 ? `
+          <div class="amount-row">
+            <span class="amount-label">Pickup & Drop (${(cart.pickup_type || 'both').toUpperCase()})</span>
+            <span class="amount-value">₹ ${formatINR(cart.pickup_charge)}</span>
+          </div>
+          ` : ''}
           <div class="amount-row total">
             <span class="amount-label">Total Payable</span>
             <span class="amount-value">₹ ${formatINR(finalTotal)}</span>
           </div>
           <div class="amount-row">
             <span class="amount-label">Advance Paid</span>
-            <span class="amount-value">₹ ${formatINR(cart.advance_paid || 0)}</span>
+            <span class="amount-value">₹ ${formatINR(advancePaid)}</span>
           </div>
           <div class="amount-row">
             <span class="amount-label">Received Amount</span>
-            <span class="amount-value">₹ ${formatINR(finalTotal - (cart.advance_paid || 0))}</span>
+            <span class="amount-value">₹ ${formatINR(receivedStudio)}</span>
           </div>
           <div class="amount-row">
             <span class="amount-label">Balance Due</span>
-            <span class="amount-value">₹ ${formatINR(cart.balance_due || 0)}</span>
+            <span class="amount-value">₹ ${formatINR(balanceDue)}</span>
+          </div>
+          <div class="amount-row">
+            <span class="amount-label">Status</span>
+            <span class="amount-value" style="color: ${isJobPaid ? '#2e7d32' : '#c62828'}; font-weight: bold;">${paymentStatusText}</span>
           </div>
         </div>
       </div>
@@ -618,25 +681,8 @@ async function generateInvoicePDF(jobCartId) {
     </html>
     `;
 
-    // 10. Render PDF with Puppeteer
-    const puppeteer = require('puppeteer');
-    const launchOptions = {
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    };
-    // Use system Chromium on VPS (set PUPPETEER_EXECUTABLE_PATH in .env)
-    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-    }
-    const browser = await puppeteer.launch(launchOptions);
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '8mm', right: '8mm', bottom: '8mm', left: '8mm' },
-    });
-    await browser.close();
+    // 10. Render PDF with reusable browser
+    const pdfBuffer = await htmlToPdfBuffer(html);
 
     return { pdfBuffer, invoiceNumber };
   } finally {
@@ -765,25 +811,8 @@ async function generateBuySellInvoicePDF(buySellId) {
     </html>
     `;
 
-    const puppeteer = require('puppeteer');
-    const browser = await puppeteer.launch({
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
-    });
-    
-    try {
-      const page = await browser.newPage();
-      await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
-      const pdfBuffer = await page.pdf({
-        format: 'A4',
-        printBackground: true,
-        margin: { top: '8mm', right: '8mm', bottom: '8mm', left: '8mm' }
-      });
-      return pdfBuffer;
-    } finally {
-      await browser.close();
-    }
+    const pdfBuffer = await htmlToPdfBuffer(htmlContent);
+    return pdfBuffer;
   } finally {
     conn.release();
   }
@@ -1111,23 +1140,7 @@ function buildInvoiceHTML({ title, invoiceNumber, invoiceDate, logoHtml, partyNa
 
 // â”€â”€â”€ Shared PDF renderer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function renderPDF(html, invoiceNumber) {
-  const puppeteer = require('puppeteer');
-  const launchOptions = {
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-  };
-  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-    launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-  }
-  const browser = await puppeteer.launch(launchOptions);
-  const page = await browser.newPage();
-  await page.setContent(html, { waitUntil: 'networkidle0' });
-  const pdfBuffer = await page.pdf({
-    format: 'A4',
-    printBackground: true,
-    margin: { top: '8mm', right: '8mm', bottom: '8mm', left: '8mm' },
-  });
-  await browser.close();
+  const pdfBuffer = await htmlToPdfBuffer(html);
   return { pdfBuffer, invoiceNumber };
 }
 
@@ -1140,16 +1153,26 @@ async function generatePackageInvoicePDF(requestId) {
     const [records] = await conn.query(`
       SELECT pr.*, u.name AS customer_name, u.mobile AS customer_mobile,
              v.registration_no, v.brand, v.model,
-             p.name AS package_name
+             p.name AS package_name,
+             pay.status AS payment_status
       FROM package_requests pr
       JOIN users u ON pr.customer_id = u.id
       JOIN vehicles v ON pr.vehicle_id = v.id
       JOIN packages p ON pr.package_id = p.id
-      WHERE pr.id = ? AND pr.status = 'approved'
+      LEFT JOIN v2_payments pay ON (
+        pay.booking_id IS NULL AND
+        JSON_UNQUOTE(JSON_EXTRACT(pay.notes, '$.package_request_id')) = pr.id
+      )
+      WHERE pr.id = ?
     `, [requestId]);
 
-    if (!records.length) throw new Error('Approved package request not found');
+    if (!records.length) throw new Error('Package request not found');
     const record = records[0];
+
+    const isPaid = record.status === 'approved' || record.payment_status === 'captured' || record.payment_status === 'completed';
+    const receivedAmount = isPaid ? parseFloat(record.price || 0) : 0;
+    const balanceDue = isPaid ? 0 : parseFloat(record.price || 0);
+    const paymentStatusText = isPaid ? 'PAID' : 'PENDING';
 
     // Fetch settings
     const [settingsRows] = await conn.query('SELECT key_name, value FROM settings');
@@ -1294,8 +1317,9 @@ async function generatePackageInvoicePDF(requestId) {
         <div class="amounts-section">
           <div class="amount-row"><span class="amount-label">Subtotal</span><span class="amount-value">₹ ${formatINR(grandTotal)}</span></div>
           <div class="amount-row total"><span class="amount-label">Total Payable</span><span class="amount-value">₹ ${formatINR(grandTotal)}</span></div>
-          <div class="amount-row"><span class="amount-label">Received Amount</span><span class="amount-value">₹ ${formatINR(grandTotal)}</span></div>
-          <div class="amount-row"><span class="amount-label">Balance</span><span class="amount-value">₹ 0</span></div>
+          <div class="amount-row"><span class="amount-label">Received Amount</span><span class="amount-value">₹ ${formatINR(receivedAmount)}</span></div>
+          <div class="amount-row"><span class="amount-label">Balance Due</span><span class="amount-value">₹ ${formatINR(balanceDue)}</span></div>
+          <div class="amount-row"><span class="amount-label">Status</span><span class="amount-value" style="color: ${isPaid ? '#2e7d32' : '#c62828'}; font-weight: bold;">${paymentStatusText}</span></div>
         </div>
       </div>
       <div class="terms-section">
@@ -1438,7 +1462,7 @@ async function generatePaymentReceiptPDF(paymentId) {
     const [payments] = await conn.query(`
       SELECT p.*,
              u.name AS customer_name, u.mobile AS customer_mobile, u.email AS customer_email
-      FROM payments p
+      FROM v2_payments p
       LEFT JOIN users u ON p.customer_id = u.id
       WHERE p.id = ?
     `, [paymentId]);
@@ -1459,9 +1483,14 @@ async function generatePaymentReceiptPDF(paymentId) {
 
     const grandTotal = parseFloat(record.amount) || 0;
     
+    let paymentDesc = 'Payment received';
+    if (record.booking_id) paymentDesc = `Advance Payment (Booking #${record.booking_id})`;
+    else if (record.job_cart_id) paymentDesc = `Service Billing (Job Card #${record.job_cart_id})`;
+    else if (record.package_id || (record.notes && record.notes.includes('package_request_id'))) paymentDesc = 'Package Purchase Payment';
+
     const serviceRowsHtml = `
       <tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-transform:uppercase;">Payment - ${record.payment_type}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-transform:uppercase;">${paymentDesc}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:center;">1</td>
         <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">₹ ${formatINR(grandTotal)}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">₹ ${formatINR(grandTotal)}</td>
@@ -1716,25 +1745,228 @@ async function generateQuotationPDF(quotationId) {
     </html>
     `;
 
-    const puppeteer = require('puppeteer');
-    const browser = await puppeteer.launch({
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
-    });
-    
-    try {
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
-      const pdfBuffer = await page.pdf({
-        format: 'A4',
-        printBackground: true,
-        margin: { top: '8mm', right: '8mm', bottom: '8mm', left: '8mm' }
-      });
-      return { pdfBuffer, quotationNumber };
-    } finally {
-      await browser.close();
-    }
+    const pdfBuffer = await htmlToPdfBuffer(html);
+    return { pdfBuffer, quotationNumber };
+  } finally {
+    conn.release();
+  }
+}
+
+async function generateBookingInvoicePDF(bookingId) {
+  const conn = await pool.getConnection();
+  try {
+    const [bookings] = await conn.query(`
+      SELECT b.*, u.name AS customer_name, u.mobile AS customer_mobile, u.email AS customer_email,
+             v.registration_no, v.brand, v.model,
+             s.name AS service_name, s.price_hatchback, s.price_medium_hatchback, s.price_sedan, s.price_premium_sedan, s.price_suv
+      FROM bookings b
+      LEFT JOIN users u ON b.customer_id = u.id
+      LEFT JOIN vehicles v ON b.vehicle_id = v.id
+      LEFT JOIN services s ON b.service_id = s.id
+      WHERE b.id = ?
+    `, [bookingId]);
+
+    if (!bookings.length) throw new Error('Booking not found');
+    const booking = bookings[0];
+
+    const [settingsRows] = await conn.query('SELECT key_name, value FROM settings');
+    const settings = {};
+    settingsRows.forEach(r => { settings[r.key_name] = r.value; });
+
+    const invoiceNumber = `BKG-${booking.id}`;
+    const invoiceDate = new Date(booking.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    const logoBase64 = getLogoBase64();
+    const logoHtml = logoBase64
+      ? `<img src="${logoBase64}" alt="GK Auto Herb" style="width:80px;height:80px;object-fit:contain;" />`
+      : `<div style="width:80px;height:80px;background:#D32F2F;border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:14px;text-align:center;">Auto<br>Herb</div>`;
+
+    const finalTotal = parseFloat(booking.total_amount) || 0;
+    const advancePaid = booking.advance_payment_id ? parseFloat(booking.advance_amount) : 0;
+    const balanceDue = Math.max(0, finalTotal - advancePaid);
+    const isPaid = balanceDue <= 0;
+    const paymentStatusText = isPaid ? 'PAID' : 'PENDING';
+
+    const serviceRowsHtml = `
+      <tr>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-transform:uppercase;">
+          ${(booking.service_name || booking.package_service_name || 'Wash Service').toUpperCase()}
+        </td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:center;">1 PCS</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">₹ ${formatINR(finalTotal - parseFloat(booking.pickup_charge || 0))}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;text-align:right;">₹ ${formatINR(finalTotal - parseFloat(booking.pickup_charge || 0))}</td>
+      </tr>
+    `;
+
+    const emptyRowsCount = 5;
+    const emptyRows = Array(emptyRowsCount).fill(`
+      <tr>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;">&nbsp;</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;">&nbsp;</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;">&nbsp;</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e0e0e0;">&nbsp;</td>
+      </tr>
+    `).join('');
+
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8" />
+      <style>
+        @page { size: A4; margin: 0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, Helvetica, sans-serif; color: #1a1a1a; padding: 30px 35px; font-size: 12px; line-height: 1.4; }
+        .bill-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+        .bill-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+        .company-header { display: flex; align-items: center; gap: 15px; background: #D32F2F; padding: 12px 15px; border-radius: 4px; margin-bottom: 15px; margin-top: 8px; }
+        .company-logo { flex-shrink: 0; background: white; padding: 4px; border-radius: 4px; }
+        .company-info { color: white; }
+        .company-info h1 { font-size: 22px; font-weight: 800; margin-bottom: 3px; }
+        .company-info p { font-size: 10px; line-height: 1.5; opacity: 0.95; }
+        .company-info .gst-row { margin-top: 4px; font-size: 10px; font-weight: 600; }
+        .invoice-meta { display: flex; border: 1px solid #D32F2F; margin-bottom: 12px; }
+        .invoice-meta-left, .invoice-meta-right { flex: 1; padding: 8px 12px; }
+        .invoice-meta-right { text-align: right; border-left: 1px solid #D32F2F; }
+        .meta-label { font-size: 10px; color: #D32F2F; font-weight: 700; }
+        .meta-value { font-size: 13px; font-weight: 700; }
+        .bill-details { display: flex; border: 1px solid #D32F2F; border-top: none; margin-top: -12px; margin-bottom: 15px; }
+        .bill-to-section { flex: 1; padding: 10px 12px; }
+        .vehicle-section { flex: 0 0 220px; padding: 10px 12px; border-left: 1px solid #D32F2F; text-align: right; }
+        .bill-to-label, .vehicle-label { font-size: 10px; font-weight: 700; color: #D32F2F; text-transform: uppercase; }
+        .bill-to-name { font-size: 13px; font-weight: 700; margin-top: 3px; }
+        .bill-to-detail { font-size: 11px; color: #444; margin-top: 1px; }
+        .vehicle-value { font-size: 12px; font-weight: 600; margin-top: 2px; }
+        .services-table { width: 100%; border-collapse: collapse; margin-bottom: 0; }
+        .services-table thead th { background: #D32F2F; color: white; padding: 8px 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; text-align: left; }
+        .services-table thead th:nth-child(2), .services-table thead th:nth-child(3), .services-table thead th:nth-child(4) { text-align: center; }
+        .services-table thead th:last-child { text-align: right; }
+        .subtotal-row { display: flex; justify-content: space-between; padding: 10px 12px; border: 1px solid #D32F2F; font-weight: 700; font-size: 13px; margin-top: 20px; margin-bottom: 0; }
+        .bottom-grid { display: flex; gap: 0; border: 1px solid #D32F2F; border-top: none; }
+        .bank-section { flex: 1; padding: 12px; border-right: 1px solid #D32F2F; }
+        .amounts-section { flex: 0 0 260px; padding: 0; }
+        .bank-title { font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 6px; }
+        .bank-row { display: flex; font-size: 10px; margin-bottom: 2px; }
+        .bank-label { width: 85px; font-weight: 600; }
+        .bank-value { flex: 1; }
+        .amount-row { display: flex; justify-content: space-between; padding: 6px 12px; font-size: 11px; border-bottom: 1px solid #eee; }
+        .amount-row.total { background: #D32F2F; color: white; font-weight: 700; font-size: 13px; }
+        .amount-label { font-weight: 600; }
+        .amount-value { font-weight: 700; }
+        .terms-section { border: 1px solid #D32F2F; border-top: none; display: flex; }
+        .terms-left { flex: 1; padding: 12px; border-right: 1px solid #D32F2F; }
+        .terms-right { flex: 0 0 260px; padding: 12px; }
+        .terms-title { font-size: 10px; font-weight: 700; text-transform: uppercase; margin-bottom: 6px; }
+        .terms-text { font-size: 9px; color: #444; line-height: 1.5; }
+        .words-label { font-size: 10px; font-weight: 700; margin-bottom: 4px; }
+        .words-value { font-size: 11px; font-style: italic; color: #333; }
+        .signatory { border: 1px solid #D32F2F; border-top: none; padding: 20px 12px 12px; text-align: right; }
+        .signatory-line { width: 200px; margin-left: auto; text-align: center; }
+        .signatory-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #D32F2F; }
+        .signatory-name { font-size: 11px; font-weight: 600; margin-top: 2px; }
+      </style>
+    </head>
+    <body>
+      <div class="bill-header">
+        <div><span class="bill-title">BILL OF SUPPLY</span></div>
+      </div>
+      <div class="company-header">
+        <div class="company-logo">${logoHtml}</div>
+        <div class="company-info">
+          <h1>GK Auto Herb</h1>
+          <p>4 Tilak Nagar Society, Near Radiyatba Nagar, Opp AP Mart super store, New alkapuri, Laxmipura,<br>Vadodara, Gujarat, 390021</p>
+          <div class="gst-row">
+            <span>Mobile: 9408424541</span>&nbsp;&nbsp;&nbsp;
+            <span>GSTIN: 24AKUPK0446L1ZT</span>&nbsp;&nbsp;&nbsp;
+            <span>PAN Number: AKUPK0446L</span>
+          </div>
+          <p>Email: gaurav.itm2006@gmail.com</p>
+        </div>
+      </div>
+      <div class="invoice-meta">
+        <div class="invoice-meta-left">
+          <span class="meta-label">Invoice No.: </span><span class="meta-value">${invoiceNumber}</span>
+        </div>
+        <div class="invoice-meta-right">
+          <span class="meta-label">Invoice Date: </span><span class="meta-value">${invoiceDate}</span>
+        </div>
+      </div>
+      <div class="bill-details">
+        <div class="bill-to-section">
+          <div class="bill-to-label">BILL TO</div>
+          <div class="bill-to-name">${booking.customer_name || '-'}</div>
+          <div class="bill-to-detail">Mobile: ${booking.customer_mobile || '-'}</div>
+          <div class="bill-to-detail">Place of Supply: Gujarat</div>
+        </div>
+        <div class="vehicle-section">
+          <div><span class="vehicle-label">Vehicle Name</span><div class="vehicle-value">${(booking.brand || '')} ${(booking.model || '').toUpperCase()}</div></div>
+          <div style="margin-top:8px;"><span class="vehicle-label">Vehicle No.</span><div class="vehicle-value">${booking.registration_no || '-'}</div></div>
+        </div>
+      </div>
+      <table class="services-table">
+        <thead>
+          <tr>
+            <th style="width:50%;">SERVICE</th>
+            <th style="width:15%;text-align:center;">QTY.</th>
+            <th style="width:17%;text-align:right;">RATE</th>
+            <th style="width:18%;text-align:right;">AMOUNT</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${serviceRowsHtml}
+          ${emptyRows}
+        </tbody>
+      </table>
+      <div class="subtotal-row">
+        <div><span style="font-size:11px;font-weight:700;">SUBTOTAL</span></div>
+        <div style="display:flex;gap:40px;"><span>1</span><span>₹ ${formatINR(finalTotal)}</span></div>
+      </div>
+      <div class="bottom-grid">
+        <div class="bank-section">
+          <div class="bank-title">BANK DETAILS</div>
+          <div class="bank-row"><span class="bank-label">Name:</span><span class="bank-value">GK Auto Herb</span></div>
+          <div class="bank-row"><span class="bank-label">IFSC Code:</span><span class="bank-value">UTIB0005059</span></div>
+          <div class="bank-row"><span class="bank-label">Account No:</span><span class="bank-value">924020045334712</span></div>
+          <div class="bank-row"><span class="bank-label">Bank:</span><span class="bank-value">Axis Bank, GOTRI SEVASI ROAD</span></div>
+        </div>
+        <div class="amounts-section">
+          <div class="amount-row"><span class="amount-label">Subtotal</span><span class="amount-value">₹ ${formatINR(finalTotal)}</span></div>
+          ${parseFloat(booking.pickup_charge || 0) > 0 ? `
+          <div class="amount-row">
+            <span class="amount-label">Pickup & Drop (${(booking.pickup_type || 'both').toUpperCase()})</span>
+            <span class="amount-value">₹ ${formatINR(booking.pickup_charge)}</span>
+          </div>
+          ` : ''}
+          <div class="amount-row total"><span class="amount-label">Total Payable</span><span class="amount-value">₹ ${formatINR(finalTotal)}</span></div>
+          <div class="amount-row"><span class="amount-label">Received Amount</span><span class="amount-value">₹ ${formatINR(advancePaid)}</span></div>
+          <div class="amount-row"><span class="amount-label">Balance Due</span><span class="amount-value">₹ ${formatINR(balanceDue)}</span></div>
+          <div class="amount-row"><span class="amount-label">Status</span><span class="amount-value" style="color: ${isPaid ? '#2e7d32' : '#c62828'}; font-weight: bold;">${paymentStatusText}</span></div>
+        </div>
+      </div>
+      <div class="terms-section">
+        <div class="terms-left">
+          <div class="terms-title">TERMS AND CONDITIONS</div>
+          <div class="terms-text">1. Your car belongings are not our responsibility and make sure you check your belongings before dropping your car at our workshop.<br>2. Please check if any cash or others important documents are there.<br>3. All disputes are subject to [Vadodara] jurisdiction only.</div>
+        </div>
+        <div class="terms-right">
+          <div class="words-label">Total Amount (in words)</div>
+          <div class="words-value">${amountInWords(finalTotal)}</div>
+        </div>
+      </div>
+      <div class="signatory">
+        <div class="signatory-line">
+          <div style="border-top:1px solid #999;padding-top:6px;margin-top:30px;">
+            <div class="signatory-label">AUTHORISED SIGNATORY FOR</div>
+            <div class="signatory-name">GK Auto Herb</div>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+
+    const pdfBuffer = await htmlToPdfBuffer(html);
+    return { pdfBuffer, invoiceNumber };
   } finally {
     conn.release();
   }
@@ -1748,6 +1980,7 @@ module.exports = {
   generatePackageInvoicePDF,
   generateQuickWashInvoicePDF,
   generatePaymentReceiptPDF,
-  generateQuotationPDF
+  generateQuotationPDF,
+  generateBookingInvoicePDF
 };
 

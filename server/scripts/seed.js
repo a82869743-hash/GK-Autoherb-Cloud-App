@@ -35,7 +35,7 @@ async function seed() {
       ('GK AutoHerb Owner', '9000000001', 'admin@gkautoherb.in', ?, 'admin'),
       ('Test Customer', '9000000002', 'customer@test.com', ?, 'customer'),
       ('Test Staff', '9000000003', 'staff@test.com', ?, 'staff')
-    ON DUPLICATE KEY UPDATE name = VALUES(name)
+    ON DUPLICATE KEY UPDATE name = VALUES(name), password_hash = VALUES(password_hash)
   `, [adminHash, testHash, testHash]);
   console.log('  ✓ Users seeded (admin, customer, staff)');
 

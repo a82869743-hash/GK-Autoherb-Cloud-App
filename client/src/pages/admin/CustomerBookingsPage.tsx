@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Calendar, Clock, Car, Phone, User, FileText,
-  ChevronLeft, ChevronRight, Loader2, X, Eye, History, Plus
+  ChevronLeft, ChevronRight, Loader2, X, Eye, History, Plus, Download
 } from 'lucide-react';
 import { useBookings, useVehicleHistory, useCreateManualBooking } from '../../api/hooks/useBookings';
 import { useServices } from '../../api/hooks/useServices';
@@ -434,6 +434,65 @@ export default function CustomerBookingsPage() {
                     </button>
                   )}
                 </div>
+              </div>
+
+              {/* Payment Details */}
+              <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-2 items-center w-full">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e]">Payment:</span>
+                {b.booking_type === 'package' ? (
+                  <span className="text-xs font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-lg">
+                    📦 Package Credit ({b.package_name || 'Active Package'})
+                  </span>
+                ) : b.is_free_wash ? (
+                  <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg">
+                    🎁 Free Wash (Loyalty)
+                  </span>
+                ) : b.advance_payment_id ? (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-lg flex items-center gap-1">
+                      💰 Advance Paid: ₹{b.advance_amount || 0}
+                    </span>
+                    <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-lg">
+                      💵 Studio Due: ₹{(b.total_amount || 0) - (b.advance_amount || 0)} (Total: ₹{b.total_amount || 0})
+                    </span>
+                    <button
+                      onClick={() => {
+                        const token = localStorage.getItem('token');
+                        window.open(`/api/payments/${b.advance_payment_id}/invoice?token=${token}`, '_blank');
+                      }}
+                      className="text-blue-600 hover:text-blue-800 font-bold text-xs inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 px-2 py-1 rounded-lg hover:bg-blue-100 transition-colors"
+                      title="Download Payment Receipt"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Receipt
+                    </button>
+                  </div>
+                ) : b.advance_amount > 0 ? (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-bold text-yellow-700 bg-yellow-50 border border-yellow-200 px-2.5 py-0.5 rounded-lg">
+                      ⏳ Advance Pending: ₹{b.advance_amount || 0}
+                    </span>
+                    <span className="text-xs font-bold text-gray-700 bg-gray-50 border border-gray-200 px-2.5 py-0.5 rounded-lg">
+                      💵 Total Bill: ₹{b.total_amount || 0}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-xs font-bold text-gray-700 bg-gray-50 border border-gray-200 px-2.5 py-0.5 rounded-lg">
+                    💵 Pay at Studio: ₹{b.total_amount || 0}
+                  </span>
+                )}
+                
+                <button
+                  onClick={() => {
+                    const token = localStorage.getItem('token');
+                    window.open(`/api/bookings/${b.id}/invoice?token=${token}`, '_blank');
+                  }}
+                  className="ml-auto text-blue-600 hover:text-blue-800 font-bold text-xs inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
+                  title="Download Booking Invoice"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Booking Invoice
+                </button>
               </div>
 
               {/* Notes */}

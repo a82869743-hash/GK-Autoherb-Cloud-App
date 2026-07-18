@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axiosInstance';
 import { PlusCircle, Search, User, Car, Phone, Mail, Box, Calendar, Loader2, IndianRupee } from 'lucide-react';
+import { useBrands, useModels } from '../../api/hooks/useVehicles';
+import { getCategoryForModel } from '../../utils/carData';
+import SearchableSelect from '../../components/ui/SearchableSelect';
 
 interface OfflineRegistration {
   customer_id: number;
@@ -31,11 +34,31 @@ export default function ManualRegistrationPage() {
     category: '',
     registration_no: '',
     package_id: '',
-    price: ''
+    price: '',
+    package_start_date: new Date().toISOString().split('T')[0],
+    package_end_date: ''
   });
 
   const [packages, setPackages] = useState<any[]>([]);
   const [packageServices, setPackageServices] = useState<any[]>([]);
+  const [customBrand, setCustomBrand] = useState('');
+  const [customModel, setCustomModel] = useState('');
+
+  // Car brand/model lists
+  const { data: brandsRes } = useBrands();
+  const { data: modelsRes } = useModels(formData.brand);
+  const brandsList: string[] = brandsRes?.data || [];
+  const modelsList: string[] = modelsRes?.data || [];
+
+  const brandsOptions = [
+    ...brandsList.map((b: string) => ({ value: b, label: b })),
+    { value: 'Others', label: 'Others (Enter Manually)' }
+  ];
+
+  const modelsOptions = [
+    ...modelsList.map((m: string) => ({ value: m, label: m })),
+    { value: 'Others', label: 'Others (Enter Manually)' }
+  ];
 
   useEffect(() => {
     fetchRegistrations();
@@ -54,7 +77,9 @@ export default function ManualRegistrationPage() {
           const mapped = res.data.data.map((s: any) => ({
             service_name: s.name,
             total_count: s.total_count || 1,
-            remaining: s.total_count || 1
+            remaining: s.total_count || 1,
+            complimentary: s.complimentary || 0,
+            display_order: s.display_order || 0
           }));
           setPackageServices(mapped);
         }
@@ -97,8 +122,11 @@ export default function ManualRegistrationPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const finalBrand = formData.brand === 'Others' ? customBrand : formData.brand;
+    const finalModel = (formData.brand === 'Others' || formData.model === 'Others') ? customModel : formData.model;
+
     if (formData.package_id) {
-      if (!formData.brand.trim() || !formData.model.trim() || !formData.registration_no.trim() || !formData.category) {
+      if (!finalBrand.trim() || !finalModel.trim() || !formData.registration_no.trim() || !formData.category) {
         alert('All vehicle details (Brand, Model, Reg No, Category) are required when selecting a package.');
         return;
       }
@@ -108,6 +136,8 @@ export default function ManualRegistrationPage() {
     try {
       const payload = {
         ...formData,
+        brand: finalBrand,
+        model: finalModel,
         package_custom_services: formData.package_id ? packageServices : undefined
       };
       const res = await api.post('/customers/manual-registration', payload);
@@ -115,8 +145,12 @@ export default function ManualRegistrationPage() {
         alert('Customer registered successfully!');
         setFormData({
           name: '', mobile: '', email: '', brand: '', model: '',
-          category: '', registration_no: '', package_id: '', price: ''
+          category: '', registration_no: '', package_id: '', price: '',
+          package_start_date: new Date().toISOString().split('T')[0],
+          package_end_date: ''
         });
+        setCustomBrand('');
+        setCustomModel('');
         setPackageServices([]);
         fetchRegistrations();
       }
@@ -127,6 +161,33 @@ export default function ManualRegistrationPage() {
       setSubmitting(false);
     }
   };
+
+  // Auto lookup when a 10-digit mobile number is typed
+  useEffect(() => {
+    const cleanMobile = formData.mobile.replace(/\D/g, '');
+    if (cleanMobile.length === 10) {
+      const lookupCustomer = async () => {
+        try {
+          const res = await api.get(`/customers/lookup/${cleanMobile}`);
+          if (res.data.success && res.data.found) {
+            const cust = res.data.data;
+            setFormData(prev => ({
+              ...prev,
+              name: cust.name || prev.name,
+              email: cust.email || prev.email || '',
+              brand: cust.vehicle?.brand || prev.brand || '',
+              model: cust.vehicle?.model || prev.model || '',
+              category: cust.vehicle?.category || prev.category || '',
+              registration_no: cust.vehicle?.registration_no || prev.registration_no || ''
+            }));
+          }
+        } catch (err) {
+          console.warn('Customer auto-lookup failed:', err);
+        }
+      };
+      lookupCustomer();
+    }
+  }, [formData.mobile]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -176,14 +237,64 @@ export default function ManualRegistrationPage() {
               <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Vehicle Details</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Brand</label>
-                  <input name="brand" value={formData.brand} onChange={handleChange} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-red-500" placeholder="e.g. BMW" />
+                  <SearchableSelect
+                    label="Brand"
+                    options={brandsOptions}
+                    value={formData.brand}
+                    onChange={(e) => {
+                      setFormData(prev => ({ ...prev, brand: e.target.value, model: '', category: '' }));
+                      setCustomBrand('');
+                      setCustomModel('');
+                    }}
+                    placeholder="Select Brand"
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Model</label>
-                  <input name="model" value={formData.model} onChange={handleChange} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-red-500" placeholder="e.g. X1" />
+                  <SearchableSelect
+                    label="Model"
+                    options={modelsOptions}
+                    value={formData.model}
+                    onChange={(e) => {
+                      const mVal = e.target.value;
+                      const cat = getCategoryForModel(formData.brand, mVal) || '';
+                      setFormData(prev => ({ ...prev, model: mVal, category: cat }));
+                      setCustomModel('');
+                    }}
+                    placeholder={formData.brand ? "Select Model" : "Select brand first"}
+                    disabled={!formData.brand || formData.brand === 'Others'}
+                  />
                 </div>
               </div>
+              {(formData.brand === 'Others' || formData.model === 'Others') && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                  {formData.brand === 'Others' && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Enter Brand Name</label>
+                      <input
+                        type="text"
+                        value={customBrand}
+                        onChange={(e) => setCustomBrand(e.target.value)}
+                        placeholder="e.g. Porsche"
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-red-500"
+                        required
+                      />
+                    </div>
+                  )}
+                  {(formData.brand === 'Others' || formData.model === 'Others') && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Enter Model Name</label>
+                      <input
+                        type="text"
+                        value={customModel}
+                        onChange={(e) => setCustomModel(e.target.value)}
+                        placeholder="e.g. Cayenne"
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-red-500"
+                        required
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Reg No.</label>
@@ -225,6 +336,30 @@ export default function ManualRegistrationPage() {
                     </div>
                   </div>
 
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Package Start Date</label>
+                      <input 
+                        type="date" 
+                        name="package_start_date" 
+                        value={formData.package_start_date} 
+                        onChange={handleChange} 
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-red-500" 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Package End Date (Optional)</label>
+                      <input 
+                        type="date" 
+                        name="package_end_date" 
+                        value={formData.package_end_date} 
+                        onChange={handleChange} 
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-red-500" 
+                        placeholder="Auto calculated"
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-3 pt-3 border-t border-dashed border-gray-200">
                     <label className="block text-xs font-semibold text-gray-700">Remaining Service Balances</label>
                     <p className="text-[10px] text-gray-400">Specify current remaining counts for this customer's package services.</p>
@@ -233,7 +368,7 @@ export default function ManualRegistrationPage() {
                       {packageServices.map((svc, idx) => (
                         <div key={idx} className="flex items-center justify-between gap-2 bg-gray-50 p-2 rounded-lg border border-gray-100">
                           <span className="text-xs font-medium text-gray-700 truncate flex-1" title={svc.service_name}>
-                            {svc.service_name}
+                            {svc.service_name} {svc.complimentary === 1 ? '(Free)' : ''}
                           </span>
                           <div className="flex items-center gap-1.5 shrink-0">
                             <input

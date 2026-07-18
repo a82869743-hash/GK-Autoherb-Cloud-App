@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { useCustomerDashboard } from '../../api/hooks/useDashboard';
-import { Wrench, Calendar, Gift, Car, User, LogOut, ClipboardList, LayoutDashboard, MoreHorizontal, X, PackageOpen, Bell } from 'lucide-react';
+import { Wrench, Calendar, Gift, Car, User, LogOut, ClipboardList, LayoutDashboard, MoreHorizontal, X, PackageOpen, Bell, ShoppingBag } from 'lucide-react';
 
 const tabItems = [
   { to: '/customer', icon: LayoutDashboard, label: 'Home', end: true },
@@ -11,6 +11,7 @@ const tabItems = [
   { to: '/customer/bookings', icon: Calendar, label: 'Bookings' },
   { to: '/customer/loyalty', icon: Gift, label: 'Loyalty' },
   { to: '/customer/buy-packages', icon: PackageOpen, label: 'Buy Packages' },
+  { to: '/customer/products', icon: ShoppingBag, label: 'Products' },
   { to: '/customer/vehicles', icon: Car, label: 'My Cars' },
   { to: '/customer/profile', icon: User, label: 'Profile' },
 ];
@@ -107,7 +108,7 @@ export default function CustomerNavbar() {
       </header>
 
       {/* Bottom tab bar (mobile) */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 z-40 sm:hidden shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 z-40 sm:hidden shadow-[0_-4px_12px_rgba(0,0,0,0.05)] pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-center justify-around h-16">
           {mobileTabItems.map(({ to, icon: Icon, label, end }) => (
             <NavLink

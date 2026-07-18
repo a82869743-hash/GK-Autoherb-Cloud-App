@@ -1,5 +1,28 @@
 const pool = require('../config/db');
 
+function parseDateRobust(dateStr) {
+  if (!dateStr) return null;
+  let d = new Date(dateStr);
+  if (!isNaN(d.getTime())) return d;
+
+  const parts = dateStr.trim().split(/[-/]/);
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      d = new Date(year, month, day);
+    } else if (parts[2].length === 4) {
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const year = parseInt(parts[2], 10);
+      d = new Date(year, month, day);
+    }
+    if (!isNaN(d.getTime())) return d;
+  }
+  return null;
+}
+
 // ─── LIST ALL CUSTOMERS ─────────────────────────
 exports.list = async (req, res) => {
   try {
@@ -103,7 +126,8 @@ exports.createManual = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
-    const { name, mobile, email, brand, model, category, registration_no, package_id, price, package_custom_services } = req.body;
+    const { name, mobile, email, brand, model, category, registration_no, package_id, price, package_custom_services, package_start_date, package_end_date } = req.body;
+    console.log('MANUAL REGISTRATION BODY:', { package_start_date, package_end_date, body: req.body });
 
     if (!name || !mobile) {
       return res.status(400).json({ success: false, error: 'Name and mobile are required' });
@@ -125,30 +149,63 @@ exports.createManual = async (req, res) => {
     // Add Vehicle
     let vehicleId = null;
     if (brand && model) {
-      // make existing vehicles non-primary
-      await connection.query("UPDATE vehicles SET is_primary = 0 WHERE customer_id = ?", [customerId]);
-      
-      const [vehResult] = await connection.query(
-        "INSERT INTO vehicles (customer_id, registration_no, brand, model, category, is_primary) VALUES (?, ?, ?, ?, ?, ?)",
-        [customerId, registration_no || null, brand, model, category || null, 1]
-      );
-      vehicleId = vehResult.insertId;
+      let existingVeh = [];
+      if (registration_no) {
+        [existingVeh] = await connection.query(
+          "SELECT id FROM vehicles WHERE customer_id = ? AND registration_no = ?",
+          [customerId, registration_no]
+        );
+      } else {
+        [existingVeh] = await connection.query(
+          "SELECT id FROM vehicles WHERE customer_id = ? AND brand = ? AND model = ?",
+          [customerId, brand, model]
+        );
+      }
+
+      if (existingVeh.length > 0) {
+        vehicleId = existingVeh[0].id;
+        // Mark as primary
+        await connection.query("UPDATE vehicles SET is_primary = 0 WHERE customer_id = ?", [customerId]);
+        await connection.query("UPDATE vehicles SET is_primary = 1 WHERE id = ?", [vehicleId]);
+      } else {
+        // make existing vehicles non-primary
+        await connection.query("UPDATE vehicles SET is_primary = 0 WHERE customer_id = ?", [customerId]);
+        
+        const [vehResult] = await connection.query(
+          "INSERT INTO vehicles (customer_id, registration_no, brand, model, category, is_primary) VALUES (?, ?, ?, ?, ?, ?)",
+          [customerId, registration_no || null, brand, model, category || null, 1]
+        );
+        vehicleId = vehResult.insertId;
+      }
     }
 
     // Add Package
     if (package_id && vehicleId) {
+      const [pkgs] = await connection.query('SELECT name FROM packages WHERE id = ?', [package_id]);
+      const packageName = pkgs.length ? pkgs[0].name : '';
+      const lowerPkgName = packageName.toLowerCase();
+
+      let finalStartDate = parseDateRobust(package_start_date) || new Date();
+      let finalEndDate = parseDateRobust(package_end_date);
+
+      if (!finalEndDate) {
+        const durationMonths = lowerPkgName.includes('bronze') ? 3 : (lowerPkgName.includes('silver') ? 5 : 12);
+        finalEndDate = new Date(finalStartDate);
+        finalEndDate.setMonth(finalEndDate.getMonth() + durationMonths);
+      }
+
       // Auto approve
       await connection.query(
-        "INSERT INTO package_requests (customer_id, vehicle_id, package_id, status, price, approved_at) VALUES (?, ?, ?, 'approved', ?, NOW())",
-        [customerId, vehicleId, package_id, price || 0]
+        "INSERT INTO package_requests (customer_id, vehicle_id, package_id, status, price, created_at, approved_at) VALUES (?, ?, ?, 'approved', ?, ?, ?)",
+        [customerId, vehicleId, package_id, price || 0, finalStartDate, finalStartDate]
       );
       
       // Also insert into user_packages so the user actually gets the package!
       const [upResult] = await connection.query(
         `INSERT INTO user_packages 
-         (user_id, package_id, end_date, payment_status, package_status, price_paid, vehicle_segment, vehicle_id)
-         VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 1 YEAR), 'paid', 'active', ?, ?, ?)`,
-        [customerId, package_id, price || 0, category || null, vehicleId]
+         (user_id, package_id, start_date, end_date, payment_status, package_status, price_paid, vehicle_segment, vehicle_id)
+         VALUES (?, ?, ?, ?, 'paid', 'active', ?, ?, ?)`,
+        [customerId, package_id, finalStartDate, finalEndDate, price || 0, category || null, vehicleId]
       );
       const userPackageId = upResult.insertId;
 
@@ -166,14 +223,8 @@ exports.createManual = async (req, res) => {
           );
         }
       } else {
-        // Fallback: load default services of the package and insert them with 0 used
-        const [pkgServices] = await connection.query(
-          `SELECT s.name AS service_name, ps.total_count
-           FROM package_services ps
-           JOIN services s ON ps.service_id = s.id
-           WHERE ps.package_id = ?`,
-          [package_id]
-        );
+        const { getServiceBreakdown } = require('./userPackagesController');
+        const pkgServices = await getServiceBreakdown(connection, package_id);
         for (const item of pkgServices) {
           await connection.query(
             "INSERT INTO package_usage (user_package_id, service_name, used_count, usage_status) VALUES (?, ?, 0, 'available')",
@@ -254,6 +305,47 @@ exports.listManual = async (req, res) => {
     res.json({ success: true, data: rows });
   } catch (err) {
     console.error('Manual list error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+exports.lookupByMobile = async (req, res) => {
+  try {
+    const { mobile } = req.params;
+    if (!mobile) {
+      return res.status(400).json({ success: false, error: 'Mobile number is required' });
+    }
+
+    // Find customer by mobile
+    const [users] = await pool.query(
+      "SELECT id, name, email FROM users WHERE mobile = ? AND role = 'customer' AND is_active = 1",
+      [mobile]
+    );
+
+    if (users.length === 0) {
+      return res.json({ success: true, found: false });
+    }
+
+    const customer = users[0];
+
+    // Find their primary vehicle (or latest registered vehicle)
+    const [vehicles] = await pool.query(
+      "SELECT brand, model, category, registration_no FROM vehicles WHERE customer_id = ? ORDER BY is_primary DESC, id DESC LIMIT 1",
+      [customer.id]
+    );
+
+    res.json({
+      success: true,
+      found: true,
+      data: {
+        id: customer.id,
+        name: customer.name,
+        email: customer.email,
+        vehicle: vehicles.length ? vehicles[0] : null
+      }
+    });
+  } catch (err) {
+    console.error('Customer lookup error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };

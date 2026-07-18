@@ -23,23 +23,55 @@ import { useReferralCode, useReferralHistory, useApplyReferral } from '../../api
 import { useAuthStore } from '../../store/authStore';
 import Button from '../../components/ui/Button';
 import { SkeletonCard } from '../../components/ui/SkeletonLoader';
+import ErrorState from '../../components/shared/ErrorState';
 import { formatINR, formatDate } from '../../utils/formatters';
 import { toast } from 'react-hot-toast';
+import api from '../../api/axiosInstance';
 
 export default function LoyaltyPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { data: loyalty, isLoading } = useLoyalty('mine');
+  const { data: loyalty, isLoading, isError, refetch } = useLoyalty('mine');
   const { data: history } = useLoyaltyHistory('mine');
   
   // Referral states & queries
-  const { data: referral, isLoading: isRefLoading } = useReferralCode(user?.id || 'mine');
-  const { data: refHistory } = useReferralHistory(user?.id || 'mine');
+  const { data: referral, isLoading: isRefLoading, isError: isRefError, refetch: refetchRef } = useReferralCode(user?.id || 'mine');
+  const { data: refHistory, isError: isRefHistError, refetch: refetchRefHist } = useReferralHistory(user?.id || 'mine');
   const applyReferralMutation = useApplyReferral();
   
   const [activeTab, setActiveTab] = useState<'loyalty' | 'referrals'>('loyalty');
   const [copied, setCopied] = useState(false);
   const [friendCode, setFriendCode] = useState('');
+  const [redeemingWash, setRedeemingWash] = useState(false);
+
+  const handleRedeemWash = async () => {
+    try {
+      setRedeemingWash(true);
+      const res = await api.post('/loyalty/redeem-wash');
+      toast.success(res.data?.message || 'Successfully redeemed 1000 points for 1 Free Wash!');
+      refetch();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.response?.data?.error || 'Failed to redeem points to wash');
+    } finally {
+      setRedeemingWash(false);
+    }
+  };
+
+  if (isError || isRefError || isRefHistError) {
+    return (
+      <div className="pt-4">
+        <ErrorState
+          message="Failed to load loyalty or referral details. Please try again."
+          onRetry={() => {
+            refetch();
+            refetchRef();
+            refetchRefHist();
+          }}
+        />
+      </div>
+    );
+  }
 
   if (isLoading || isRefLoading) {
     return (
@@ -175,6 +207,29 @@ export default function LoyaltyPage() {
                   Your points are worth {formatINR(points * pointValue)}. Points are automatically applied on your next service.
                 </p>
               </div>
+            </div>
+          )}
+
+          {/* Redeem 1000 points for Free Wash Banner */}
+          {pointsEnabled && points >= 1000 && (
+            <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 card-premium">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white shadow-md shadow-amber-500/25 shrink-0">
+                  <Coins size={20} />
+                </div>
+                <div>
+                  <p className="text-sm font-extrabold text-gray-900">Convert Points to Free Wash!</p>
+                  <p className="text-xs text-gray-600 mt-0.5">You have {points} points. Convert 1,000 points into 1 Free Wash voucher instantly.</p>
+                </div>
+              </div>
+              <Button 
+                onClick={handleRedeemWash} 
+                loading={redeemingWash}
+                className="bg-gradient-to-r from-amber-500 to-orange-600 border-none hover:from-amber-600 hover:to-orange-700 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-md shadow-amber-500/20 shrink-0"
+                icon={<Gift size={14} />}
+              >
+                Redeem Free Wash
+              </Button>
             </div>
           )}
 

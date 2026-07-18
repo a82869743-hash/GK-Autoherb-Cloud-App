@@ -3,7 +3,7 @@ const pool = require('../config/db');
 // Helper: fetch related services, products & pricing for a package
 async function enrichPackage(pkg) {
   const [services] = await pool.query(
-    `SELECT ps.id AS ps_id, ps.total_count, s.id, s.name, s.price_hatchback, s.price_medium_hatchback, s.price_sedan, s.price_premium_sedan, s.price_suv
+    `SELECT ps.id AS ps_id, ps.total_count, ps.complimentary, s.id, s.name, s.price_hatchback, s.price_medium_hatchback, s.price_sedan, s.price_premium_sedan, s.price_suv
      FROM package_services ps JOIN services s ON ps.service_id = s.id
      WHERE ps.package_id = ?`, [pkg.id]
   );
@@ -309,17 +309,21 @@ exports.getMyRequests = async (req, res) => {
   }
 };
 
-// ─── ADMIN: LIST PACKAGE REQUESTS ───────────
 exports.listRequests = async (req, res) => {
   try {
     const [rows] = await pool.query(`
       SELECT pr.*, u.name as customer_name, u.mobile as customer_mobile,
              v.registration_no, v.brand, v.model,
-             p.name as package_name
+             p.name as package_name,
+             pay.status AS payment_status, pay.payment_method
       FROM package_requests pr
       JOIN users u ON pr.customer_id = u.id
       JOIN vehicles v ON pr.vehicle_id = v.id
       JOIN packages p ON pr.package_id = p.id
+      LEFT JOIN v2_payments pay ON (
+        pay.booking_id IS NULL AND
+        JSON_UNQUOTE(JSON_EXTRACT(pay.notes, '$.package_request_id')) = pr.id
+      )
       ORDER BY pr.created_at DESC
     `);
     res.json({ success: true, data: rows });
@@ -359,54 +363,8 @@ exports._approveRequestInternal = async (conn, id, paymentId = null) => {
   const packageName = packages.length ? packages[0].name : '';
 
   // Get service breakdown based on tier or DB fallback
-  let serviceBreakdown = [];
-  let baseTier = '';
-  const lowerName = (packageName || '').toLowerCase();
-  if (lowerName.includes('bronze')) baseTier = 'Bronze Package';
-  else if (lowerName.includes('silver')) baseTier = 'Silver Package';
-  else if (lowerName.includes('gold')) baseTier = 'Gold Package';
-  else if (lowerName.includes('diamond')) baseTier = 'Diamond Package';
-  else if (lowerName.includes('platinum')) baseTier = 'Platinum Package';
-
-  const PACKAGE_SERVICE_MAP = {
-    'Bronze Package':   [{ service_name: 'Car Foam Wash', total_count: 3 }, { service_name: 'Body Wax Coat', total_count: 1 }],
-    'Silver Package':   [{ service_name: 'Car Foam Wash', total_count: 5 }, { service_name: 'Body Wax Coat', total_count: 2 }, { service_name: 'Two Wheeler Wash', total_count: 1 }],
-    'Gold Package':     [{ service_name: 'Car Foam Wash', total_count: 8 }, { service_name: 'Body Wax Coat', total_count: 3 }, { service_name: 'Two Wheeler Wash', total_count: 1 }, { service_name: 'Two Wheeler Wax Coat', total_count: 1 }],
-    'Diamond Package':  [{ service_name: 'Car Foam Wash', total_count: 10 }, { service_name: 'Body Wax Coat', total_count: 2 }, { service_name: 'Two Wheeler Wash', total_count: 2 }, { service_name: 'Two Wheeler Wax Coat', total_count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1 }],
-    'Platinum Package': [{ service_name: 'Car Foam Wash', total_count: 12 }, { service_name: 'Body Wax Coat', total_count: 3 }, { service_name: 'Two Wheeler Wash', total_count: 2 }, { service_name: 'Two Wheeler Wax Coat', total_count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1 }, { service_name: 'Deep Cleaning', total_count: 1 }],
-  };
-
-  if (baseTier && PACKAGE_SERVICE_MAP[baseTier]) {
-    serviceBreakdown = PACKAGE_SERVICE_MAP[baseTier];
-  } else if (PACKAGE_SERVICE_MAP[packageName]) {
-    serviceBreakdown = PACKAGE_SERVICE_MAP[packageName];
-  } else {
-    // Fallback to database
-    const [dbServices] = await conn.query(
-      `SELECT s.name AS service_name, ps.total_count
-       FROM package_services ps
-       JOIN services s ON ps.service_id = s.id
-       WHERE ps.package_id = ?`,
-      [reqData.package_id]
-    );
-    if (dbServices.length > 0) {
-      serviceBreakdown = dbServices.map(s => ({ service_name: s.service_name, total_count: s.total_count }));
-    } else {
-      const [pkgDetails] = await conn.query(
-        'SELECT wash_count, wax_count FROM packages WHERE id = ?',
-        [reqData.package_id]
-      );
-      if (pkgDetails.length) {
-        if (pkgDetails[0].wash_count > 0) {
-          serviceBreakdown.push({ service_name: 'Foam Wash', total_count: pkgDetails[0].wash_count });
-        }
-        if (pkgDetails[0].wax_count > 0) {
-          serviceBreakdown.push({ service_name: 'Wax Coat', total_count: pkgDetails[0].wax_count });
-        }
-      }
-    }
-  }
-
+  const { getServiceBreakdown } = require('./userPackagesController');
+  const serviceBreakdown = await getServiceBreakdown(conn, reqData.package_id, packageName);
   for (const svc of serviceBreakdown) {
     await conn.query(
       'INSERT INTO package_usage (user_package_id, service_name, used_count, usage_status) VALUES (?, ?, 0, ?)',
@@ -531,7 +489,7 @@ exports.getPackageServices = async (req, res) => {
   try {
     const { id } = req.params;
     const [rows] = await pool.query(
-      `SELECT ps.id AS ps_id, ps.total_count, s.id, s.name, s.description,
+      `SELECT ps.id AS ps_id, ps.total_count, ps.complimentary, s.id, s.name, s.description,
               s.price_hatchback, s.price_medium_hatchback, s.price_sedan, s.price_premium_sedan, s.price_suv,
               s.duration_minutes, s.is_active
        FROM package_services ps
@@ -541,6 +499,28 @@ exports.getPackageServices = async (req, res) => {
       [id]
     );
     if (rows.length > 0) {
+      const [pkgRows] = await pool.query('SELECT paid_wash_count FROM packages WHERE id = ?', [id]);
+      if (pkgRows.length && pkgRows[0].paid_wash_count > 0) {
+        const paidCount = pkgRows[0].paid_wash_count;
+        let washFound = false;
+        for (const row of rows) {
+          if (row.name === 'Full Foam Wash') {
+            row.total_count = Number(row.total_count || 0) + Number(paidCount);
+            washFound = true;
+          }
+        }
+        if (!washFound) {
+          const [foamWashRows] = await pool.query('SELECT id, name, description, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, duration_minutes, is_active FROM services WHERE name = "Full Foam Wash" LIMIT 1');
+          if (foamWashRows.length) {
+            rows.push({
+              ps_id: -1,
+              total_count: paidCount,
+              complimentary: 0,
+              ...foamWashRows[0]
+            });
+          }
+        }
+      }
       return res.json({ success: true, data: rows });
     }
 

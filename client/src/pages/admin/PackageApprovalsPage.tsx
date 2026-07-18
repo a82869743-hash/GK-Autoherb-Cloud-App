@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axiosInstance';
-import { CheckCircle, XCircle, Loader2, PackageOpen, User, Car, Clock, AlertTriangle } from 'lucide-react';
+import { CheckCircle, XCircle, Loader2, PackageOpen, User, Car, Clock, AlertTriangle, Download } from 'lucide-react';
 import ConfirmModal from '../../components/ui/ConfirmModal';
 
 export default function PackageApprovalsPage() {
@@ -180,25 +180,47 @@ export default function PackageApprovalsPage() {
                         <div className="text-gray-500">{req.registration_no || 'No Reg'}</div>
                       </div>
                     </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                      <span className="text-xs font-semibold text-gray-500">Payment Status:</span>
+                      <span className={`px-2.5 py-1 rounded text-[10px] font-extrabold uppercase tracking-wider ${
+                        req.payment_status === 'captured'
+                          ? 'bg-green-100 text-green-800 border border-green-200'
+                          : 'bg-amber-100 text-amber-800 border border-amber-200'
+                      }`}>
+                        {req.payment_status === 'captured' ? '💰 PAID' : '⏳ PENDING'}
+                      </span>
+                    </div>
                     <div className="text-xs text-gray-400 pt-2 border-t border-gray-100">
                       Requested on: {new Date(req.created_at).toLocaleString('en-IN')}
                     </div>
                   </div>
-                  <div className="p-4 bg-gray-50 border-t border-gray-100 flex gap-2">
+                  <div className="p-4 bg-gray-50 border-t border-gray-100 flex flex-col gap-2">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleApproveClick(req.id)}
+                        disabled={approvingId === req.id}
+                        className="flex-1 flex justify-center items-center gap-2 px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                      >
+                        {approvingId === req.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => openRejectModal(req.id)}
+                        className="flex-1 flex justify-center items-center gap-2 px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors"
+                      >
+                        <XCircle className="w-4 h-4" />
+                        Reject
+                      </button>
+                    </div>
                     <button
-                      onClick={() => handleApproveClick(req.id)}
-                      disabled={approvingId === req.id}
-                      className="flex-1 flex justify-center items-center gap-2 px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                      onClick={() => {
+                        const token = localStorage.getItem('token');
+                        window.open(`/api/packages/requests/${req.id}/invoice?token=${token}`, '_blank');
+                      }}
+                      className="w-full flex justify-center items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-200 text-blue-700 font-bold rounded-lg hover:bg-blue-100 transition-colors"
                     >
-                      {approvingId === req.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => openRejectModal(req.id)}
-                      className="flex-1 flex justify-center items-center gap-2 px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors"
-                    >
-                      <XCircle className="w-4 h-4" />
-                      Reject
+                      <Download className="w-4 h-4" />
+                      Download Invoice
                     </button>
                   </div>
                 </div>
@@ -225,7 +247,9 @@ export default function PackageApprovalsPage() {
                     <th className="p-4">Customer</th>
                     <th className="p-4">Vehicle</th>
                     <th className="p-4">Amount</th>
+                    <th className="p-4">Payment</th>
                     <th className="p-4">Approved At</th>
+                    <th className="p-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -244,8 +268,29 @@ export default function PackageApprovalsPage() {
                         <div className="text-gray-500 text-xs">{req.registration_no || 'No Reg'}</div>
                       </td>
                       <td className="p-4 font-bold text-gray-900">₹{req.price}</td>
+                      <td className="p-4">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                          req.payment_status === 'captured'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {req.payment_status === 'captured' ? 'PAID' : 'PENDING'}
+                        </span>
+                      </td>
                       <td className="p-4 text-gray-500">
                         {new Date(req.approved_at || req.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })}
+                      </td>
+                      <td className="p-4 text-right">
+                        <button
+                          onClick={() => {
+                            const token = localStorage.getItem('token');
+                            window.open(`/api/packages/requests/${req.id}/invoice?token=${token}`, '_blank');
+                          }}
+                          className="text-blue-600 hover:text-blue-800 font-bold text-xs inline-flex items-center gap-1 bg-blue-50 border border-blue-200 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Receipt
+                        </button>
                       </td>
                     </tr>
                   ))}

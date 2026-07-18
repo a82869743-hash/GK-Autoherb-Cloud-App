@@ -26,7 +26,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
         <select
           ref={ref}
           id={selectId}
-          className={`w-full px-4 py-3 bg-[#f6f3f2] border-none rounded-lg text-[#1c1b1b] font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white transition-all text-sm ${
+          className={`w-full px-4 py-3 bg-[#f6f3f2] border-none rounded-lg text-[#1c1b1b] font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white transition-all text-base md:text-sm ${
             error ? 'ring-2 ring-red-400' : ''
           } ${className}`}
           {...props}

@@ -1,7 +1,7 @@
 const pool = require('../config/db');
 
 // ─── Generate/Get Referral Code ──────────────────────────
-exports.getReferralCode = async (req, res) => {
+exports.getReferralCode = async (req, res, next) => {
   try {
     const customer_id = req.params.customer_id === 'mine' ? req.user.id : req.params.customer_id;
     let [rows] = await pool.query('SELECT * FROM referral_codes WHERE customer_id = ?', [customer_id]);
@@ -18,26 +18,12 @@ exports.getReferralCode = async (req, res) => {
     
     res.json({ success: true, data: rows[0] });
   } catch (err) {
-    const resolvedId = req.params.customer_id === 'mine' ? req.user.id : req.params.customer_id;
-    console.warn('getReferralCode error (falling back to mock data):', err.message);
-    res.json({
-      success: true,
-      data: {
-        id: 99,
-        customer_id: Number(resolvedId) || resolvedId,
-        code: `GK${resolvedId}MOCK`,
-        is_active: 1,
-        reward_points: 100,
-        current_uses: 2,
-        max_uses: 10,
-        created_at: new Date().toISOString()
-      }
-    });
+    next(err);
   }
 };
 
 // ─── Apply Referral Code ─────────────────────────────────
-exports.applyReferral = async (req, res) => {
+exports.applyReferral = async (req, res, next) => {
   let connection;
   try {
     const { code, new_customer_id } = req.body;
@@ -84,15 +70,14 @@ exports.applyReferral = async (req, res) => {
     if (connection) {
       try { await connection.rollback(); } catch(e) {}
     }
-    console.warn('applyReferral error (falling back to mock data):', err.message);
-    res.json({ success: true, message: 'Referral code applied successfully (Mock Mode)' });
+    next(err);
   } finally {
     if (connection) connection.release();
   }
 };
 
 // ─── Get Referral History ───────────────────────────────
-exports.getHistory = async (req, res) => {
+exports.getHistory = async (req, res, next) => {
   try {
     const customer_id = req.params.customer_id === 'mine' ? req.user.id : req.params.customer_id;
     const [rows] = await pool.query(
@@ -105,34 +90,6 @@ exports.getHistory = async (req, res) => {
     );
     res.json({ success: true, data: rows });
   } catch (err) {
-    const resolvedId = req.params.customer_id === 'mine' ? req.user.id : req.params.customer_id;
-    console.warn('getHistory error (falling back to mock data):', err.message);
-    res.json({
-      success: true,
-      data: [
-        {
-          id: 1,
-          referrer_id: Number(resolvedId) || resolvedId,
-          referred_id: 101,
-          referral_code: `GK${resolvedId}MOCK`,
-          reward_type: 'points',
-          reward_value: 100,
-          status: 'credited',
-          created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-          referred_name: 'David Miller'
-        },
-        {
-          id: 2,
-          referrer_id: Number(resolvedId) || resolvedId,
-          referred_id: 102,
-          referral_code: `GK${resolvedId}MOCK`,
-          reward_type: 'points',
-          reward_value: 100,
-          status: 'pending',
-          created_at: new Date(Date.now() - 86400000).toISOString(),
-          referred_name: 'Sarah Connor'
-        }
-      ]
-    });
+    next(err);
   }
 };

@@ -14,12 +14,18 @@ VALUES
   ('Diamond Package', 'Pay For 10 Car Foam Wash', 10, 0, 0, 1, 1, 1, 4),
   ('Platinum Package', 'Pay For 12 Car Foam Wash', 12, 0, 0, 1, 1, 1, 5);
 
--- Get package IDs
-SET @bronze_id = (SELECT id FROM packages WHERE name = 'Bronze Package' AND is_active = 1 ORDER BY id DESC LIMIT 1);
-SET @silver_id = (SELECT id FROM packages WHERE name = 'Silver Package' AND is_active = 1 ORDER BY id DESC LIMIT 1);
-SET @gold_id = (SELECT id FROM packages WHERE name = 'Gold Package' AND is_active = 1 ORDER BY id DESC LIMIT 1);
-SET @diamond_id = (SELECT id FROM packages WHERE name = 'Diamond Package' AND is_active = 1 ORDER BY id DESC LIMIT 1);
-SET @platinum_id = (SELECT id FROM packages WHERE name = 'Platinum Package' AND is_active = 1 ORDER BY id DESC LIMIT 1);
+-- Get package IDs (fallback to name only if active check fails)
+SET @bronze_id = (SELECT id FROM packages WHERE name = 'Bronze Package' ORDER BY id DESC LIMIT 1);
+SET @silver_id = (SELECT id FROM packages WHERE name = 'Silver Package' ORDER BY id DESC LIMIT 1);
+SET @gold_id = (SELECT id FROM packages WHERE name = 'Gold Package' ORDER BY id DESC LIMIT 1);
+SET @diamond_id = (SELECT id FROM packages WHERE name = 'Diamond Package' ORDER BY id DESC LIMIT 1);
+SET @platinum_id = (SELECT id FROM packages WHERE name = 'Platinum Package' ORDER BY id DESC LIMIT 1);
+
+UPDATE packages SET is_active = 1, is_published = 1, visible_to_customer = 1, paid_wash_count = 3, sort_order = 1 WHERE id = @bronze_id;
+UPDATE packages SET is_active = 1, is_published = 1, visible_to_customer = 1, paid_wash_count = 5, sort_order = 2 WHERE id = @silver_id;
+UPDATE packages SET is_active = 1, is_published = 1, visible_to_customer = 1, paid_wash_count = 8, sort_order = 3 WHERE id = @gold_id;
+UPDATE packages SET is_active = 1, is_published = 1, visible_to_customer = 1, paid_wash_count = 10, sort_order = 4 WHERE id = @diamond_id;
+UPDATE packages SET is_active = 1, is_published = 1, visible_to_customer = 1, paid_wash_count = 12, sort_order = 5 WHERE id = @platinum_id;
 
 -- ─── PACKAGE PRICING ────────────────────────────
 

@@ -4,6 +4,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
 import { PackageOpen, Car, CheckCircle, Loader2, ArrowRight, ShieldCheck, X, AlertCircle, Clock, XCircle, Check, Minus, FileSpreadsheet, FileDown, CreditCard, QrCode } from 'lucide-react';
 import QrPaymentModal from '../../components/shared/QrPaymentModal';
+import ErrorState from '../../components/shared/ErrorState';
 
 interface Vehicle {
   id: number;
@@ -109,7 +110,7 @@ function getTierKey(name: string): string {
 }
 
 const ALL_SERVICES = [
-  'Car Foam Wash',
+  'Full Foam Wash',
   'Body Wax Coat',
   'Two Wheeler Wash',
   'Two Wheeler Wax Coat',
@@ -120,11 +121,44 @@ const ALL_SERVICES = [
 ];
 
 const PACKAGE_BREAKDOWN: Record<string, { paid_washes: number, complimentary: { service_name: string, count: number }[] }> = {
-  'bronze':   { paid_washes: 3, complimentary: [{ service_name: 'Car Foam Wash', count: 1 }, { service_name: 'Body Wax Coat', count: 1 }] },
-  'silver':   { paid_washes: 5, complimentary: [{ service_name: 'Car Foam Wash', count: 2 }, { service_name: 'Body Wax Coat', count: 2 }, { service_name: 'Two Wheeler Wash', count: 1 }] },
-  'gold':     { paid_washes: 8, complimentary: [{ service_name: 'Car Foam Wash', count: 4 }, { service_name: 'Body Wax Coat', count: 3 }, { service_name: 'Two Wheeler Wash', count: 1 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }] },
-  'diamond':  { paid_washes: 10, complimentary: [{ service_name: 'Car Foam Wash', count: 6 }, { service_name: 'Body Wax Coat', count: 2 }, { service_name: 'Two Wheeler Wash', count: 2 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 }] },
-  'platinum': { paid_washes: 12, complimentary: [{ service_name: 'Car Foam Wash', count: 8 }, { service_name: 'Body Wax Coat', count: 3 }, { service_name: 'Two Wheeler Wash', count: 2 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 }, { service_name: 'Deep Cleaning', count: 1 }] },
+  'bronze':   { paid_washes: 3, complimentary: [{ service_name: 'Full Foam Wash', count: 1 }, { service_name: 'Body Wax Coat', count: 1 }] },
+  'silver':   { paid_washes: 5, complimentary: [{ service_name: 'Full Foam Wash', count: 2 }, { service_name: 'Body Wax Coat', count: 2 }, { service_name: 'Two Wheeler Wash', count: 1 }] },
+  'gold':     { paid_washes: 8, complimentary: [{ service_name: 'Full Foam Wash', count: 4 }, { service_name: 'Body Wax Coat', count: 3 }, { service_name: 'Two Wheeler Wash', count: 1 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }] },
+  'diamond':  { paid_washes: 10, complimentary: [{ service_name: 'Full Foam Wash', count: 6 }, { service_name: 'Body Wax Coat', count: 2 }, { service_name: 'Two Wheeler Wash', count: 2 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 }] },
+  'platinum': { paid_washes: 12, complimentary: [{ service_name: 'Full Foam Wash', count: 8 }, { service_name: 'Body Wax Coat', count: 3 }, { service_name: 'Two Wheeler Wash', count: 2 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 }, { service_name: 'Deep Cleaning', count: 1 }] },
+};
+
+const INCLUDED_SERVICES: Record<string, { service_name: string, count: number }[]> = {
+  'bronze': [
+    { service_name: 'Full Foam Wash', count: 4 },
+    { service_name: 'Body Wax Coat', count: 1 },
+  ],
+  'silver': [
+    { service_name: 'Full Foam Wash', count: 7 },
+    { service_name: 'Body Wax Coat', count: 2 },
+    { service_name: 'Two Wheeler Wash', count: 1 },
+  ],
+  'gold': [
+    { service_name: 'Full Foam Wash', count: 12 },
+    { service_name: 'Body Wax Coat', count: 3 },
+    { service_name: 'Two Wheeler Wash', count: 1 },
+    { service_name: 'Two Wheeler Wax Coat', count: 1 },
+  ],
+  'diamond': [
+    { service_name: 'Full Foam Wash', count: 16 },
+    { service_name: 'Body Wax Coat', count: 2 },
+    { service_name: 'Two Wheeler Wash', count: 2 },
+    { service_name: 'Two Wheeler Wax Coat', count: 1 },
+    { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 },
+  ],
+  'platinum': [
+    { service_name: 'Full Foam Wash', count: 20 },
+    { service_name: 'Body Wax Coat', count: 3 },
+    { service_name: 'Two Wheeler Wash', count: 2 },
+    { service_name: 'Two Wheeler Wax Coat', count: 1 },
+    { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 },
+    { service_name: 'Deep Cleaning', count: 1 },
+  ],
 };
 
 export default function BuyPackagesPage() {
@@ -134,6 +168,7 @@ export default function BuyPackagesPage() {
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [packages, setPackages] = useState<Pkg[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [filterCarType, setFilterCarType] = useState<string>('SMALL_HATCHBACK');
   const [pricingType, setPricingType] = useState<'basic' | 'premium'>('basic');
@@ -173,28 +208,32 @@ export default function BuyPackagesPage() {
     }
   };
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const [vehRes, pkgRes] = await Promise.all([
-          api.get('/vehicles/my-vehicles'),
-          api.get('/packages')
-        ]);
-        if (vehRes.data.success) {
-          setVehicles(vehRes.data.data);
-          if (vehRes.data.data.length > 0) {
-            setSelectedVehicle(vehRes.data.data.find((v: any) => v.is_primary) || vehRes.data.data[0]);
-          }
+  const loadData = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const [vehRes, pkgRes] = await Promise.all([
+        api.get('/vehicles/my-vehicles'),
+        api.get('/packages')
+      ]);
+      if (vehRes.data.success) {
+        setVehicles(vehRes.data.data);
+        if (vehRes.data.data.length > 0) {
+          setSelectedVehicle(vehRes.data.data.find((v: any) => v.is_primary) || vehRes.data.data[0]);
         }
-        if (pkgRes.data.success) {
-          setPackages(pkgRes.data.data);
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
       }
+      if (pkgRes.data.success) {
+        setPackages(pkgRes.data.data);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err.response?.data?.error || 'Failed to load packages. Please check your connection.');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadData();
     // Fetch customer's own package requests
     api.get('/packages/requests/my').then(res => {
@@ -410,6 +449,17 @@ export default function BuyPackagesPage() {
   };
 
 
+  if (error) {
+    return (
+      <div className="pt-4">
+        <ErrorState
+          message={error}
+          onRetry={loadData}
+        />
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -517,48 +567,35 @@ export default function BuyPackagesPage() {
                 {/* ─── Services ─── */}
                 <div className="p-4 flex-1 flex flex-col">
                   
-                  {/* Paid Services */}
+                  {/* Included Services */}
                   <p className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-gray-400 mb-2 text-center">
-                    Paid Services
-                  </p>
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                        <Check className="w-3 h-3 text-blue-600" strokeWidth={3} />
-                      </div>
-                      <span className="text-xs text-gray-800 font-semibold">
-                        {paidWashCount} Car Foam Wash{paidWashCount > 1 ? 'es' : ''}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Complementary Services */}
-                  <p className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-gray-400 mb-2 text-center">
-                    Complementary
+                    Included Services
                   </p>
                   <div className="space-y-2 flex-1">
-                    {ALL_SERVICES.map(svcName => {
-                      // Check if it's in the breakdown complementary list
-                      const compItem = breakdown.complimentary.find(c => c.service_name === svcName);
-                      const count = compItem ? compItem.count : 0;
-                      const included = count > 0;
-                      return (
-                        <div key={svcName} className="flex items-center gap-2">
-                          {included ? (
-                            <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                              <Check className="w-3 h-3 text-green-600" strokeWidth={3} />
-                            </div>
-                          ) : (
-                            <div className="w-5 h-5 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
-                              <X className="w-3 h-3 text-red-400" strokeWidth={3} />
-                            </div>
-                          )}
-                          <span className={`text-xs ${included ? 'text-gray-800 font-semibold' : 'text-gray-400 line-through'}`}>
-                            {included && count > 1 ? `${count} ` : ''}{svcName}
+                    {paidWashCount > 0 && (
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                          <Check className="w-3 h-3 text-blue-600" strokeWidth={3} />
+                        </div>
+                        <span className="text-xs text-gray-800 font-bold">
+                          Pay For {paidWashCount} Full Foam Wash (Mandatory)
+                        </span>
+                      </div>
+                    )}
+                    {breakdown.complimentary && breakdown.complimentary.length > 0 ? (
+                      breakdown.complimentary.map((s: any, idx: number) => (
+                        <div key={s.service_name + idx} className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                            <Check className="w-3 h-3 text-green-600" strokeWidth={3} />
+                          </div>
+                          <span className="text-xs text-gray-600 font-medium">
+                            {s.count} {s.service_name} (Complimentary)
                           </span>
                         </div>
-                      );
-                    })}
+                      ))
+                    ) : (
+                      <p className="text-xs text-gray-400 italic text-center py-4">No services specified</p>
+                    )}
                   </div>
 
                   {/* ─── Price ─── */}

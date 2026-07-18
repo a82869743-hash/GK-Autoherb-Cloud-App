@@ -127,6 +127,7 @@ app.use('/api/gst-reports',    require('./routes/gstReports'));
 app.use('/api/customer-rewards', require('./routes/customerRewards'));
 app.use('/api/referrals',     require('./routes/referrals'));
 app.use('/api/pickup-requests', require('./routes/pickup'));
+app.use('/api/products',      require('./routes/products'));
 
 // ─── Socket.io Auth + GPS ───────────────────────────
 const jwt = require('jsonwebtoken');

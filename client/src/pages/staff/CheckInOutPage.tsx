@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { Clock, LogIn, LogOut, Calendar, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import AdminTopBar from '../../components/layout/AdminTopBar';
+import ErrorState from '../../components/shared/ErrorState';
 import { useMyAttendance, useCheckIn, useCheckOut } from '../../api/hooks/useStaff';
 import { formatTime } from '../../utils/formatters';
 
 export default function CheckInOutPage() {
-  const { data: attRes, isLoading, refetch } = useMyAttendance();
+  const { data: attRes, isLoading, isError, refetch } = useMyAttendance();
   const checkInMut = useCheckIn();
   const checkOutMut = useCheckOut();
 
@@ -40,7 +41,14 @@ export default function CheckInOutPage() {
       <AdminTopBar title="Staff Check-In / Check-Out" subtitle="Log your daily attendance and shift hours" />
 
       <div className="max-w-xl mx-auto mt-6">
-        {isLoading ? (
+        {isError ? (
+          <div className="pt-4">
+            <ErrorState
+              message="Failed to load attendance records. Please check your connection and try again."
+              onRetry={() => refetch()}
+            />
+          </div>
+        ) : isLoading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="animate-spin text-[#D32F2F] w-8 h-8" />
           </div>

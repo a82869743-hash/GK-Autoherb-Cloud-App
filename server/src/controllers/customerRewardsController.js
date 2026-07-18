@@ -53,7 +53,7 @@ const awardWelcomeRewardInternal = async (customerId, conn = pool) => {
 
   // Also log in loyalty points transactions (loyalty_transactions)
   await conn.query(
-    `INSERT INTO loyalty_transactions (customer_id, type, amount, description) VALUES (?, 'earn', 500, 'Welcome Reward points and 1 Free Wash awarded.')`,
+    `INSERT INTO loyalty_transactions (customer_id, type, points, description) VALUES (?, 'earn', 500, 'Welcome Reward points and 1 Free Wash awarded.')`,
     [customerId]
   );
 
@@ -95,7 +95,7 @@ exports.redeem = async (req, res) => {
     // Also add to loyalty points ledger if there are points
     if (existing[0].points_awarded > 0) {
       await pool.query(
-        `INSERT INTO loyalty_transactions (customer_id, type, amount, description) VALUES (?, 'earn', ?, ?)`,
+        `INSERT INTO loyalty_transactions (customer_id, type, points, description) VALUES (?, 'earn', ?, ?)`,
         [existing[0].customer_id, existing[0].points_awarded, existing[0].description]
       );
     }

@@ -2,11 +2,12 @@ import { useJobCarts } from '../../api/hooks/useJobCarts';
 import AdminTopBar from '../../components/layout/AdminTopBar';
 import { SkeletonCard } from '../../components/ui/SkeletonLoader';
 import EmptyState from '../../components/shared/EmptyState';
+import ErrorState from '../../components/shared/ErrorState';
 import { Briefcase, CheckCircle, Clock, ChevronRight, PlusCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function StaffJobCartsPage() {
-  const { data, isLoading } = useJobCarts({});
+  const { data, isLoading, isError, refetch } = useJobCarts({});
   const jobs = data?.data || [];
 
   return (
@@ -24,7 +25,12 @@ export default function StaffJobCartsPage() {
         }
       />
 
-      {isLoading ? (
+      {isError ? (
+        <ErrorState
+          message="Failed to load today's job queue. Please check your connection and try again."
+          onRetry={() => refetch()}
+        />
+      ) : isLoading ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"><SkeletonCard/><SkeletonCard/><SkeletonCard/></div>
       ) : !jobs.length ? (
         <EmptyState icon={Briefcase} title="No Carts in Queue" description="No job carts have been created for today yet." />
