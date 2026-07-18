@@ -504,13 +504,14 @@ exports.getPackageServices = async (req, res) => {
         const paidCount = pkgRows[0].paid_wash_count;
         let washFound = false;
         for (const row of rows) {
-          if (row.name === 'Full Foam Wash') {
+          const name = (row.name || '').toLowerCase();
+          if (name === 'full foam wash' || name === 'exterior body foam wash' || name === 'foam wash' || name.includes('foam wash')) {
             row.total_count = Number(row.total_count || 0) + Number(paidCount);
             washFound = true;
           }
         }
         if (!washFound) {
-          const [foamWashRows] = await pool.query('SELECT id, name, description, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, duration_minutes, is_active FROM services WHERE name = "Full Foam Wash" LIMIT 1');
+          const [foamWashRows] = await pool.query('SELECT id, name, description, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, duration_minutes, is_active FROM services WHERE name LIKE "%Foam Wash%" LIMIT 1');
           if (foamWashRows.length) {
             rows.push({
               ps_id: -1,

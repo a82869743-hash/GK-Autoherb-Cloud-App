@@ -139,18 +139,22 @@ async function getServiceBreakdown(conn, packageId, packageName) {
         const paidCount = pkg[0].paid_wash_count;
         let washFound = false;
         for (const svc of dbServices) {
-          if (svc.service_name === 'Full Foam Wash') {
+          const name = (svc.service_name || '').toLowerCase();
+          if (name === 'full foam wash' || name === 'exterior body foam wash' || name === 'foam wash' || name.includes('foam wash')) {
             svc.total_count = Number(svc.total_count || 0) + Number(paidCount);
             washFound = true;
           }
         }
         if (!washFound) {
-          dbServices.push({
-            service_name: 'Full Foam Wash',
-            total_count: paidCount,
-            complimentary: 0,
-            display_order: 1
-          });
+          const [foamWashRows] = await conn.query('SELECT id, name AS service_name FROM services WHERE name LIKE "%Foam Wash%" LIMIT 1');
+          if (foamWashRows.length) {
+            dbServices.push({
+              service_name: foamWashRows[0].service_name,
+              total_count: paidCount,
+              complimentary: 0,
+              display_order: 1
+            });
+          }
         }
       }
       return dbServices;
