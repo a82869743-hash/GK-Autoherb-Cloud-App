@@ -305,6 +305,14 @@ export default function ProductsPage() {
   const [submittingQr, setSubmittingQr] = useState(false);
   const [activeTab, setActiveTab] = useState<'shop' | 'orders'>('shop');
 
+  // Normalize product name for fuzzy matching
+  const normalizeProductName = (name: string) => {
+    return (name || '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '') // Remove all non-alphanumeric
+      .trim();
+  };
+
   // Load products and match with DB stock
   const loadData = async () => {
     try {
@@ -313,23 +321,115 @@ export default function ProductsPage() {
       const invRes = await api.get('/products');
       const dbItems = invRes.data?.data || [];
 
-      // Map template products to DB items
+      const matchedDbIds = new Set<number>();
+
+      // Map template products to DB items using fuzzy matching
       const mapped = PRODUCT_TEMPLATES.map((tmpl) => {
-        // Find by dbName (case insensitive)
-        const match = dbItems.find(
+        // Try exact match first
+        let match = dbItems.find(
           (db: any) => db.product_name.toUpperCase() === tmpl.dbName.toUpperCase()
         );
+
+        // If no exact match, try normalized fuzzy match
+        if (!match) {
+          const normalizedTmpl = normalizeProductName(tmpl.dbName);
+          match = dbItems.find((db: any) => {
+            const normalizedDb = normalizeProductName(db.product_name);
+            return normalizedDb === normalizedTmpl || 
+                   normalizedDb.includes(normalizedTmpl) || 
+                   normalizedTmpl.includes(normalizedDb);
+          });
+        }
+
+        // If still no match, try partial word matching
+        if (!match) {
+          const tmplWords = tmpl.dbName.toUpperCase().split(/[\s*\-_]+/).filter(Boolean);
+          match = dbItems.find((db: any) => {
+            const dbUpper = (db.product_name || '').toUpperCase();
+            // At least 2 key words must match
+            const matchCount = tmplWords.filter(w => dbUpper.includes(w)).length;
+            return matchCount >= Math.min(2, tmplWords.length);
+          });
+        }
+
+        if (match) matchedDbIds.add(match.id);
+
+        const dbQty = match ? parseFloat(match.quantity) : 0;
+
+        // Extract image from DB images_json if available
+        let dbImage = '';
+        if (match?.images_json) {
+          try {
+            const imgArr = typeof match.images_json === 'string' ? JSON.parse(match.images_json) : match.images_json;
+            if (Array.isArray(imgArr) && imgArr.length > 0) dbImage = imgArr[0];
+            else if (typeof imgArr === 'string' && imgArr) dbImage = imgArr;
+          } catch { /* ignore parse errors */ }
+        }
+
         return {
           ...tmpl,
+          image: dbImage || tmpl.image, // DB image takes priority
           dbId: match?.id || null,
-          dbQty: match ? parseFloat(match.quantity) : 0,
-          dbPrice: match ? parseFloat(match.selling_price) : tmpl.price,
-          inStock: match ? parseFloat(match.quantity) > 0 : false
+          dbQty: dbQty,
+          dbPrice: match ? parseFloat(match.selling_price) || tmpl.price : tmpl.price,
+          inStock: match ? (isNaN(dbQty) ? true : dbQty > 0) : false
         };
       });
+
+      // 2. Add any DB products that didn't match a template (so nothing is hidden)
+      // De-duplicate by product name (keep the one with highest selling_price)
+      const unmatchedDbProducts = dbItems.filter((db: any) => !matchedDbIds.has(db.id));
+      const seenNames = new Map<string, any>();
+      for (const db of unmatchedDbProducts) {
+        const nameKey = (db.product_name || '').toUpperCase().trim();
+        const existing = seenNames.get(nameKey);
+        if (!existing || (parseFloat(db.selling_price) || 0) > (parseFloat(existing.selling_price) || 0)) {
+          seenNames.set(nameKey, db);
+        }
+      }
+
+      for (const db of seenNames.values()) {
+        const dbQty = parseFloat(db.quantity);
+        const sellingPrice = parseFloat(db.selling_price) || 0;
+        // Skip products with no price set
+        if (sellingPrice <= 0) continue;
+
+        const estimatedMrp = Math.ceil(sellingPrice * 1.6 / 10) * 10; // Round up to nearest 10
+        const discountPct = Math.round(((estimatedMrp - sellingPrice) / estimatedMrp) * 100);
+
+        // Extract image from DB images_json
+        let dbImage = '';
+        if (db.images_json) {
+          try {
+            const imgArr = typeof db.images_json === 'string' ? JSON.parse(db.images_json) : db.images_json;
+            if (Array.isArray(imgArr) && imgArr.length > 0) dbImage = imgArr[0];
+            else if (typeof imgArr === 'string' && imgArr) dbImage = imgArr;
+          } catch { /* ignore parse errors */ }
+        }
+
+        mapped.push({
+          dbName: db.product_name,
+          displayName: db.product_name,
+          image: dbImage, // Use admin-uploaded image from DB
+          rating: 4.5,
+          reviewsCount: 0,
+          price: sellingPrice,
+          mrp: estimatedMrp,
+          discount: discountPct > 0 ? discountPct + '% OFF' : '',
+          description: db.description || db.product_name,
+          features: [],
+          specs: { Category: db.category || 'Premium Utility', Brand: db.brand || 'GK AutoHerb', SKU: db.sku || '-' },
+          whyBuy: '',
+          dbId: db.id,
+          dbQty: dbQty,
+          dbPrice: sellingPrice,
+          inStock: isNaN(dbQty) ? true : dbQty > 0,
+        } as any);
+      }
+
       setProducts(mapped);
 
-      // 2. Fetch Customer Orders
+      // 3. Fetch Customer Orders
       const orderRes = await api.get('/products/my-orders');
       setOrders(orderRes.data?.data || []);
     } catch (err) {
@@ -556,16 +656,18 @@ export default function ProductsPage() {
               {/* Product Image */}
               <div className="relative aspect-video bg-gray-50 overflow-hidden">
                 <img
-                  src={product.image}
+                  src={product.image || 'https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=500&q=80'}
                   alt={product.displayName}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1563720223185-11003d516935?w=500';
+                    (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=500&q=80';
                   }}
                 />
-                <span className="absolute top-3 left-3 bg-red-600 text-white text-[11px] font-black px-2 py-0.5 rounded-full uppercase">
-                  {product.discount}
-                </span>
+                {product.discount && (
+                  <span className="absolute top-3 left-3 bg-red-600 text-white text-[11px] font-black px-2 py-0.5 rounded-full uppercase">
+                    {product.discount}
+                  </span>
+                )}
                 {!product.inStock && (
                   <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center">
                     <span className="bg-white text-black font-extrabold text-xs px-3 py-1 rounded-full uppercase tracking-wider">
@@ -597,8 +699,10 @@ export default function ProductsPage() {
 
                 <div className="pt-2 flex items-center justify-between">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-lg font-black text-gray-900">₹{product.dbPrice}</span>
-                    <span className="text-xs text-gray-400 line-through">₹{product.mrp}</span>
+                    <span className="text-lg font-black text-gray-900">₹{product.dbPrice.toLocaleString('en-IN')}</span>
+                    {product.mrp > product.dbPrice && (
+                      <span className="text-xs text-gray-400 line-through">₹{product.mrp.toLocaleString('en-IN')}</span>
+                    )}
                   </div>
                   <button
                     onClick={() => {

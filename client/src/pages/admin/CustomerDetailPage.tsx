@@ -301,14 +301,14 @@ export default function CustomerDetailPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
         <button 
           onClick={() => navigate('/admin/customers')}
           className="flex items-center gap-2 text-gray-500 hover:text-gray-900 font-medium transition-colors"
         >
           <ArrowLeft className="w-4 h-4" /> Back to Customers
         </button>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <button
             onClick={() => handleExportPackageHistory('pdf')}
             className="px-3 py-2 border border-red-200 text-red-700 hover:bg-red-50 text-xs font-bold rounded-xl transition flex items-center gap-1 shadow-sm"
@@ -323,14 +323,14 @@ export default function CustomerDetailPage() {
           </button>
           <button
             onClick={() => setCustomAssignModalOpen(true)}
-            className="px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-800 text-white text-xs font-bold rounded-xl hover:from-purple-700 hover:to-purple-900 transition flex items-center gap-1.5 shadow-md shadow-purple-500/25 animate-pulse-glow"
+            className="px-3 py-2 bg-gradient-to-r from-purple-600 to-purple-800 text-white text-xs font-bold rounded-xl hover:from-purple-700 hover:to-purple-900 transition flex items-center gap-1.5 shadow-md shadow-purple-500/25"
           >
             <Plus size={14} />
-            Assign Custom Package
+            <span className="hidden sm:inline">Assign</span> Custom Package
           </button>
           <button
             onClick={() => setAssignModalOpen(true)}
-            className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-800 text-white text-xs font-bold rounded-xl hover:from-red-700 hover:to-red-900 transition flex items-center gap-1.5 shadow-md shadow-red-500/25"
+            className="px-3 py-2 bg-gradient-to-r from-red-600 to-red-800 text-white text-xs font-bold rounded-xl hover:from-red-700 hover:to-red-900 transition flex items-center gap-1.5 shadow-md shadow-red-500/25"
           >
             <Package size={14} />
             Assign Package
@@ -376,12 +376,12 @@ export default function CustomerDetailPage() {
           {/* Active Package */}
           {activePackage ? (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden p-6">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-2">
                 <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                   <Package className="w-5 h-5 text-purple-600" />
                   Active Package
                 </h3>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => {
                       if (activePackage.usage && activePackage.usage.length > 0) {

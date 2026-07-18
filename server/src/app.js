@@ -42,6 +42,9 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), (re
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// ─── Serve uploaded product images ──────────────────
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+
 // ─── Global Audit Logger ────────────────────────────
 const auditLogger = require('./middleware/auditLog');
 app.use(auditLogger);

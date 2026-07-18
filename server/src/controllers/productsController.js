@@ -389,11 +389,33 @@ exports.confirmQrOrder = async (req, res) => {
 // ─── LIST CUSTOMER PRODUCTS ────────────────────────
 exports.listCustomerProducts = async (req, res) => {
   try {
-    const [rows] = await pool.query(
-      `SELECT id, product_name, selling_price, quantity, sku, brand, category, images_json, description 
-       FROM inventory 
-       WHERE is_deleted = 0 AND status = 'active'`
-    );
+    let rows;
+    try {
+      // Try with status filter first — GROUP BY to de-duplicate
+      [rows] = await pool.query(
+        `SELECT MIN(id) as id, product_name, 
+                MAX(selling_price) as selling_price, MAX(cost_price) as cost_price, 
+                SUM(quantity) as quantity, 
+                MAX(sku) as sku, MAX(brand) as brand, MAX(category) as category, 
+                MAX(images_json) as images_json, MAX(description) as description
+         FROM inventory 
+         WHERE is_deleted = 0 AND status = 'active'
+         GROUP BY product_name`
+      );
+    } catch (statusErr) {
+      // status column may not exist — fallback without it
+      console.warn('status column not found in inventory, querying without it:', statusErr.message);
+      [rows] = await pool.query(
+        `SELECT MIN(id) as id, product_name, 
+                MAX(selling_price) as selling_price, MAX(cost_price) as cost_price, 
+                SUM(quantity) as quantity, 
+                MAX(sku) as sku, MAX(brand) as brand, MAX(category) as category, 
+                MAX(images_json) as images_json, MAX(description) as description
+         FROM inventory 
+         WHERE is_deleted = 0
+         GROUP BY product_name`
+      );
+    }
     res.json({ success: true, data: rows });
   } catch (err) {
     console.error('listCustomerProducts error:', err);

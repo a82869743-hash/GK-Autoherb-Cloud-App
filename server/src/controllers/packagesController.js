@@ -3,15 +3,21 @@ const pool = require('../config/db');
 // Helper: fetch related services, products & pricing for a package
 async function enrichPackage(pkg) {
   const [services] = await pool.query(
-    `SELECT ps.id AS ps_id, ps.total_count, ps.complimentary, s.id, s.name, s.price_hatchback, s.price_medium_hatchback, s.price_sedan, s.price_premium_sedan, s.price_suv
+    `SELECT ps.id AS ps_id, ps.total_count, COALESCE(ps.complimentary, 0) AS complimentary, s.id, s.name, s.price_hatchback, s.price_medium_hatchback, s.price_sedan, s.price_premium_sedan, s.price_suv
      FROM package_services ps JOIN services s ON ps.service_id = s.id
      WHERE ps.package_id = ?`, [pkg.id]
   );
-  const [products] = await pool.query(
-    `SELECT pp.id, pp.product_id, pp.quantity, i.product_name, i.unit
-     FROM package_products pp JOIN inventory i ON pp.product_id = i.id
-     WHERE pp.package_id = ?`, [pkg.id]
-  );
+  let products = [];
+  try {
+    [products] = await pool.query(
+      `SELECT pp.id, pp.product_id, pp.quantity, i.product_name, i.unit
+       FROM package_products pp JOIN inventory i ON pp.product_id = i.id
+       WHERE pp.package_id = ?`, [pkg.id]
+    );
+  } catch (prodErr) {
+    // package_products or inventory may not exist on some DB schemas
+    console.warn('Failed to fetch package products (safe to ignore):', prodErr.message);
+  }
   // Fetch v2 pricing matrix (car_type × pricing_type)
   let pricing = [];
   try {
@@ -345,15 +351,14 @@ exports._approveRequestInternal = async (conn, id, paymentId = null) => {
   // 2. Mark approved
   await conn.query("UPDATE package_requests SET status = 'approved', approved_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
 
-  // 3. Add to user_packages with pricing_type, car_type, price_paid, vehicle_id
+  // 3. Add to user_packages — use core columns only (safe for any DB schema)
   const [result] = await conn.query(
     `INSERT INTO user_packages 
-     (user_id, package_id, start_date, end_date, payment_status, package_status, price_paid, vehicle_segment, vehicle_id, pricing_type, car_type) 
-     VALUES (?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 'paid', 'active', ?, ?, ?, ?, ?)`,
+     (user_id, package_id, start_date, end_date, payment_status, package_status, price_paid, vehicle_segment, vehicle_id) 
+     VALUES (?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 'paid', 'active', ?, ?, ?)`,
     [
       reqData.customer_id, reqData.package_id,
-      reqData.price || 0, reqData.car_type || null, reqData.vehicle_id,
-      reqData.pricing_type || 'basic', reqData.car_type || null
+      reqData.price || 0, reqData.car_type || null, reqData.vehicle_id
     ]
   );
   const userPackageId = result.insertId;
@@ -372,7 +377,7 @@ exports._approveRequestInternal = async (conn, id, paymentId = null) => {
     );
   }
 
-  // Log to v2_package_renewals as initial purchase
+  // Log to v2_package_renewals as initial purchase (non-blocking)
   try {
     await conn.query(
       `INSERT INTO v2_package_renewals
@@ -485,11 +490,97 @@ exports.downloadInvoice = async (req, res) => {
 
 // ─── GET SERVICES IN A PACKAGE ──────────────
 // Returns only services included in a specific package (for filtered booking)
+// Uses PACKAGE_SERVICE_MAP as source of truth for known tiers (Bronze/Silver/Gold/Diamond/Platinum)
+// Falls back to DB package_services table for custom packages
 exports.getPackageServices = async (req, res) => {
   try {
     const { id } = req.params;
+
+    // 1. Get the package name to check against the hardcoded map
+    const [pkgRows] = await pool.query('SELECT id, name FROM packages WHERE id = ?', [id]);
+    if (!pkgRows.length) {
+      return res.status(404).json({ success: false, error: 'Package not found' });
+    }
+    const packageName = pkgRows[0].name;
+
+    // 2. Check PACKAGE_SERVICE_MAP first (source of truth for known tiers)
+    const { PACKAGE_SERVICE_MAP } = require('./userPackagesController');
+    
+    let mapKey = '';
+    const lowerName = (packageName || '').toLowerCase();
+    if (lowerName.includes('bronze')) mapKey = 'Bronze Package';
+    else if (lowerName.includes('silver')) mapKey = 'Silver Package';
+    else if (lowerName.includes('gold')) mapKey = 'Gold Package';
+    else if (lowerName.includes('diamond')) mapKey = 'Diamond Package';
+    else if (lowerName.includes('platinum')) mapKey = 'Platinum Package';
+
+    // Direct name match fallback
+    if (!mapKey && PACKAGE_SERVICE_MAP[packageName]) {
+      mapKey = packageName;
+    }
+
+    if (mapKey && PACKAGE_SERVICE_MAP[mapKey]) {
+      // Found in hardcoded map — use it as the authoritative source
+      const mapServices = PACKAGE_SERVICE_MAP[mapKey];
+
+      // Enrich with service details from DB services table (for prices, duration, etc.)
+      const enriched = [];
+      for (const svc of mapServices) {
+        try {
+          const [svcRows] = await pool.query(
+            'SELECT id, name, description, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, duration_minutes, is_active FROM services WHERE name = ? LIMIT 1',
+            [svc.service_name]
+          );
+          if (svcRows.length) {
+            enriched.push({
+              ps_id: -1,
+              total_count: svc.total_count,
+              complimentary: svc.complimentary || 0,
+              ...svcRows[0]
+            });
+          } else {
+            // Service not found in services table — still include it with minimal data
+            enriched.push({
+              ps_id: -1,
+              total_count: svc.total_count,
+              complimentary: svc.complimentary || 0,
+              id: -1,
+              name: svc.service_name,
+              description: svc.service_name,
+              price_hatchback: 0,
+              price_medium_hatchback: 0,
+              price_sedan: 0,
+              price_premium_sedan: 0,
+              price_suv: 0,
+              duration_minutes: 30,
+              is_active: 1
+            });
+          }
+        } catch (svcErr) {
+          // Still include the service even if DB lookup fails
+          enriched.push({
+            ps_id: -1,
+            total_count: svc.total_count,
+            complimentary: svc.complimentary || 0,
+            id: -1,
+            name: svc.service_name,
+            description: svc.service_name,
+            price_hatchback: 0,
+            price_medium_hatchback: 0,
+            price_sedan: 0,
+            price_premium_sedan: 0,
+            price_suv: 0,
+            duration_minutes: 30,
+            is_active: 1
+          });
+        }
+      }
+      return res.json({ success: true, data: enriched });
+    }
+
+    // 3. Not a known tier — fall back to DB package_services table
     const [rows] = await pool.query(
-      `SELECT ps.id AS ps_id, ps.total_count, ps.complimentary, s.id, s.name, s.description,
+      `SELECT ps.id AS ps_id, ps.total_count, COALESCE(ps.complimentary, 0) AS complimentary, s.id, s.name, s.description,
               s.price_hatchback, s.price_medium_hatchback, s.price_sedan, s.price_premium_sedan, s.price_suv,
               s.duration_minutes, s.is_active
        FROM package_services ps
@@ -499,73 +590,55 @@ exports.getPackageServices = async (req, res) => {
       [id]
     );
     if (rows.length > 0) {
-      const [pkgRows] = await pool.query('SELECT paid_wash_count FROM packages WHERE id = ?', [id]);
-      if (pkgRows.length && pkgRows[0].paid_wash_count > 0) {
-        const paidCount = pkgRows[0].paid_wash_count;
-        let washFound = false;
-        for (const row of rows) {
-          const name = (row.name || '').toLowerCase();
-          if (name === 'full foam wash' || name === 'exterior body foam wash' || name === 'foam wash' || name.includes('foam wash')) {
-            row.total_count = Number(row.total_count || 0) + Number(paidCount);
-            washFound = true;
-          }
-        }
-        if (!washFound) {
-          const [foamWashRows] = await pool.query('SELECT id, name, description, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, duration_minutes, is_active FROM services WHERE name LIKE "%Foam Wash%" LIMIT 1');
-          if (foamWashRows.length) {
-            rows.push({
-              ps_id: -1,
-              total_count: paidCount,
-              complimentary: 0,
-              ...foamWashRows[0]
-            });
-          }
-        }
-      }
       return res.json({ success: true, data: rows });
     }
 
-    // Fallback to legacy wash_count, wax_count
-    const [pkgDetails] = await pool.query(
-      'SELECT wash_count, wax_count FROM packages WHERE id = ?',
-      [id]
-    );
-    const fallback = [];
-    if (pkgDetails.length > 0) {
-      if (pkgDetails[0].wash_count > 0) {
-        fallback.push({
-          ps_id: -1,
-          total_count: pkgDetails[0].wash_count,
-          id: -1,
-          name: 'Foam Wash',
-          description: 'Standard Foam Wash',
-          price_hatchback: 0,
-          price_medium_hatchback: 0,
-          price_sedan: 0,
-          price_premium_sedan: 0,
-          price_suv: 0,
-          duration_minutes: 30,
-          is_active: 1
-        });
+    // 4. Final fallback to legacy wash_count, wax_count
+    try {
+      const [pkgDetails] = await pool.query(
+        'SELECT wash_count, wax_count FROM packages WHERE id = ?',
+        [id]
+      );
+      const fallback = [];
+      if (pkgDetails.length > 0) {
+        if (pkgDetails[0].wash_count > 0) {
+          fallback.push({
+            ps_id: -1,
+            total_count: pkgDetails[0].wash_count,
+            id: -1,
+            name: 'Foam Wash',
+            description: 'Standard Foam Wash',
+            price_hatchback: 0,
+            price_medium_hatchback: 0,
+            price_sedan: 0,
+            price_premium_sedan: 0,
+            price_suv: 0,
+            duration_minutes: 30,
+            is_active: 1
+          });
+        }
+        if (pkgDetails[0].wax_count > 0) {
+          fallback.push({
+            ps_id: -2,
+            total_count: pkgDetails[0].wax_count,
+            id: -2,
+            name: 'Wax Coat',
+            description: 'Standard Wax Coat',
+            price_hatchback: 0,
+            price_medium_hatchback: 0,
+            price_sedan: 0,
+            price_premium_sedan: 0,
+            price_suv: 0,
+            duration_minutes: 30,
+            is_active: 1
+          });
+        }
       }
-      if (pkgDetails[0].wax_count > 0) {
-        fallback.push({
-          ps_id: -2,
-          total_count: pkgDetails[0].wax_count,
-          id: -2,
-          name: 'Wax Coat',
-          description: 'Standard Wax Coat',
-          price_hatchback: 0,
-          price_medium_hatchback: 0,
-          price_sedan: 0,
-          price_premium_sedan: 0,
-          price_suv: 0,
-          duration_minutes: 30,
-          is_active: 1
-        });
-      }
+      res.json({ success: true, data: fallback });
+    } catch (fallbackErr) {
+      console.warn('wash_count/wax_count columns not found:', fallbackErr.message);
+      res.json({ success: true, data: [] });
     }
-    res.json({ success: true, data: fallback });
   } catch (err) {
     console.error('Package services list error:', err);
     res.status(500).json({ success: false, error: 'Server error' });

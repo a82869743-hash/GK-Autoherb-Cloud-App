@@ -121,41 +121,47 @@ async function getServiceBreakdown(conn, packageId, packageName) {
     }
   }
 
-  // 1. Fallback to database first
+  // 1. Try database first (package_services table)
   try {
     const [dbServices] = await conn.query(
-      `SELECT s.name AS service_name, MAX(ps.total_count) AS total_count, MAX(ps.complimentary) AS complimentary, MAX(ps.display_order) AS display_order
+      `SELECT s.name AS service_name, MAX(ps.total_count) AS total_count, MAX(COALESCE(ps.complimentary, 0)) AS complimentary
        FROM package_services ps
        JOIN services s ON ps.service_id = s.id
        WHERE ps.package_id = ?
        GROUP BY s.name
-       ORDER BY display_order ASC`,
+       ORDER BY s.name ASC`,
       [packageId]
     );
 
     if (dbServices.length > 0) {
-      const [pkg] = await conn.query('SELECT paid_wash_count FROM packages WHERE id = ?', [packageId]);
-      if (pkg.length && pkg[0].paid_wash_count > 0) {
-        const paidCount = pkg[0].paid_wash_count;
-        let washFound = false;
-        for (const svc of dbServices) {
-          const name = (svc.service_name || '').toLowerCase();
-          if (name === 'full foam wash' || name === 'exterior body foam wash' || name === 'foam wash' || name.includes('foam wash')) {
-            svc.total_count = Number(svc.total_count || 0) + Number(paidCount);
-            washFound = true;
+      // Safely try to get paid_wash_count (column may not exist)
+      try {
+        const [pkg] = await conn.query('SELECT paid_wash_count FROM packages WHERE id = ?', [packageId]);
+        if (pkg.length && pkg[0].paid_wash_count > 0) {
+          const paidCount = pkg[0].paid_wash_count;
+          let washFound = false;
+          for (const svc of dbServices) {
+            const name = (svc.service_name || '').toLowerCase();
+            if (name === 'full foam wash' || name === 'exterior body foam wash' || name === 'foam wash' || name.includes('foam wash')) {
+              svc.total_count = Number(svc.total_count || 0) + Number(paidCount);
+              washFound = true;
+            }
+          }
+          if (!washFound) {
+            const [foamWashRows] = await conn.query('SELECT id, name AS service_name FROM services WHERE name LIKE "%Foam Wash%" LIMIT 1');
+            if (foamWashRows.length) {
+              dbServices.push({
+                service_name: foamWashRows[0].service_name,
+                total_count: paidCount,
+                complimentary: 0,
+                display_order: 1
+              });
+            }
           }
         }
-        if (!washFound) {
-          const [foamWashRows] = await conn.query('SELECT id, name AS service_name FROM services WHERE name LIKE "%Foam Wash%" LIMIT 1');
-          if (foamWashRows.length) {
-            dbServices.push({
-              service_name: foamWashRows[0].service_name,
-              total_count: paidCount,
-              complimentary: 0,
-              display_order: 1
-            });
-          }
-        }
+      } catch (pwcErr) {
+        // paid_wash_count column may not exist — safe to ignore
+        console.warn('paid_wash_count column not found (safe to ignore):', pwcErr.message);
       }
       return dbServices;
     }
@@ -163,7 +169,7 @@ async function getServiceBreakdown(conn, packageId, packageName) {
     console.warn('Failed dbServices query in getServiceBreakdown:', dbErr.message);
   }
 
-  // 2. Try to match base tier for legacy fallback
+  // 2. Try to match base tier for legacy fallback (hardcoded PACKAGE_SERVICE_MAP)
   let baseTier = '';
   const lowerName = (packageName || '').toLowerCase();
   if (lowerName.includes('bronze')) baseTier = 'Bronze Package';
@@ -222,14 +228,21 @@ exports.assignPackage = async (req, res) => {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    // Verify package exists
-    const [packages] = await conn.query('SELECT id, name, package_validity FROM packages WHERE id = ?', [package_id]);
+    // Verify package exists — safely query with or without package_validity column
+    let packages;
+    try {
+      [packages] = await conn.query('SELECT id, name, package_validity FROM packages WHERE id = ?', [package_id]);
+    } catch (colErr) {
+      // package_validity column may not exist
+      console.warn('package_validity column not found, using fallback:', colErr.message);
+      [packages] = await conn.query('SELECT id, name FROM packages WHERE id = ?', [package_id]);
+    }
     if (!packages.length) {
       await conn.rollback();
       return res.status(404).json({ success: false, error: 'Package not found' });
     }
 
-    const defaultDuration = packages[0].package_validity !== null ? packages[0].package_validity : 12;
+    const defaultDuration = packages[0].package_validity !== undefined && packages[0].package_validity !== null ? packages[0].package_validity : 12;
     const finalDurationMonths = req.body.duration_months !== undefined ? req.body.duration_months : defaultDuration;
 
     // Check for existing active package for the SAME vehicle (prevent duplicates)
@@ -256,7 +269,7 @@ exports.assignPackage = async (req, res) => {
       });
     }
 
-    // Insert into user_packages with new Phase 2 fields
+    // Insert into user_packages — core columns only (safe for any DB schema)
     const [result] = await conn.query(
       `INSERT INTO user_packages
        (user_id, package_id, end_date, payment_status, package_status, price_paid, vehicle_segment, vehicle_id)
@@ -289,27 +302,32 @@ exports.assignPackage = async (req, res) => {
         );
       }
     }
-    // GST auto-logging for Package Sale
-    const [gstSetting] = await conn.query("SELECT value FROM settings WHERE key_name = 'is_gst_applicable'");
-    const isGstEnabled = gstSetting.length && gstSetting[0].value === '1';
-    if (isGstEnabled && price_paid) {
-      const periodMonth = new Date().getMonth() + 1;
-      const periodYear = new Date().getFullYear();
-      const [gstSettingNo] = await conn.query("SELECT value FROM settings WHERE key_name = 'gstin'");
-      const gstin = gstSettingNo.length ? gstSettingNo[0].value : '';
 
-      const numericPrice = parseFloat(price_paid);
-      const taxableAmount = numericPrice / 1.18;
-      const totalGst = numericPrice - taxableAmount;
-      const cgst = totalGst / 2;
-      const sgst = totalGst / 2;
-      const igst = 0;
+    // GST auto-logging for Package Sale (wrapped in try/catch — non-blocking)
+    try {
+      const [gstSetting] = await conn.query("SELECT value FROM settings WHERE key_name = 'is_gst_applicable'");
+      const isGstEnabled = gstSetting.length && gstSetting[0].value === '1';
+      if (isGstEnabled && price_paid) {
+        const periodMonth = new Date().getMonth() + 1;
+        const periodYear = new Date().getFullYear();
+        const [gstSettingNo] = await conn.query("SELECT value FROM settings WHERE key_name = 'gstin'");
+        const gstin = gstSettingNo.length ? gstSettingNo[0].value : '';
 
-      await conn.query(
-        `INSERT INTO v2_gst_records (record_type, gstin, taxable_amount, cgst, sgst, igst, total_gst, period_month, period_year)
-         VALUES ('sales', ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [gstin, taxableAmount, cgst, sgst, igst, totalGst, periodMonth, periodYear]
-      );
+        const numericPrice = parseFloat(price_paid);
+        const taxableAmount = numericPrice / 1.18;
+        const totalGst = numericPrice - taxableAmount;
+        const cgst = totalGst / 2;
+        const sgst = totalGst / 2;
+        const igst = 0;
+
+        await conn.query(
+          `INSERT INTO v2_gst_records (record_type, gstin, taxable_amount, cgst, sgst, igst, total_gst, period_month, period_year)
+           VALUES ('sales', ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [gstin, taxableAmount, cgst, sgst, igst, totalGst, periodMonth, periodYear]
+        );
+      }
+    } catch (gstErr) {
+      console.warn('GST logging failed (non-blocking):', gstErr.message);
     }
 
     await conn.commit();
@@ -366,24 +384,31 @@ exports._renewPackageInternal = async (conn, { user_package_id, package_id, paym
     );
 
     // Calculate new end_date: extend from current end_date if still active, else from NOW
-    const [pkgDetails] = await conn.query('SELECT package_validity FROM packages WHERE id = ?', [targetPackageId]);
-    const duration_months = pkgDetails.length && pkgDetails[0].package_validity !== null ? pkgDetails[0].package_validity : 12;
+    let duration_months = 12;
+    try {
+      const [pkgDetails] = await conn.query('SELECT package_validity FROM packages WHERE id = ?', [targetPackageId]);
+      if (pkgDetails.length && pkgDetails[0].package_validity !== null && pkgDetails[0].package_validity !== undefined) {
+        duration_months = pkgDetails[0].package_validity;
+      }
+    } catch (pvErr) {
+      console.warn('package_validity column not found (safe to ignore):', pvErr.message);
+    }
 
     let baseDate = new Date();
     if (currentPkg.package_status === 'active' && currentPkg.end_date && new Date(currentPkg.end_date) > new Date()) {
       baseDate = new Date(currentPkg.end_date);
     }
 
+    // Insert renewed package — use only core columns (safe for any DB schema)
     const [newResult] = await conn.query(
       `INSERT INTO user_packages
-       (user_id, package_id, start_date, end_date, renewed_from_id, payment_status, package_status, price_paid, vehicle_segment, vehicle_id, pricing_type, car_type)
-       VALUES (?, ?, NOW(), DATE_ADD(?, INTERVAL ? MONTH), ?, 'paid', 'active', ?, ?, ?, ?, ?)`,
+       (user_id, package_id, start_date, end_date, renewed_from_id, payment_status, package_status, price_paid, vehicle_segment, vehicle_id)
+       VALUES (?, ?, NOW(), DATE_ADD(?, INTERVAL ? MONTH), ?, 'paid', 'active', ?, ?, ?)`,
       [
         currentPkg.user_id, targetPackageId,
         baseDate, duration_months, user_package_id,
         payment_amount !== undefined ? payment_amount : currentPkg.price_paid, 
-        currentPkg.vehicle_segment, currentPkg.vehicle_id,
-        currentPkg.pricing_type || 'basic', currentPkg.car_type || null
+        currentPkg.vehicle_segment, currentPkg.vehicle_id
       ]
     );
     const newUserPackageId = newResult.insertId;
@@ -398,19 +423,23 @@ exports._renewPackageInternal = async (conn, { user_package_id, package_id, paym
       );
     }
 
-    // Log the renewal event in v2_package_renewals
-    await conn.query(
-      `INSERT INTO v2_package_renewals
-       (customer_id, package_id, customer_package_id, renewal_date, amount_paid, payment_id, renewed_by, notes)
-       VALUES (?, ?, ?, CURDATE(), ?, ?, ?, ?)`,
-      [
-        currentPkg.user_id, targetPackageId, newUserPackageId,
-        payment_amount !== undefined ? payment_amount : currentPkg.price_paid,
-        payment_id || null,
-        renewed_by,
-        notes || `Renewed package subscription from ID ${user_package_id}`
-      ]
-    );
+    // Log the renewal event in v2_package_renewals (non-blocking)
+    try {
+      await conn.query(
+        `INSERT INTO v2_package_renewals
+         (customer_id, package_id, customer_package_id, renewal_date, amount_paid, payment_id, renewed_by, notes)
+         VALUES (?, ?, ?, CURDATE(), ?, ?, ?, ?)`,
+        [
+          currentPkg.user_id, targetPackageId, newUserPackageId,
+          payment_amount !== undefined ? payment_amount : currentPkg.price_paid,
+          payment_id || null,
+          renewed_by,
+          notes || `Renewed package subscription from ID ${user_package_id}`
+        ]
+      );
+    } catch (renewLogErr) {
+      console.warn('Failed to log renewal event (non-blocking):', renewLogErr.message);
+    }
 
     // Trigger non-blocking WhatsApp/SMS confirmations
     try {
