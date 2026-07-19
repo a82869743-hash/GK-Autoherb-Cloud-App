@@ -5,40 +5,22 @@ conn.on('ready', () => {
   console.log('Connected to VPS');
   
   const script = `
-    echo "=== Current Nginx Config ==="
-    cat /etc/nginx/sites-available/default 2>/dev/null || cat /etc/nginx/nginx.conf
+    echo "=== Inventory table ==="
+    mysql -u root -p1234 gk_autoherb -e "SELECT id, product_name, selling_price, quantity, status FROM inventory WHERE is_deleted = 0 ORDER BY id;" 2>/dev/null
 
     echo ""
-    echo "=== Frontend files ==="
-    ls -la /var/www/gkauto/ 2>/dev/null | head -10
+    echo "=== Bookings table columns ==="
+    mysql -u root -p1234 gk_autoherb -e "SHOW COLUMNS FROM bookings;" 2>/dev/null
 
     echo ""
-    echo "=== PM2 status ==="
-    pm2 list
+    echo "=== Check if pickup_type exists ==="
+    mysql -u root -p1234 gk_autoherb -e "SELECT column_name FROM information_schema.columns WHERE table_schema='gk_autoherb' AND table_name='bookings' AND column_name='pickup_type';" 2>/dev/null
 
     echo ""
-    echo "=== Check Express static serving ==="
-    grep -n "static\\|dist\\|client\\|build\\|index.html" /root/app/server/src/app.js || echo "No static serving found in app.js"
+    echo "=== Inventory table columns ==="
+    mysql -u root -p1234 gk_autoherb -e "SHOW COLUMNS FROM inventory;" 2>/dev/null
 
     echo ""
-    echo "=== Check server.js ==="
-    cat /root/app/server/src/server.js 2>/dev/null | head -30
-
-    echo ""
-    echo "=== Nginx enabled sites ==="
-    ls -la /etc/nginx/sites-enabled/ 2>/dev/null
-
-    echo ""
-    echo "=== Test localhost:5000 ==="
-    curl -s -o /dev/null -w "HTTP %{http_code}" http://localhost:5000/
-    echo ""
-    curl -s -o /dev/null -w "HTTP %{http_code}" http://localhost:5000/api/packages
-    echo ""
-
-    echo ""
-    echo "=== PM2 logs (last 15 lines) ==="
-    pm2 logs --nostream --lines 15
-
     echo "=== Done ==="
   `;
   

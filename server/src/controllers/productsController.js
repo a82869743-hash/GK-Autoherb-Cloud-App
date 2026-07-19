@@ -396,8 +396,10 @@ exports.listCustomerProducts = async (req, res) => {
         `SELECT MIN(id) as id, product_name, 
                 MAX(selling_price) as selling_price, MAX(cost_price) as cost_price, 
                 SUM(quantity) as quantity, 
-                MAX(sku) as sku, MAX(brand) as brand, MAX(category) as category, 
-                MAX(images_json) as images_json, MAX(description) as description
+                MAX(sku) as sku, MAX(brand) as brand, MAX(category) as category,
+                MAX(sub_category) as sub_category,
+                MAX(CAST(images_json AS CHAR(2000))) as images_json, 
+                MAX(description) as description
          FROM inventory 
          WHERE is_deleted = 0 AND status = 'active'
          GROUP BY product_name`
@@ -409,8 +411,10 @@ exports.listCustomerProducts = async (req, res) => {
         `SELECT MIN(id) as id, product_name, 
                 MAX(selling_price) as selling_price, MAX(cost_price) as cost_price, 
                 SUM(quantity) as quantity, 
-                MAX(sku) as sku, MAX(brand) as brand, MAX(category) as category, 
-                MAX(images_json) as images_json, MAX(description) as description
+                MAX(sku) as sku, MAX(brand) as brand, MAX(category) as category,
+                MAX(sub_category) as sub_category,
+                MAX(CAST(images_json AS CHAR(2000))) as images_json, 
+                MAX(description) as description
          FROM inventory 
          WHERE is_deleted = 0
          GROUP BY product_name`

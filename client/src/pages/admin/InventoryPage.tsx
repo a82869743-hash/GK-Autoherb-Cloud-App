@@ -515,14 +515,23 @@ export default function InventoryPage() {
                             if (row.images_json) {
                               try {
                                 const arr = typeof row.images_json === 'string' ? JSON.parse(row.images_json) : row.images_json;
-                                if (Array.isArray(arr) && arr.length > 0) imgUrl = arr[0];
-                              } catch (e) {}
+                                if (Array.isArray(arr) && arr.length > 0 && arr[0]) imgUrl = arr[0];
+                              } catch {}
                             }
                             return imgUrl ? (
-                              <img src={imgUrl} alt={row.product_name} className="w-9 h-9 rounded-lg object-contain border border-gray-100 bg-gray-50 shrink-0" />
+                              <img
+                                src={imgUrl}
+                                alt={row.product_name}
+                                className="w-9 h-9 rounded-lg object-cover border border-gray-100 bg-gray-50 shrink-0"
+                                onError={(e) => {
+                                  const el = e.target as HTMLImageElement;
+                                  // Replace with a colored initial instead of broken icon
+                                  el.outerHTML = `<div class="w-9 h-9 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center shrink-0 text-gray-400 font-bold text-sm border border-gray-100">${(row.product_name || 'P')[0]}</div>`;
+                                }}
+                              />
                             ) : (
-                              <div className="w-9 h-9 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center shrink-0 text-gray-300">
-                                <Package size={16} />
+                              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center shrink-0 text-gray-400 font-bold text-sm border border-gray-100">
+                                {(row.product_name || 'P')[0]}
                               </div>
                             );
                           })()}

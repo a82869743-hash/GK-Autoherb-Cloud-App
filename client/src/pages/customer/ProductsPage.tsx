@@ -355,6 +355,8 @@ export default function ProductsPage() {
         if (match) matchedDbIds.add(match.id);
 
         const dbQty = match ? parseFloat(match.quantity) : 0;
+        const dbSellingPrice = match ? parseFloat(match.selling_price) : 0;
+        const dbCostPrice = match ? parseFloat(match.cost_price) : 0;
 
         // Extract image from DB images_json if available
         let dbImage = '';
@@ -366,12 +368,33 @@ export default function ProductsPage() {
           } catch { /* ignore parse errors */ }
         }
 
+        // Calculate MRP and discount from DB data
+        const effectivePrice = dbSellingPrice > 0 ? dbSellingPrice : tmpl.price;
+        const effectiveMrp = dbSellingPrice > 0
+          ? Math.ceil(dbSellingPrice * 1.6 / 10) * 10
+          : tmpl.mrp;
+        const effectiveDiscount = effectiveMrp > effectivePrice
+          ? Math.round(((effectiveMrp - effectivePrice) / effectiveMrp) * 100) + '% OFF'
+          : tmpl.discount;
+
         return {
           ...tmpl,
-          image: dbImage || tmpl.image, // DB image takes priority
+          // DB data overrides template when available
+          displayName: match?.product_name || tmpl.displayName,
+          description: match?.description || tmpl.description,
+          image: dbImage || tmpl.image,
+          price: effectivePrice,
+          mrp: effectiveMrp,
+          discount: effectiveDiscount,
+          specs: {
+            ...tmpl.specs,
+            ...(match?.category ? { Category: match.category } : {}),
+            ...(match?.brand ? { Brand: match.brand } : {}),
+            ...(match?.sku ? { SKU: match.sku } : {}),
+          },
           dbId: match?.id || null,
           dbQty: dbQty,
-          dbPrice: match ? parseFloat(match.selling_price) || tmpl.price : tmpl.price,
+          dbPrice: effectivePrice,
           inStock: match ? (isNaN(dbQty) ? true : dbQty > 0) : false
         };
       });
@@ -809,11 +832,11 @@ export default function ProductsPage() {
             {/* Product Picture Section */}
             <div className="relative md:w-1/2 bg-gray-900 flex flex-col justify-center min-h-[300px]">
               <img
-                src={selectedProduct.image}
+                src={selectedProduct.image || 'https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=500&q=80'}
                 alt={selectedProduct.displayName}
                 className="w-full h-full object-cover"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1563720223185-11003d516935?w=500';
+                  (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=500&q=80';
                 }}
               />
               <button
