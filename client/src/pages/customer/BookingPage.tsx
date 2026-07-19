@@ -769,8 +769,16 @@ export default function BookingPage() {
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
-                                <Sparkles size={14} className="text-purple-500" />
-                                <p className="font-bold text-[#1c1b1b]">{usage.service_name}{matchedService?.duration_minutes ? ` · ~${matchedService.duration_minutes} min` : ''}</p>
+                                <Sparkles size={14} className={usage.complimentary > 0 ? "text-purple-500" : "text-blue-500"} />
+                                <p className="font-bold text-[#1c1b1b]">
+                                  {usage.service_name}
+                                  <span className={`ml-2 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                                    usage.complimentary > 0 ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700'
+                                  }`}>
+                                    {usage.complimentary > 0 ? 'Free' : 'Mandatory'}
+                                  </span>
+                                  {matchedService?.duration_minutes ? ` · ~${matchedService.duration_minutes} min` : ''}
+                                </p>
                               </div>
                               <div className="flex items-center gap-3">
                                 <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${
