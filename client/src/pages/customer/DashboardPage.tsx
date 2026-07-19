@@ -109,8 +109,8 @@ export default function CustomerDashboardPage() {
           {/* Loyalty Stats in Hero */}
           <div className="flex flex-wrap gap-6 sm:gap-10">
             <div className="opacity-0 animate-fade-in-up" style={{ animationDelay: '0.1s', animationFillMode: 'forwards' }}>
-              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-1">Credits</p>
-              <p className="text-xl sm:text-2xl font-black text-white tracking-tight">{formatINR(loyalty.credits || 0)}</p>
+              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-1">Reward Points</p>
+              <p className="text-xl sm:text-2xl font-black text-white tracking-tight">{loyalty.credits || 0} Pts</p>
               <div className="w-10 h-[3px] bg-[#D32F2F] rounded-full mt-1.5" />
             </div>
             <div className="opacity-0 animate-fade-in-up" style={{ animationDelay: '0.2s', animationFillMode: 'forwards' }}>

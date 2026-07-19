@@ -9,8 +9,12 @@ conn.on('ready', () => {
     tail -n 50 /root/.pm2/logs/gk-backend-error.log || pm2 logs gk-backend --lines 50 --no-colors
 
     echo ""
-    echo "=== PM2 Out Logs ==="
-    tail -n 50 /root/.pm2/logs/gk-backend-out.log
+    echo "=== Columns in packages table ==="
+    mysql -u root -p1234 gk_autoherb -e "SHOW COLUMNS FROM packages;" 2>/dev/null
+
+    echo ""
+    echo "=== Columns in user_packages table ==="
+    mysql -u root -p1234 gk_autoherb -e "SHOW COLUMNS FROM user_packages;" 2>/dev/null
 
     echo ""
     echo "=== Done ==="
