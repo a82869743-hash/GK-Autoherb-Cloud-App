@@ -7,6 +7,7 @@ import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 import Button from '../../components/ui/Button';
 import PackageRenewModal from '../../components/shared/PackageRenewModal';
+import { useAuthStore } from '../../store/authStore';
 
 export default function CustomerDetailPage() {
   const { id } = useParams();
