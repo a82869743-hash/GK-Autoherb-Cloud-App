@@ -18,8 +18,15 @@ conn.on('ready', () => {
     echo "=== Preserving server .env (DB password, 2FA, API keys) ==="
     # .env is gitignored so git pull won't touch it
     
-    echo "=== Running DB migrations ==="
-    npm run migrate || true
+    echo "=== Running DB migrations (add missing columns/tables) ==="
+    node scripts/migrate_columns.js || echo "Migration script failed (non-fatal)"
+    
+    echo "=== Running price updates ==="
+    node scripts/update_prices.js || echo "Price update script failed (non-fatal)"
+    
+    echo "=== Creating uploads directory ==="
+    mkdir -p uploads/products
+    chmod 755 uploads/products
     
     echo "=== Restarting backend ==="
     pm2 restart all || pm2 start src/server.js
@@ -32,6 +39,8 @@ conn.on('ready', () => {
     echo "=== Deploying to Nginx ==="
     rm -rf /var/www/gkauto/*
     cp -r dist/* /var/www/gkauto/
+    
+    echo "=== Restarting Nginx ==="
     systemctl restart nginx
     
     echo "=== Deployment Complete! ==="
