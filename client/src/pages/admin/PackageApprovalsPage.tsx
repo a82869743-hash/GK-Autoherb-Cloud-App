@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../../api/axiosInstance';
 import { CheckCircle, XCircle, Loader2, PackageOpen, User, Car, Clock, AlertTriangle, Download } from 'lucide-react';
 import ConfirmModal from '../../components/ui/ConfirmModal';
+import { useAuthStore } from '../../store/authStore';
 
 export default function PackageApprovalsPage() {
   const [requests, setRequests] = useState<any[]>([]);
@@ -214,7 +215,7 @@ export default function PackageApprovalsPage() {
                     </div>
                     <button
                       onClick={() => {
-                        const token = localStorage.getItem('token');
+                        const token = useAuthStore.getState().token;
                         window.open(`/api/packages/requests/${req.id}/invoice?token=${token}`, '_blank');
                       }}
                       className="w-full flex justify-center items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-200 text-blue-700 font-bold rounded-lg hover:bg-blue-100 transition-colors"
@@ -283,7 +284,7 @@ export default function PackageApprovalsPage() {
                       <td className="p-4 text-right">
                         <button
                           onClick={() => {
-                            const token = localStorage.getItem('token');
+                            const token = useAuthStore.getState().token;
                             window.open(`/api/packages/requests/${req.id}/invoice?token=${token}`, '_blank');
                           }}
                           className="text-blue-600 hover:text-blue-800 font-bold text-xs inline-flex items-center gap-1 bg-blue-50 border border-blue-200 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"

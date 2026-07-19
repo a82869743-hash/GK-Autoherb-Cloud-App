@@ -491,7 +491,7 @@ export default function CustomerDetailPage() {
                 </h3>
                 <div className="flex gap-2">
                   <a
-                    href={`${api.defaults.baseURL}/user-packages/export?user_id=${id}&format=pdf&token=${localStorage.getItem('token')}`}
+                    href={`${api.defaults.baseURL}/user-packages/export?user_id=${id}&format=pdf&token=${useAuthStore.getState().token}`}
                     target="_blank"
                     rel="noreferrer"
                     className="text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors border border-red-100 flex items-center gap-1"
@@ -499,7 +499,7 @@ export default function CustomerDetailPage() {
                     PDF
                   </a>
                   <a
-                    href={`${api.defaults.baseURL}/user-packages/export?user_id=${id}&format=excel&token=${localStorage.getItem('token')}`}
+                    href={`${api.defaults.baseURL}/user-packages/export?user_id=${id}&format=excel&token=${useAuthStore.getState().token}`}
                     target="_blank"
                     rel="noreferrer"
                     className="text-xs font-medium text-green-600 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-lg transition-colors border border-green-100 flex items-center gap-1"

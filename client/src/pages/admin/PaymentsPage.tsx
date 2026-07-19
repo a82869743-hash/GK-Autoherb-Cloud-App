@@ -6,6 +6,7 @@ import PremiumPageHeader from '../../components/shared/PremiumPageHeader';
 import PremiumStatCard from '../../components/shared/PremiumStatCard';
 import { PageTransition, AnimatedCard, RippleButton, AnimatedModal } from '../../components/ui/Animations';
 import { toast } from 'react-hot-toast';
+import { useAuthStore } from '../../store/authStore';
 
 const STATUS_BADGES: Record<string, string> = {
   completed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -188,7 +189,7 @@ export default function PaymentsPage() {
   };
 
   const handleDownloadInvoice = (paymentId: number) => {
-    const token = localStorage.getItem('token');
+    const token = useAuthStore.getState().token;
     window.open(`/api/payments/${paymentId}/invoice?token=${token}`, '_blank');
   };
 
