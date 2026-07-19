@@ -187,8 +187,8 @@ async function getServiceBreakdown(conn, packageId, packageName) {
   }
 
   // 2. Try to match base tier for legacy fallback (hardcoded PACKAGE_SERVICE_MAP)
-  let baseTier = '';
-  const lowerName = (packageName || '').toLowerCase();
+  baseTier = '';
+  lowerName = (packageName || '').toLowerCase();
   if (lowerName.includes('bronze')) baseTier = 'Bronze Package';
   else if (lowerName.includes('silver')) baseTier = 'Silver Package';
   else if (lowerName.includes('gold')) baseTier = 'Gold Package';

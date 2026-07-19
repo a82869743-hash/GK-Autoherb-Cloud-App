@@ -5,8 +5,12 @@ conn.on('ready', () => {
   console.log('Connected to VPS');
   
   const script = `
-    echo "=== Git Diff for userPackagesController.js ==="
-    cd /root/app && git diff c4c9c67..fe996f6 -- server/src/controllers/userPackagesController.js
+    echo "=== PM2 Error Logs ==="
+    tail -n 50 /root/.pm2/logs/gk-backend-error.log || pm2 logs gk-backend --lines 50 --no-colors
+
+    echo ""
+    echo "=== PM2 Out Logs ==="
+    tail -n 50 /root/.pm2/logs/gk-backend-out.log
 
     echo ""
     echo "=== Done ==="
