@@ -5,20 +5,8 @@ conn.on('ready', () => {
   console.log('Connected to VPS');
   
   const script = `
-    echo "=== Inventory table ==="
-    mysql -u root -p1234 gk_autoherb -e "SELECT id, product_name, selling_price, quantity, status FROM inventory WHERE is_deleted = 0 ORDER BY id;" 2>/dev/null
-
-    echo ""
-    echo "=== Bookings table columns ==="
-    mysql -u root -p1234 gk_autoherb -e "SHOW COLUMNS FROM bookings;" 2>/dev/null
-
-    echo ""
-    echo "=== Check if pickup_type exists ==="
-    mysql -u root -p1234 gk_autoherb -e "SELECT column_name FROM information_schema.columns WHERE table_schema='gk_autoherb' AND table_name='bookings' AND column_name='pickup_type';" 2>/dev/null
-
-    echo ""
-    echo "=== Inventory table columns ==="
-    mysql -u root -p1234 gk_autoherb -e "SHOW COLUMNS FROM inventory;" 2>/dev/null
+    echo "=== Git Diff for userPackagesController.js ==="
+    cd /root/app && git diff c4c9c67..fe996f6 -- server/src/controllers/userPackagesController.js
 
     echo ""
     echo "=== Done ==="

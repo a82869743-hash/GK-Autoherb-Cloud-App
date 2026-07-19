@@ -121,7 +121,24 @@ async function getServiceBreakdown(conn, packageId, packageName) {
     }
   }
 
-  // 1. Try database first (package_services table)
+  // 1. Try to match base tier first (source of truth for standard tiers)
+  let baseTier = '';
+  const lowerName = (packageName || '').toLowerCase();
+  if (lowerName.includes('bronze')) baseTier = 'Bronze Package';
+  else if (lowerName.includes('silver')) baseTier = 'Silver Package';
+  else if (lowerName.includes('gold')) baseTier = 'Gold Package';
+  else if (lowerName.includes('diamond')) baseTier = 'Diamond Package';
+  else if (lowerName.includes('platinum')) baseTier = 'Platinum Package';
+
+  if (baseTier && PACKAGE_SERVICE_MAP[baseTier]) {
+    return PACKAGE_SERVICE_MAP[baseTier];
+  }
+
+  if (PACKAGE_SERVICE_MAP[packageName]) {
+    return PACKAGE_SERVICE_MAP[packageName];
+  }
+
+  // 2. Try database (package_services table) for custom packages
   try {
     const [dbServices] = await conn.query(
       `SELECT s.name AS service_name, MAX(ps.total_count) AS total_count, MAX(COALESCE(ps.complimentary, 0)) AS complimentary
