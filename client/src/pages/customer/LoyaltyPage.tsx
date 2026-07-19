@@ -170,9 +170,11 @@ export default function LoyaltyPage() {
               </div>
             )}
             <div className="opacity-0 animate-fade-in-up" style={{ animationDelay: '0.1s', animationFillMode: 'forwards' }}>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Credits</p>
-              <p className="text-2xl sm:text-3xl font-black text-white tracking-tight">{formatINR(loyalty?.credits || 0)}</p>
-              <p className="text-[10px] text-gray-400 mt-1">Store Balance</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Reward Points</p>
+              <p className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                {Math.round(loyalty?.credits || 0)} <span className="text-sm font-bold text-gray-400">Pts</span>
+              </p>
+              <p className="text-[10px] text-gray-400 mt-1">Points Balance</p>
               <div className="w-12 h-1 bg-[#D32F2F] rounded-full mt-2" />
             </div>
             <div className="opacity-0 animate-fade-in-up" style={{ animationDelay: '0.2s', animationFillMode: 'forwards' }}>
@@ -190,6 +192,28 @@ export default function LoyaltyPage() {
           </div>
         </div>
         <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#D32F2F] via-[#D32F2F]/40 to-transparent" />
+      </div>
+
+      {/* ── 1000 Points = Free Wash Info Banner ────────── */}
+      <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200/60 rounded-xl p-4 sm:p-5 mb-6 flex items-start gap-4">
+        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+          <Gift size={20} className="text-emerald-600" />
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-bold text-gray-900 flex items-center gap-2">
+            🎉 Earn Points, Get Free Washes!
+          </p>
+          <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+            Collect <span className="font-extrabold text-emerald-700">1,000 points</span> and redeem them for a <span className="font-extrabold text-emerald-700">FREE car wash</span>! 
+            You earn points automatically every time you book a service with us. Keep washing, keep earning!
+          </p>
+          <div className="mt-3 flex items-center gap-3">
+            <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-full border border-emerald-200 shadow-sm">
+              <Coins size={14} className="text-amber-500" />
+              <span className="text-[11px] font-bold text-gray-700">1,000 Pts = 1 Free Wash</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ── Active Tab Content ──────────────────────────── */}
