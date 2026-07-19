@@ -772,12 +772,20 @@ export default function BuyPackagesPage() {
                 {/* Show services included */}
                 {confirmPkg.services && confirmPkg.services.length > 0 && (
                   <div className="border-t border-gray-200 pt-3">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Complementary Services</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Included Services</p>
                     <div className="space-y-1.5">
-                      {confirmPkg.services.map(svc => (
-                        <div key={svc.id || svc.ps_id} className="flex items-center gap-2 text-xs">
+                      {/* Mandatory (paid) services */}
+                      {confirmPkg.services.filter((svc: any) => (svc.paid || 0) > 0).map((svc: any) => (
+                        <div key={`m-${svc.id || svc.ps_id}`} className="flex items-center gap-2 text-xs">
+                          <Check className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                          <span className="text-gray-800 font-bold">Pay For {svc.paid} {svc.name} (Mandatory)</span>
+                        </div>
+                      ))}
+                      {/* Free (complimentary) services */}
+                      {confirmPkg.services.filter((svc: any) => (svc.complimentary || 0) > 0).map((svc: any) => (
+                        <div key={`f-${svc.id || svc.ps_id}`} className="flex items-center gap-2 text-xs">
                           <Check className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
-                          <span className="text-gray-700">{svc.total_count > 1 ? `${svc.total_count} ` : ''}{svc.name}</span>
+                          <span className="text-gray-700">{svc.complimentary} {svc.name} (Free)</span>
                         </div>
                       ))}
                     </div>

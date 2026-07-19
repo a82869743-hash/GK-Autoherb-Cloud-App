@@ -170,6 +170,8 @@ export default function CustomerDetailPage() {
           const mapped = res.data.data.map((s: any) => ({
             service_name: s.name,
             total_count: s.total_count || 1,
+            paid: s.paid || 0,
+            complimentary: s.complimentary || 0,
             remaining: s.total_count || 1
           }));
           setPackageServices(mapped);
@@ -699,32 +701,62 @@ export default function CustomerDetailPage() {
             </select>
           </div>
 
-          {/* Service Balances List */}
+          {/* Included Services (Mandatory & Free) */}
           {packageServices.length > 0 && (
             <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-3">
-              <p className="text-xs font-bold uppercase tracking-wider text-gray-500">Remaining Service Balances</p>
-              <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto">
-                {packageServices.map((svc: any, idx: number) => (
-                  <div key={svc.service_name} className="flex justify-between items-center bg-white p-2 rounded-lg border border-gray-100">
-                    <span className="text-xs font-semibold text-gray-700">{svc.service_name}</span>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="number"
-                        min="0"
-                        className="w-12 px-1.5 py-0.5 border border-gray-300 rounded text-center text-xs font-bold focus:outline-none focus:ring-1 focus:ring-red-500"
-                        value={svc.remaining}
-                        onChange={(e) => {
-                          const val = Math.max(0, parseInt(e.target.value) || 0);
-                          const updated = [...packageServices];
-                          updated[idx].remaining = val;
-                          setPackageServices(updated);
-                        }}
-                      />
-                      <span className="text-[10px] text-gray-400 font-bold">/ {svc.total_count}</span>
+              <p className="text-xs font-bold uppercase tracking-wider text-gray-500">Included Services</p>
+              <div className="space-y-2 max-h-56 overflow-y-auto">
+                {/* Mandatory (paid) services */}
+                {packageServices.filter((svc: any) => svc.paid > 0).map((svc: any) => (
+                  <div key={`paid-${svc.service_name}`} className="flex items-center gap-2 bg-blue-50 p-2.5 rounded-lg border border-blue-100">
+                    <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                      <span className="text-blue-600 text-[10px]">✓</span>
                     </div>
+                    <span className="text-xs text-gray-800 font-bold">
+                      Pay For {svc.paid} {svc.service_name} (Mandatory)
+                    </span>
+                  </div>
+                ))}
+                {/* Free (complimentary) services */}
+                {packageServices.filter((svc: any) => svc.complimentary > 0).map((svc: any) => (
+                  <div key={`free-${svc.service_name}`} className="flex items-center gap-2 bg-green-50 p-2.5 rounded-lg border border-green-100">
+                    <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                      <span className="text-green-600 text-[10px]">✓</span>
+                    </div>
+                    <span className="text-xs text-gray-600 font-medium">
+                      {svc.complimentary} {svc.service_name} (Free)
+                    </span>
                   </div>
                 ))}
               </div>
+              {/* Editable totals for admin override */}
+              <details className="mt-2">
+                <summary className="text-[10px] font-bold text-gray-400 cursor-pointer hover:text-gray-600">
+                  ▸ Edit Service Counts (Admin Override)
+                </summary>
+                <div className="grid grid-cols-1 gap-2 mt-2">
+                  {packageServices.map((svc: any, idx: number) => (
+                    <div key={svc.service_name} className="flex justify-between items-center bg-white p-2 rounded-lg border border-gray-100">
+                      <span className="text-xs font-semibold text-gray-700">{svc.service_name}</span>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min="0"
+                          className="w-12 px-1.5 py-0.5 border border-gray-300 rounded text-center text-xs font-bold focus:outline-none focus:ring-1 focus:ring-red-500"
+                          value={svc.remaining}
+                          onChange={(e) => {
+                            const val = Math.max(0, parseInt(e.target.value) || 0);
+                            const updated = [...packageServices];
+                            updated[idx].remaining = val;
+                            setPackageServices(updated);
+                          }}
+                        />
+                        <span className="text-[10px] text-gray-400 font-bold">/ {svc.total_count}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
             </div>
           )}
 

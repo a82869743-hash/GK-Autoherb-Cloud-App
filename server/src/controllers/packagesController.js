@@ -535,6 +535,7 @@ exports.getPackageServices = async (req, res) => {
             enriched.push({
               ps_id: -1,
               total_count: svc.total_count,
+              paid: svc.paid || 0,
               complimentary: svc.complimentary || 0,
               ...svcRows[0]
             });
@@ -543,6 +544,7 @@ exports.getPackageServices = async (req, res) => {
             enriched.push({
               ps_id: -1,
               total_count: svc.total_count,
+              paid: svc.paid || 0,
               complimentary: svc.complimentary || 0,
               id: -1,
               name: svc.service_name,
@@ -561,6 +563,7 @@ exports.getPackageServices = async (req, res) => {
           enriched.push({
             ps_id: -1,
             total_count: svc.total_count,
+            paid: svc.paid || 0,
             complimentary: svc.complimentary || 0,
             id: -1,
             name: svc.service_name,
