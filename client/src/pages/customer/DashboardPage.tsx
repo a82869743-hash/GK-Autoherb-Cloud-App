@@ -247,21 +247,11 @@ export default function CustomerDashboardPage() {
                 {pkg.usage && pkg.usage.length > 0 && (
                   <div className="mt-2 ml-12 space-y-1">
                     <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-1">Included Services:</p>
-                    {/* Mandatory (paid) services */}
-                    {pkg.usage.filter((u: any) => (u.paid || 0) > 0).map((u: any) => (
-                      <div key={`m-${u.service_name}`} className="flex items-center justify-between text-xs">
-                        <span className="text-gray-800 font-bold">✓ Pay For {u.paid} {u.service_name} (Mandatory)</span>
+                    {pkg.usage.map((u: any) => (
+                      <div key={u.service_name} className="flex items-center justify-between text-xs py-0.5">
+                        <span className="text-gray-800 font-semibold">✓ {u.service_name}</span>
                         <span className={`font-bold ${u.remaining > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                          {u.remaining} / {u.total_count} left
-                        </span>
-                      </div>
-                    ))}
-                    {/* Free (complimentary) services */}
-                    {pkg.usage.filter((u: any) => (u.complimentary || 0) > 0).map((u: any) => (
-                      <div key={`f-${u.service_name}`} className="flex items-center justify-between text-xs">
-                        <span className="text-gray-600">✓ {u.complimentary} {u.service_name} (Free)</span>
-                        <span className={`font-bold ${u.remaining > 0 ? 'text-purple-600' : 'text-red-500'}`}>
-                          {u.remaining} / {u.total_count} left
+                          {u.remaining} left
                         </span>
                       </div>
                     ))}

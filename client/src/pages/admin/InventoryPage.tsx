@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Package, Edit2, Trash2, Check, Upload, Search, ShieldAlert, BarChart3, HelpCircle, RefreshCw } from 'lucide-react';
-import { useInventory, useCreateInventory, useUpdateInventory, useAdjustQuantity, useDeleteInventory } from '../../api/hooks/useInventory';
+import { Plus, Package, Edit2, Trash2, Check, Upload, Search, ShieldAlert, BarChart3, HelpCircle, RefreshCw, FolderPlus, CheckSquare, Square, Layers } from 'lucide-react';
+import { useInventory, useCreateInventory, useUpdateInventory, useAdjustQuantity, useDeleteInventory, useInventoryCategories } from '../../api/hooks/useInventory';
 import PremiumPageHeader from '../../components/shared/PremiumPageHeader';
 import PremiumStatCard from '../../components/shared/PremiumStatCard';
 import Button from '../../components/ui/Button';
@@ -52,7 +52,20 @@ export default function InventoryPage() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
 
-  const { data, isLoading, refetch } = useInventory({ search, page, limit: 100 });
+  const [brandFilter, setBrandFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+
+  const { data, isLoading, refetch } = useInventory({ search, page, limit: 100, category: categoryFilter, brand: brandFilter });
+  const { data: dbCategories, refetch: refetchCategories } = useInventoryCategories();
+
+  // Multi-select state
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [bulkCategoryTarget, setBulkCategoryTarget] = useState('');
+
+  // Custom Category State in Modal
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
+  const [customCategoryInput, setCustomCategoryInput] = useState('');
 
   // ─── Add/Edit Modal ─────────────────────
   const [modalOpen, setModalOpen] = useState(false);
@@ -278,8 +291,75 @@ export default function InventoryPage() {
       }
       setModalOpen(false);
       refetch();
+      refetchCategories();
     } catch (err: any) {
       toast('error', err.response?.data?.error || 'Failed to save product');
+    }
+  };
+
+  // ─── Bulk Operations ─────────────
+  const handleSelectAll = (filteredItems: any[]) => {
+    if (selectedIds.length === filteredItems.length && filteredItems.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredItems.map((item: any) => item.id));
+    }
+  };
+
+  const handleSelectOne = (id: number) => {
+    if (selectedIds.includes(id)) {
+      setSelectedIds(selectedIds.filter(i => i !== id));
+    } else {
+      setSelectedIds([...selectedIds, id]);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} selected products?`)) return;
+    setBulkActionLoading(true);
+    try {
+      await api.post('/inventory/bulk-delete', { ids: selectedIds });
+      toast('success', `${selectedIds.length} products deleted`);
+      setSelectedIds([]);
+      refetch();
+      refetchCategories();
+    } catch (err: any) {
+      toast('error', err.response?.data?.error || 'Failed bulk delete');
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleBulkCategoryChange = async (cat: string) => {
+    if (selectedIds.length === 0 || !cat) return;
+    setBulkActionLoading(true);
+    try {
+      await api.post('/inventory/bulk-update-category', { ids: selectedIds, category: cat });
+      toast('success', `Updated category to "${cat}" for ${selectedIds.length} items`);
+      setSelectedIds([]);
+      setBulkCategoryTarget('');
+      refetch();
+      refetchCategories();
+    } catch (err: any) {
+      toast('error', err.response?.data?.error || 'Failed bulk category update');
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleBulkStatusChange = async (status: 'active' | 'inactive') => {
+    if (selectedIds.length === 0) return;
+    setBulkActionLoading(true);
+    try {
+      await api.post('/inventory/bulk-update-status', { ids: selectedIds, status });
+      toast('success', `Status updated to "${status}" for ${selectedIds.length} items`);
+      setSelectedIds([]);
+      refetch();
+    } catch (err: any) {
+      toast('error', err.response?.data?.error || 'Failed bulk status update');
+    } finally {
+      setBulkActionLoading(false);
     }
   };
 
@@ -414,6 +494,65 @@ export default function InventoryPage() {
         />
       </div>
 
+      {/* Category Horizontal Pills & Product Count Summary */}
+      <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-200 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-bold text-gray-700">
+            <Layers className="w-4 h-4 text-blue-600" />
+            <span>Categories Breakdown</span>
+            <span className="bg-blue-100 text-blue-800 text-[10px] px-2 py-0.5 rounded-full font-bold">
+              {allItems.length} Total Products
+            </span>
+          </div>
+          <span className="text-xs text-gray-500 font-medium">
+            Showing {filteredItems.length} of {allItems.length} items
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
+          <button
+            onClick={() => { setCategoryFilter(''); setPage(1); }}
+            className={`px-3 py-1 rounded-lg font-bold transition-all shrink-0 ${
+              categoryFilter === '' ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            All Products ({allItems.length})
+          </button>
+          {INVENTORY_CATEGORIES.map(c => {
+            const count = allItems.filter((i: any) => i.category === c).length;
+            if (count === 0 && categoryFilter !== c) return null;
+            return (
+              <button
+                key={c}
+                onClick={() => { setCategoryFilter(c); setPage(1); }}
+                className={`px-3 py-1 rounded-lg font-bold transition-all shrink-0 flex items-center gap-1 ${
+                  categoryFilter === c ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <span>{c}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${categoryFilter === c ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+          {dbCategories && dbCategories.filter((dc: any) => !INVENTORY_CATEGORIES.includes(dc.category)).map((dc: any) => (
+            <button
+              key={dc.category}
+              onClick={() => { setCategoryFilter(dc.category); setPage(1); }}
+              className={`px-3 py-1 rounded-lg font-bold transition-all shrink-0 flex items-center gap-1 ${
+                categoryFilter === dc.category ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <span>{dc.category}</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${categoryFilter === dc.category ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'}`}>
+                {dc.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Search and Filters */}
       <div className="flex flex-col md:flex-row gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
         <div className="flex-1 relative">
@@ -435,6 +574,9 @@ export default function InventoryPage() {
             <option value="">All Categories</option>
             {INVENTORY_CATEGORIES.map(c => (
               <option key={c} value={c}>{c}</option>
+            ))}
+            {dbCategories && dbCategories.filter((dc: any) => !INVENTORY_CATEGORIES.includes(dc.category)).map((dc: any) => (
+              <option key={dc.category} value={dc.category}>{dc.category}</option>
             ))}
           </select>
         </div>
@@ -461,6 +603,77 @@ export default function InventoryPage() {
         </div>
       </div>
 
+      {/* Floating Bulk Actions Bar */}
+      {selectedIds.length > 0 && (
+        <div className="sticky top-4 z-20 bg-gray-900 text-white p-3 rounded-xl shadow-xl border border-gray-800 flex items-center justify-between flex-wrap gap-3 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2 text-xs font-bold">
+            <CheckSquare className="w-4 h-4 text-blue-400" />
+            <span>{selectedIds.length} Products Selected</span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1">
+              <select
+                className="px-2.5 py-1.5 bg-gray-800 border border-gray-700 text-white text-xs rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                value={bulkCategoryTarget}
+                onChange={(e) => setBulkCategoryTarget(e.target.value)}
+              >
+                <option value="">Move to Category...</option>
+                {INVENTORY_CATEGORIES.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="text-xs py-1"
+                disabled={!bulkCategoryTarget || bulkActionLoading}
+                onClick={() => handleBulkCategoryChange(bulkCategoryTarget)}
+              >
+                Apply Category
+              </Button>
+            </div>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              className="text-xs py-1 text-emerald-400 hover:text-emerald-300"
+              disabled={bulkActionLoading}
+              onClick={() => handleBulkStatusChange('active')}
+            >
+              Mark Active
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              className="text-xs py-1 text-amber-400 hover:text-amber-300"
+              disabled={bulkActionLoading}
+              onClick={() => handleBulkStatusChange('inactive')}
+            >
+              Mark Inactive
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              className="text-xs py-1 bg-red-950 text-red-400 hover:bg-red-900 border-red-900"
+              disabled={bulkActionLoading}
+              onClick={handleBulkDelete}
+              icon={<Trash2 size={13} />}
+            >
+              Delete ({selectedIds.length})
+            </Button>
+
+            <button
+              onClick={() => setSelectedIds([])}
+              className="text-xs text-gray-400 hover:text-white underline ml-2"
+            >
+              Deselect All
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
         {isLoading ? (
@@ -479,6 +692,14 @@ export default function InventoryPage() {
             <table className="min-w-full divide-y divide-gray-100 text-left text-sm">
               <thead className="bg-gray-50">
                 <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  <th className="p-4 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.length === filteredItems.length && filteredItems.length > 0}
+                      onChange={() => handleSelectAll(filteredItems)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                    />
+                  </th>
                   <th className="p-4">SKU / Barcode</th>
                   <th className="p-4">Product Details</th>
                   <th className="p-4">Category & Brand</th>
@@ -494,7 +715,15 @@ export default function InventoryPage() {
                   const isOut = parseFloat(row.quantity) === 0;
 
                   return (
-                    <tr key={row.id} className="hover:bg-gray-50/50 transition-colors">
+                    <tr key={row.id} className={`hover:bg-gray-50/50 transition-colors ${selectedIds.includes(row.id) ? 'bg-blue-50/30' : ''}`}>
+                      <td className="p-4 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(row.id)}
+                          onChange={() => handleSelectOne(row.id)}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                        />
+                      </td>
                       {/* SKU & Barcode */}
                       <td className="p-4">
                         <div className="font-mono text-xs font-bold text-gray-800">
@@ -700,12 +929,42 @@ export default function InventoryPage() {
                   <Input label="Barcode / QR" value={formBarcode} onChange={e => setFormBarcode(e.target.value)} placeholder="e.g. 8901072003" />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Select
-                    label="Category *"
-                    options={INVENTORY_CATEGORIES.map(c => ({ value: c, label: c }))}
-                    value={formCategory}
-                    onChange={e => setFormCategory(e.target.value)}
-                  />
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Category *</label>
+                    <select
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      value={isCustomCategory ? '__custom__' : formCategory}
+                      onChange={(e) => {
+                        if (e.target.value === '__custom__') {
+                          setIsCustomCategory(true);
+                          setCustomCategoryInput('');
+                        } else {
+                          setIsCustomCategory(false);
+                          setFormCategory(e.target.value);
+                        }
+                      }}
+                    >
+                      {INVENTORY_CATEGORIES.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                      {dbCategories && dbCategories.filter((dc: any) => !INVENTORY_CATEGORIES.includes(dc.category)).map((dc: any) => (
+                        <option key={dc.category} value={dc.category}>{dc.category}</option>
+                      ))}
+                      <option value="__custom__">➕ Add Custom Category...</option>
+                    </select>
+                    {isCustomCategory && (
+                      <input
+                        type="text"
+                        placeholder="Type custom category name..."
+                        value={customCategoryInput}
+                        onChange={(e) => {
+                          setCustomCategoryInput(e.target.value);
+                          setFormCategory(e.target.value);
+                        }}
+                        className="w-full mt-2 px-3 py-1.5 border border-blue-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                      />
+                    )}
+                  </div>
                   <Input label="Sub Category" value={formSubCategory} onChange={e => setFormSubCategory(e.target.value)} placeholder="e.g. 9-inch Touchscreen" />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

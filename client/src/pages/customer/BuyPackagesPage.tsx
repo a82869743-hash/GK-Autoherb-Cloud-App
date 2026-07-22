@@ -774,18 +774,10 @@ export default function BuyPackagesPage() {
                   <div className="border-t border-gray-200 pt-3">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Included Services</p>
                     <div className="space-y-1.5">
-                      {/* Mandatory (paid) services */}
-                      {confirmPkg.services.filter((svc: any) => (svc.paid || 0) > 0).map((svc: any) => (
-                        <div key={`m-${svc.id || svc.ps_id}`} className="flex items-center gap-2 text-xs">
-                          <Check className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
-                          <span className="text-gray-800 font-bold">Pay For {svc.paid} {svc.name} (Mandatory)</span>
-                        </div>
-                      ))}
-                      {/* Free (complimentary) services */}
-                      {confirmPkg.services.filter((svc: any) => (svc.complimentary || 0) > 0).map((svc: any) => (
-                        <div key={`f-${svc.id || svc.ps_id}`} className="flex items-center gap-2 text-xs">
-                          <Check className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
-                          <span className="text-gray-700">{svc.complimentary} {svc.name} (Free)</span>
+                      {confirmPkg.services.map((svc: any) => (
+                        <div key={svc.id || svc.ps_id || svc.name} className="flex items-center gap-2 text-xs">
+                          <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                          <span className="text-gray-800 font-bold">{svc.total_count || (svc.paid || 0) + (svc.complimentary || 0) || 1} {svc.name}</span>
                         </div>
                       ))}
                     </div>

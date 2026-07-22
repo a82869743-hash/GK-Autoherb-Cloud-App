@@ -29,24 +29,37 @@ exports.list = async (req, res) => {
     const { search, page = 1, limit = 50 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    let where = "role = 'customer' AND is_active = 1";
+    let where = "u.role = 'customer' AND u.is_active = 1";
     const params = [];
 
     if (search) {
-      where += " AND (name LIKE ? OR mobile LIKE ?)";
-      const s = `%${search}%`;
-      params.push(s, s);
+      const s = `%${search.trim()}%`;
+      where += " AND (u.name LIKE ? OR u.mobile LIKE ? OR u.email LIKE ? OR u.id IN (SELECT customer_id FROM vehicles WHERE registration_no LIKE ? OR brand LIKE ? OR model LIKE ?))";
+      params.push(s, s, s, s, s, s);
     }
 
     const [rows] = await pool.query(`
-      SELECT id, name, mobile, email, created_at, is_active
-      FROM users
+      SELECT u.id, u.name, u.mobile, u.email, u.created_at, u.is_active
+      FROM users u
       WHERE ${where}
-      ORDER BY created_at DESC
+      ORDER BY u.created_at DESC
       LIMIT ? OFFSET ?
     `, [...params, parseInt(limit), offset]);
 
-    const [totalRows] = await pool.query(`SELECT COUNT(id) as total FROM users WHERE ${where}`, params);
+    const [totalRows] = await pool.query(`SELECT COUNT(u.id) as total FROM users u WHERE ${where}`, params);
+
+    // Enrich each customer with their vehicles
+    for (const cust of rows) {
+      try {
+        const [vRows] = await pool.query(
+          "SELECT id, brand, model, registration_no, category, is_primary FROM vehicles WHERE customer_id = ? ORDER BY is_primary DESC, created_at ASC",
+          [cust.id]
+        );
+        cust.vehicles = vRows;
+      } catch (vErr) {
+        cust.vehicles = [];
+      }
+    }
 
     res.json({
       success: true,

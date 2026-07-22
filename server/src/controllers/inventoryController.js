@@ -308,3 +308,62 @@ exports.uploadImage = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to upload image' });
   }
 };
+
+// ─── BULK DELETE ─────────────────────────────
+exports.bulkDelete = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'Product IDs array required' });
+    }
+    await pool.query('UPDATE inventory SET is_deleted = 1 WHERE id IN (?)', [ids]);
+    res.json({ success: true, message: `${ids.length} products deleted successfully` });
+  } catch (err) {
+    console.error('Bulk delete error:', err);
+    res.status(500).json({ success: false, error: 'Failed to delete products' });
+  }
+};
+
+// ─── BULK UPDATE CATEGORY ────────────────────
+exports.bulkUpdateCategory = async (req, res) => {
+  try {
+    const { ids, category } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0 || !category) {
+      return res.status(400).json({ success: false, error: 'IDs array and category string required' });
+    }
+    await pool.query('UPDATE inventory SET category = ? WHERE id IN (?)', [category, ids]);
+    res.json({ success: true, message: `Category updated to "${category}" for ${ids.length} products` });
+  } catch (err) {
+    console.error('Bulk update category error:', err);
+    res.status(500).json({ success: false, error: 'Failed to update category' });
+  }
+};
+
+// ─── BULK UPDATE STATUS ──────────────────────
+exports.bulkUpdateStatus = async (req, res) => {
+  try {
+    const { ids, status } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0 || !status) {
+      return res.status(400).json({ success: false, error: 'IDs array and status required' });
+    }
+    await pool.query('UPDATE inventory SET status = ? WHERE id IN (?)', [status, ids]);
+    res.json({ success: true, message: `Status updated to "${status}" for ${ids.length} products` });
+  } catch (err) {
+    console.error('Bulk update status error:', err);
+    res.status(500).json({ success: false, error: 'Failed to update status' });
+  }
+};
+
+// ─── GET DISTINCT CATEGORIES ─────────────────
+exports.getCategories = async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      "SELECT DISTINCT category, COUNT(*) as count FROM inventory WHERE is_deleted = 0 AND category IS NOT NULL AND category != '' GROUP BY category ORDER BY category ASC"
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('Get categories error:', err);
+    res.status(500).json({ success: false, error: 'Failed to fetch categories' });
+  }
+};
+

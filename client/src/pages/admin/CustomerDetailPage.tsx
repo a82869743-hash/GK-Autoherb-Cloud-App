@@ -437,9 +437,9 @@ export default function CustomerDetailPage() {
                   <div className="mt-3 pt-3 border-t border-purple-200/50 space-y-1.5">
                     {activePackage.usage.map((u: any) => (
                       <div key={u.service_name} className="flex justify-between text-xs">
-                        <span className="text-gray-600">{u.service_name}</span>
-                        <span className={`font-bold ${u.complimentary === 1 ? 'text-purple-600' : u.remaining > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                          {u.complimentary === 1 ? 'Complimentary' : `${u.remaining} left`}
+                        <span className="text-gray-700 font-semibold">{u.service_name}</span>
+                        <span className={`font-bold ${u.remaining > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                          {u.remaining} left
                         </span>
                       </div>
                     ))}
@@ -702,30 +702,18 @@ export default function CustomerDetailPage() {
             </select>
           </div>
 
-          {/* Included Services (Mandatory & Free) */}
+          {/* Included Services */}
           {packageServices.length > 0 && (
             <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-3">
               <p className="text-xs font-bold uppercase tracking-wider text-gray-500">Included Services</p>
               <div className="space-y-2 max-h-56 overflow-y-auto">
-                {/* Mandatory (paid) services */}
-                {packageServices.filter((svc: any) => svc.paid > 0).map((svc: any) => (
-                  <div key={`paid-${svc.service_name}`} className="flex items-center gap-2 bg-blue-50 p-2.5 rounded-lg border border-blue-100">
-                    <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                      <span className="text-blue-600 text-[10px]">✓</span>
+                {packageServices.map((svc: any) => (
+                  <div key={svc.service_name} className="flex items-center gap-2 bg-emerald-50 p-2.5 rounded-lg border border-emerald-100">
+                    <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                      <span className="text-emerald-600 text-[10px]">✓</span>
                     </div>
                     <span className="text-xs text-gray-800 font-bold">
-                      Pay For {svc.paid} {svc.service_name} (Mandatory)
-                    </span>
-                  </div>
-                ))}
-                {/* Free (complimentary) services */}
-                {packageServices.filter((svc: any) => svc.complimentary > 0).map((svc: any) => (
-                  <div key={`free-${svc.service_name}`} className="flex items-center gap-2 bg-green-50 p-2.5 rounded-lg border border-green-100">
-                    <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                      <span className="text-green-600 text-[10px]">✓</span>
-                    </div>
-                    <span className="text-xs text-gray-600 font-medium">
-                      {svc.complimentary} {svc.service_name} (Free)
+                      {svc.total_count || (svc.paid || 0) + (svc.complimentary || 0) || 1} {svc.service_name}
                     </span>
                   </div>
                 ))}

@@ -2,12 +2,21 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../axiosInstance';
 import type { InventoryItem, PaginatedResponse, ApiResponse } from '../../types';
 
-export const useInventory = (params: { search?: string; low_stock?: boolean; page?: number; limit?: number }) =>
+export const useInventory = (params: { search?: string; low_stock?: boolean; page?: number; limit?: number; category?: string; brand?: string; status?: string }) =>
   useQuery({
     queryKey: ['inventory', params],
     queryFn: async () => {
       const res = await api.get<PaginatedResponse<InventoryItem>>('/inventory', { params });
       return res.data;
+    },
+  });
+
+export const useInventoryCategories = () =>
+  useQuery({
+    queryKey: ['inventory-categories'],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: Array<{ category: string; count: number }> }>('/inventory/categories');
+      return res.data.data;
     },
   });
 

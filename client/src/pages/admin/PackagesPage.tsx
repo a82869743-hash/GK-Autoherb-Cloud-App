@@ -86,12 +86,37 @@ const INCLUDED_SERVICES: Record<string, { service_name: string, count: number }[
   ],
 };
 
-const PACKAGE_BREAKDOWN: Record<string, { paid_washes: number, complimentary: { service_name: string, count: number }[] }> = {
-  'bronze':   { paid_washes: 3, complimentary: [{ service_name: 'Full Foam Wash', count: 1 }, { service_name: 'Body Wax Coat', count: 1 }] },
-  'silver':   { paid_washes: 5, complimentary: [{ service_name: 'Full Foam Wash', count: 2 }, { service_name: 'Body Wax Coat', count: 2 }, { service_name: 'Two Wheeler Wash', count: 1 }] },
-  'gold':     { paid_washes: 8, complimentary: [{ service_name: 'Full Foam Wash', count: 4 }, { service_name: 'Body Wax Coat', count: 3 }, { service_name: 'Two Wheeler Wash', count: 1 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }] },
-  'diamond':  { paid_washes: 10, complimentary: [{ service_name: 'Full Foam Wash', count: 6 }, { service_name: 'Body Wax Coat', count: 2 }, { service_name: 'Two Wheeler Wash', count: 2 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 }] },
-  'platinum': { paid_washes: 12, complimentary: [{ service_name: 'Full Foam Wash', count: 8 }, { service_name: 'Body Wax Coat', count: 3 }, { service_name: 'Two Wheeler Wash', count: 2 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 }, { service_name: 'Deep Cleaning', count: 1 }] },
+const PACKAGE_SERVICES_UNIFIED: Record<string, { service_name: string; total_count: number }[]> = {
+  'bronze': [
+    { service_name: 'Full Foam Wash', total_count: 4 },
+    { service_name: 'Body Wax Coat', total_count: 1 },
+  ],
+  'silver': [
+    { service_name: 'Full Foam Wash', total_count: 7 },
+    { service_name: 'Body Wax Coat', total_count: 2 },
+    { service_name: 'Two Wheeler Wash', total_count: 1 },
+  ],
+  'gold': [
+    { service_name: 'Full Foam Wash', total_count: 12 },
+    { service_name: 'Body Wax Coat', total_count: 3 },
+    { service_name: 'Two Wheeler Wash', total_count: 1 },
+    { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
+  ],
+  'diamond': [
+    { service_name: 'Full Foam Wash', total_count: 16 },
+    { service_name: 'Body Wax Coat', total_count: 2 },
+    { service_name: 'Two Wheeler Wash', total_count: 2 },
+    { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
+    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1 },
+  ],
+  'platinum': [
+    { service_name: 'Full Foam Wash', total_count: 20 },
+    { service_name: 'Body Wax Coat', total_count: 3 },
+    { service_name: 'Two Wheeler Wash', total_count: 2 },
+    { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
+    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1 },
+    { service_name: 'Deep Cleaning', total_count: 1 },
+  ],
 };
 
 function getTierKey(name: string): string {
@@ -361,39 +386,17 @@ export default function PackagesPage() {
                 <div className="px-4 py-3">
                   <p className="text-[8px] font-extrabold uppercase tracking-[0.15em] text-gray-400 mb-2">Included Services</p>
                   <div className="space-y-1.5">
-                    {pkg.paid_wash_count > 0 && (
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-4 h-4 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                          <Check className="w-2.5 h-2.5 text-blue-600" strokeWidth={3} />
-                        </div>
-                        <span className="text-[11px] leading-tight text-gray-800 font-bold">
-                          Pay For {pkg.paid_wash_count} Full Foam Wash (Mandatory)
-                        </span>
-                      </div>
-                    )}
                     {(() => {
                       const tierKey = getTierKey(pkg.name);
-                      const breakdown = PACKAGE_BREAKDOWN[tierKey];
-                      if (breakdown && breakdown.complimentary && breakdown.complimentary.length > 0) {
-                        return breakdown.complimentary.map((s: any, idx: number) => (
-                          <div key={s.service_name + idx} className="flex items-center gap-1.5">
+                      const mapServices = PACKAGE_SERVICES_UNIFIED[tierKey] || (pkg.services ? pkg.services.map((s: any) => ({ service_name: s.name, total_count: s.total_count })) : []);
+                      if (mapServices && mapServices.length > 0) {
+                        return mapServices.map((s: any, idx: number) => (
+                          <div key={(s.service_name || s.name) + idx} className="flex items-center gap-1.5">
                             <div className="w-4 h-4 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
                               <Check className="w-2.5 h-2.5 text-green-600" strokeWidth={3} />
                             </div>
-                            <span className="text-[11px] leading-tight text-gray-600 font-medium">
-                              {s.count} {s.service_name} (Free)
-                            </span>
-                          </div>
-                        ));
-                      }
-                      if (pkg.services && pkg.services.length > 0) {
-                        return pkg.services.map((s: any) => (
-                          <div key={s.id || s.name} className="flex items-center gap-1.5">
-                            <div className="w-4 h-4 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                              <Check className="w-2.5 h-2.5 text-green-600" strokeWidth={3} />
-                            </div>
-                            <span className="text-[11px] leading-tight text-gray-600 font-medium">
-                              {s.total_count} {s.name} (Free)
+                            <span className="text-[11px] leading-tight text-gray-800 font-bold">
+                              {s.total_count} {s.service_name || s.name}
                             </span>
                           </div>
                         ));
