@@ -206,6 +206,7 @@ exports.update = async (req, res) => {
           [id, svc.service_id, svc.total_count || 1]
         );
       }
+      await syncPackageServicesToUserPackages(conn, id);
     }
     // Legacy format
     else if (service_ids !== undefined) {
@@ -213,6 +214,7 @@ exports.update = async (req, res) => {
       for (const sid of service_ids) {
         await conn.query('INSERT INTO package_services (package_id, service_id) VALUES (?, ?)', [id, sid]);
       }
+      await syncPackageServicesToUserPackages(conn, id);
     }
 
     // Replace product links
@@ -231,6 +233,62 @@ exports.update = async (req, res) => {
     res.status(500).json({ success: false, error: 'Server error' });
   } finally { conn.release(); }
 };
+
+// Helper: Syncs updated package services to all active customer subscriptions for this package_id
+async function syncPackageServicesToUserPackages(conn, packageId) {
+  try {
+    const [pkgServices] = await conn.query(
+      `SELECT ps.service_id, s.name AS service_name, ps.total_count
+       FROM package_services ps
+       JOIN services s ON ps.service_id = s.id
+       WHERE ps.package_id = ?`,
+      [packageId]
+    );
+
+    const [activeUserPkgs] = await conn.query(
+      `SELECT id FROM user_packages WHERE package_id = ? AND status = 'active'`,
+      [packageId]
+    );
+
+    for (const upkg of activeUserPkgs) {
+      const userPackageId = upkg.id;
+
+      if (pkgServices.length > 0) {
+        const activeNames = pkgServices.map(s => s.service_name);
+        await conn.query(
+          `DELETE FROM user_package_usage WHERE user_package_id = ? AND service_name NOT IN (?)`,
+          [userPackageId, activeNames]
+        );
+      } else {
+        await conn.query(`DELETE FROM user_package_usage WHERE user_package_id = ?`, [userPackageId]);
+      }
+
+      for (const ps of pkgServices) {
+        const [existing] = await conn.query(
+          `SELECT id, remaining, used_count FROM user_package_usage WHERE user_package_id = ? AND service_name = ?`,
+          [userPackageId, ps.service_name]
+        );
+
+        if (existing.length > 0) {
+          const used = existing[0].used_count || 0;
+          const newRemaining = Math.max(0, ps.total_count - used);
+          await conn.query(
+            `UPDATE user_package_usage SET total_count = ?, remaining = ? WHERE id = ?`,
+            [ps.total_count, newRemaining, existing[0].id]
+          );
+        } else {
+          await conn.query(
+            `INSERT INTO user_package_usage (user_package_id, service_name, total_count, used_count, remaining)
+             VALUES (?, ?, ?, 0, ?)`,
+            [userPackageId, ps.service_name, ps.total_count, ps.total_count]
+          );
+        }
+      }
+    }
+  } catch (syncErr) {
+    console.error('Failed syncPackageServicesToUserPackages:', syncErr.message);
+  }
+}
 
 // ─── TOGGLE PUBLISH ─────────────────────────
 exports.togglePublish = async (req, res) => {
@@ -496,14 +554,28 @@ exports.getPackageServices = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // 1. Get the package name to check against the hardcoded map
+    // 1. Check DB package_services table FIRST (single source of truth for admin configured packages)
+    const [rows] = await pool.query(
+      `SELECT ps.id AS ps_id, ps.total_count, COALESCE(ps.complimentary, 0) AS complimentary, s.id, s.name, s.description,
+              s.price_hatchback, s.price_medium_hatchback, s.price_sedan, s.price_premium_sedan, s.price_suv,
+              s.duration_minutes, s.is_active
+       FROM package_services ps
+       JOIN services s ON ps.service_id = s.id
+       WHERE ps.package_id = ?
+       ORDER BY s.name ASC`,
+      [id]
+    );
+    if (rows.length > 0) {
+      return res.json({ success: true, data: rows });
+    }
+
+    // 2. Check PACKAGE_SERVICE_MAP fallback if DB table has 0 entries
     const [pkgRows] = await pool.query('SELECT id, name FROM packages WHERE id = ?', [id]);
     if (!pkgRows.length) {
       return res.status(404).json({ success: false, error: 'Package not found' });
     }
     const packageName = pkgRows[0].name;
 
-    // 2. Check PACKAGE_SERVICE_MAP first (source of truth for known tiers)
     const { PACKAGE_SERVICE_MAP } = require('./userPackagesController');
     
     let mapKey = '';
@@ -514,16 +586,12 @@ exports.getPackageServices = async (req, res) => {
     else if (lowerName.includes('diamond')) mapKey = 'Diamond Package';
     else if (lowerName.includes('platinum')) mapKey = 'Platinum Package';
 
-    // Direct name match fallback
     if (!mapKey && PACKAGE_SERVICE_MAP[packageName]) {
       mapKey = packageName;
     }
 
     if (mapKey && PACKAGE_SERVICE_MAP[mapKey]) {
-      // Found in hardcoded map — use it as the authoritative source
       const mapServices = PACKAGE_SERVICE_MAP[mapKey];
-
-      // Enrich with service details from DB services table (for prices, duration, etc.)
       const enriched = [];
       for (const svc of mapServices) {
         try {
@@ -540,7 +608,6 @@ exports.getPackageServices = async (req, res) => {
               ...svcRows[0]
             });
           } else {
-            // Service not found in services table — still include it with minimal data
             enriched.push({
               ps_id: -1,
               total_count: svc.total_count,
@@ -559,7 +626,6 @@ exports.getPackageServices = async (req, res) => {
             });
           }
         } catch (svcErr) {
-          // Still include the service even if DB lookup fails
           enriched.push({
             ps_id: -1,
             total_count: svc.total_count,
@@ -579,21 +645,6 @@ exports.getPackageServices = async (req, res) => {
         }
       }
       return res.json({ success: true, data: enriched });
-    }
-
-    // 3. Not a known tier — fall back to DB package_services table
-    const [rows] = await pool.query(
-      `SELECT ps.id AS ps_id, ps.total_count, COALESCE(ps.complimentary, 0) AS complimentary, s.id, s.name, s.description,
-              s.price_hatchback, s.price_medium_hatchback, s.price_sedan, s.price_premium_sedan, s.price_suv,
-              s.duration_minutes, s.is_active
-       FROM package_services ps
-       JOIN services s ON ps.service_id = s.id
-       WHERE ps.package_id = ?
-       ORDER BY s.name ASC`,
-      [id]
-    );
-    if (rows.length > 0) {
-      return res.json({ success: true, data: rows });
     }
 
     // 4. Final fallback to legacy wash_count, wax_count

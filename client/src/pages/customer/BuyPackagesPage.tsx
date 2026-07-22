@@ -114,19 +114,10 @@ const ALL_SERVICES = [
   'Body Wax Coat',
   'Two Wheeler Wash',
   'Two Wheeler Wax Coat',
-  'Body Hybrid Ceramic Wax Coat',
   'Interior Dry Clean',
   'Exterior Rubbing / Polishing',
   'Deep Cleaning',
 ];
-
-const PACKAGE_BREAKDOWN: Record<string, { paid_washes: number, complimentary: { service_name: string, count: number }[] }> = {
-  'bronze':   { paid_washes: 3, complimentary: [{ service_name: 'Full Foam Wash', count: 1 }, { service_name: 'Body Wax Coat', count: 1 }] },
-  'silver':   { paid_washes: 5, complimentary: [{ service_name: 'Full Foam Wash', count: 2 }, { service_name: 'Body Wax Coat', count: 2 }, { service_name: 'Two Wheeler Wash', count: 1 }] },
-  'gold':     { paid_washes: 8, complimentary: [{ service_name: 'Full Foam Wash', count: 4 }, { service_name: 'Body Wax Coat', count: 3 }, { service_name: 'Two Wheeler Wash', count: 1 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }] },
-  'diamond':  { paid_washes: 10, complimentary: [{ service_name: 'Full Foam Wash', count: 6 }, { service_name: 'Body Wax Coat', count: 2 }, { service_name: 'Two Wheeler Wash', count: 2 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 }] },
-  'platinum': { paid_washes: 12, complimentary: [{ service_name: 'Full Foam Wash', count: 8 }, { service_name: 'Body Wax Coat', count: 3 }, { service_name: 'Two Wheeler Wash', count: 2 }, { service_name: 'Two Wheeler Wax Coat', count: 1 }, { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 }, { service_name: 'Deep Cleaning', count: 1 }] },
-};
 
 const INCLUDED_SERVICES: Record<string, { service_name: string, count: number }[]> = {
   'bronze': [
@@ -149,14 +140,12 @@ const INCLUDED_SERVICES: Record<string, { service_name: string, count: number }[
     { service_name: 'Body Wax Coat', count: 2 },
     { service_name: 'Two Wheeler Wash', count: 2 },
     { service_name: 'Two Wheeler Wax Coat', count: 1 },
-    { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 },
   ],
   'platinum': [
     { service_name: 'Full Foam Wash', count: 20 },
     { service_name: 'Body Wax Coat', count: 3 },
     { service_name: 'Two Wheeler Wash', count: 2 },
     { service_name: 'Two Wheeler Wax Coat', count: 1 },
-    { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 },
     { service_name: 'Deep Cleaning', count: 1 },
   ],
 };

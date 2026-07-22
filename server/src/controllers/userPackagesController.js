@@ -61,15 +61,13 @@ const PACKAGE_SERVICE_MAP = {
     { service_name: 'Body Wax Coat', total_count: 2, paid: 0, complimentary: 2, display_order: 2 },
     { service_name: 'Two Wheeler Wash', total_count: 2, paid: 0, complimentary: 2, display_order: 3 },
     { service_name: 'Two Wheeler Wax Coat', total_count: 1, paid: 0, complimentary: 1, display_order: 4 },
-    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1, paid: 0, complimentary: 1, display_order: 5 },
   ],
   'Platinum Package': [
     { service_name: 'Full Foam Wash', total_count: 20, paid: 12, complimentary: 8, display_order: 1 },
     { service_name: 'Body Wax Coat', total_count: 3, paid: 0, complimentary: 3, display_order: 2 },
     { service_name: 'Two Wheeler Wash', total_count: 2, paid: 0, complimentary: 2, display_order: 3 },
     { service_name: 'Two Wheeler Wax Coat', total_count: 1, paid: 0, complimentary: 1, display_order: 4 },
-    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1, paid: 0, complimentary: 1, display_order: 5 },
-    { service_name: 'Deep Cleaning', total_count: 1, paid: 0, complimentary: 1, display_order: 6 },
+    { service_name: 'Deep Cleaning', total_count: 1, paid: 0, complimentary: 1, display_order: 5 },
   ],
   // Legacy aliases (same data)
   'Bronze': [
@@ -92,15 +90,13 @@ const PACKAGE_SERVICE_MAP = {
     { service_name: 'Body Wax Coat', total_count: 2, paid: 0, complimentary: 2, display_order: 2 },
     { service_name: 'Two Wheeler Wash', total_count: 2, paid: 0, complimentary: 2, display_order: 3 },
     { service_name: 'Two Wheeler Wax Coat', total_count: 1, paid: 0, complimentary: 1, display_order: 4 },
-    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1, paid: 0, complimentary: 1, display_order: 5 },
   ],
   'Platinum': [
     { service_name: 'Full Foam Wash', total_count: 20, paid: 12, complimentary: 8, display_order: 1 },
     { service_name: 'Body Wax Coat', total_count: 3, paid: 0, complimentary: 3, display_order: 2 },
     { service_name: 'Two Wheeler Wash', total_count: 2, paid: 0, complimentary: 2, display_order: 3 },
     { service_name: 'Two Wheeler Wax Coat', total_count: 1, paid: 0, complimentary: 1, display_order: 4 },
-    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1, paid: 0, complimentary: 1, display_order: 5 },
-    { service_name: 'Deep Cleaning', total_count: 1, paid: 0, complimentary: 1, display_order: 6 },
+    { service_name: 'Deep Cleaning', total_count: 1, paid: 0, complimentary: 1, display_order: 5 },
   ],
 };
 
@@ -121,24 +117,7 @@ async function getServiceBreakdown(conn, packageId, packageName) {
     }
   }
 
-  // 1. Try to match base tier first (source of truth for standard tiers)
-  let baseTier = '';
-  const lowerName = (packageName || '').toLowerCase();
-  if (lowerName.includes('bronze')) baseTier = 'Bronze Package';
-  else if (lowerName.includes('silver')) baseTier = 'Silver Package';
-  else if (lowerName.includes('gold')) baseTier = 'Gold Package';
-  else if (lowerName.includes('diamond')) baseTier = 'Diamond Package';
-  else if (lowerName.includes('platinum')) baseTier = 'Platinum Package';
-
-  if (baseTier && PACKAGE_SERVICE_MAP[baseTier]) {
-    return PACKAGE_SERVICE_MAP[baseTier];
-  }
-
-  if (PACKAGE_SERVICE_MAP[packageName]) {
-    return PACKAGE_SERVICE_MAP[packageName];
-  }
-
-  // 2. Try database (package_services table) for custom packages
+  // 1. Try database (package_services table) FIRST as the single source of truth!
   try {
     const [dbServices] = await conn.query(
       `SELECT s.name AS service_name, MAX(ps.total_count) AS total_count, MAX(COALESCE(ps.complimentary, 0)) AS complimentary
@@ -151,44 +130,15 @@ async function getServiceBreakdown(conn, packageId, packageName) {
     );
 
     if (dbServices.length > 0) {
-      // Safely try to get paid_wash_count (column may not exist)
-      try {
-        const [pkg] = await conn.query('SELECT paid_wash_count FROM packages WHERE id = ?', [packageId]);
-        if (pkg.length && pkg[0].paid_wash_count > 0) {
-          const paidCount = pkg[0].paid_wash_count;
-          let washFound = false;
-          for (const svc of dbServices) {
-            const name = (svc.service_name || '').toLowerCase();
-            if (name === 'full foam wash' || name === 'exterior body foam wash' || name === 'foam wash' || name.includes('foam wash')) {
-              svc.total_count = Number(svc.total_count || 0) + Number(paidCount);
-              washFound = true;
-            }
-          }
-          if (!washFound) {
-            const [foamWashRows] = await conn.query('SELECT id, name AS service_name FROM services WHERE name LIKE "%Foam Wash%" LIMIT 1');
-            if (foamWashRows.length) {
-              dbServices.push({
-                service_name: foamWashRows[0].service_name,
-                total_count: paidCount,
-                complimentary: 0,
-                display_order: 1
-              });
-            }
-          }
-        }
-      } catch (pwcErr) {
-        // paid_wash_count column may not exist — safe to ignore
-        console.warn('paid_wash_count column not found (safe to ignore):', pwcErr.message);
-      }
       return dbServices;
     }
   } catch (dbErr) {
     console.warn('Failed dbServices query in getServiceBreakdown:', dbErr.message);
   }
 
-  // 2. Try to match base tier for legacy fallback (hardcoded PACKAGE_SERVICE_MAP)
-  baseTier = '';
-  lowerName = (packageName || '').toLowerCase();
+  // 2. Fallback for unconfigured standard tiers (hardcoded PACKAGE_SERVICE_MAP)
+  let baseTier = '';
+  const lowerName = (packageName || '').toLowerCase();
   if (lowerName.includes('bronze')) baseTier = 'Bronze Package';
   else if (lowerName.includes('silver')) baseTier = 'Silver Package';
   else if (lowerName.includes('gold')) baseTier = 'Gold Package';
@@ -198,6 +148,8 @@ async function getServiceBreakdown(conn, packageId, packageName) {
   if (baseTier && PACKAGE_SERVICE_MAP[baseTier]) {
     return PACKAGE_SERVICE_MAP[baseTier];
   }
+
+  if (PACKAGE_SERVICE_MAP[packageName]) return PACKAGE_SERVICE_MAP[packageName];
 
   if (PACKAGE_SERVICE_MAP[packageName]) return PACKAGE_SERVICE_MAP[packageName];
 

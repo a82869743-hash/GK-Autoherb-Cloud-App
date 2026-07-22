@@ -43,13 +43,12 @@ const TIER_COLORS: Record<string, { border: string; headerBg: string; badge: str
   platinum: { border: 'border-l-purple-600',  headerBg: 'bg-purple-50',  badge: 'bg-purple-100 text-purple-700' },
 };
 
-// All 6 service names from the flyer
+// All service names from the flyer
 const ALL_SERVICES = [
   'Full Foam Wash',
   'Body Wax Coat',
   'Two Wheeler Wash',
   'Two Wheeler Wax Coat',
-  'Body Hybrid Ceramic Wax Coat',
   'Deep Cleaning',
 ];
 
@@ -74,14 +73,12 @@ const INCLUDED_SERVICES: Record<string, { service_name: string, count: number }[
     { service_name: 'Body Wax Coat', count: 2 },
     { service_name: 'Two Wheeler Wash', count: 2 },
     { service_name: 'Two Wheeler Wax Coat', count: 1 },
-    { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 },
   ],
   'platinum': [
     { service_name: 'Full Foam Wash', count: 20 },
     { service_name: 'Body Wax Coat', count: 3 },
     { service_name: 'Two Wheeler Wash', count: 2 },
     { service_name: 'Two Wheeler Wax Coat', count: 1 },
-    { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 },
     { service_name: 'Deep Cleaning', count: 1 },
   ],
 };
@@ -107,14 +104,12 @@ const PACKAGE_SERVICES_UNIFIED: Record<string, { service_name: string; total_cou
     { service_name: 'Body Wax Coat', total_count: 2 },
     { service_name: 'Two Wheeler Wash', total_count: 2 },
     { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
-    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1 },
   ],
   'platinum': [
     { service_name: 'Full Foam Wash', total_count: 20 },
     { service_name: 'Body Wax Coat', total_count: 3 },
     { service_name: 'Two Wheeler Wash', total_count: 2 },
     { service_name: 'Two Wheeler Wax Coat', total_count: 1 },
-    { service_name: 'Body Hybrid Ceramic Wax Coat', total_count: 1 },
     { service_name: 'Deep Cleaning', total_count: 1 },
   ],
 };
@@ -388,7 +383,9 @@ export default function PackagesPage() {
                   <div className="space-y-1.5">
                     {(() => {
                       const tierKey = getTierKey(pkg.name);
-                      const mapServices = PACKAGE_SERVICES_UNIFIED[tierKey] || (pkg.services ? pkg.services.map((s: any) => ({ service_name: s.name, total_count: s.total_count })) : []);
+                      const mapServices = (pkg.services && pkg.services.length > 0)
+                        ? pkg.services.map((s: any) => ({ service_name: s.name, total_count: s.total_count }))
+                        : (PACKAGE_SERVICES_UNIFIED[tierKey] || []);
                       if (mapServices && mapServices.length > 0) {
                         return mapServices.map((s: any, idx: number) => (
                           <div key={(s.service_name || s.name) + idx} className="flex items-center gap-1.5">
