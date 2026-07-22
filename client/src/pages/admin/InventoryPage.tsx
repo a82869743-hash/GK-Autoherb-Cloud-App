@@ -103,10 +103,6 @@ export default function InventoryPage() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  // Filters
-  const [brandFilter, setBrandFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
-
   const createMut = useCreateInventory();
   const updateMut = useUpdateInventory();
   const adjustMut = useAdjustQuantity();
