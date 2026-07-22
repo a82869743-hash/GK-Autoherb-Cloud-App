@@ -535,9 +535,9 @@ export default function BuyPackagesPage() {
             const tierKey = getTierKey(pkg.name);
             const colors = TIER_COLORS[tierKey] || DEFAULT_TIER_COLOR;
 
-            // Extract paid foam wash count from breakdown or fallback
-            const breakdown = PACKAGE_BREAKDOWN[tierKey] || { paid_washes: pkg.wash_count || 0, complimentary: [] };
-            const paidWashCount = breakdown.paid_washes;
+            const mapServices = (pkg.services && pkg.services.length > 0)
+              ? pkg.services.map((s: any) => ({ service_name: s.name, count: s.total_count }))
+              : (INCLUDED_SERVICES[tierKey] || []);
 
             return (
               <div
@@ -561,24 +561,14 @@ export default function BuyPackagesPage() {
                     Included Services
                   </p>
                   <div className="space-y-2 flex-1">
-                    {paidWashCount > 0 && (
-                      <div className="flex items-center gap-2">
-                        <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                          <Check className="w-3 h-3 text-blue-600" strokeWidth={3} />
-                        </div>
-                        <span className="text-xs text-gray-800 font-bold">
-                          Pay For {paidWashCount} Full Foam Wash (Mandatory)
-                        </span>
-                      </div>
-                    )}
-                    {breakdown.complimentary && breakdown.complimentary.length > 0 ? (
-                      breakdown.complimentary.map((s: any, idx: number) => (
-                        <div key={s.service_name + idx} className="flex items-center gap-2">
+                    {mapServices && mapServices.length > 0 ? (
+                      mapServices.map((s: any, idx: number) => (
+                        <div key={(s.service_name || s.name) + idx} className="flex items-center gap-2">
                           <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
                             <Check className="w-3 h-3 text-green-600" strokeWidth={3} />
                           </div>
-                          <span className="text-xs text-gray-600 font-medium">
-                            {s.count} {s.service_name} (Complimentary)
+                          <span className="text-xs text-gray-800 font-bold">
+                            {s.count || s.total_count} {s.service_name || s.name}
                           </span>
                         </div>
                       ))
