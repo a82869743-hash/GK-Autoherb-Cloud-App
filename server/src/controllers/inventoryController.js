@@ -357,6 +357,13 @@ exports.bulkUpdateStatus = async (req, res) => {
 // ─── GET CATEGORIES ──────────────────────────
 exports.getCategories = async (req, res) => {
   try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS inventory_categories (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
     const [rows] = await pool.query(`
       SELECT c.name AS category, COUNT(i.id) AS count
       FROM inventory_categories c
@@ -379,6 +386,14 @@ exports.createCategory = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Category name required' });
     }
     const categoryName = name.trim();
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS inventory_categories (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
     await pool.query(
       'INSERT INTO inventory_categories (name) VALUES (?) ON DUPLICATE KEY UPDATE name = VALUES(name)',

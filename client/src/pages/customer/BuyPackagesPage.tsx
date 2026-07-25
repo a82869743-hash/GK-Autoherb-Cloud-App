@@ -239,6 +239,30 @@ export default function BuyPackagesPage() {
   }, [selectedVehicle]);
 
   const getPrice = (pkg: Pkg) => {
+    // 1. Dynamic lookup from package_pricing matrix (car_type x pricing_type)
+    if (pkg.pricing && pkg.pricing.length > 0) {
+      const match = pkg.pricing.find(
+        p => p.car_type === filterCarType && p.pricing_type === pricingType
+      );
+      if (match && Number(match.price) > 0) {
+        return Number(match.price);
+      }
+    }
+
+    // 2. Direct category price field lookup
+    const categoryFieldMap: Record<string, keyof Pkg> = {
+      SMALL_HATCHBACK: 'price_hatchback',
+      MEDIUM_HATCHBACK: 'price_medium_hatchback',
+      SEDAN_SUV: 'price_sedan',
+      PREMIUM_SEDAN: 'price_premium_sedan',
+      LARGE_CAR: 'price_suv',
+    };
+    const field = categoryFieldMap[filterCarType];
+    if (field && pkg[field] && Number(pkg[field]) > 0) {
+      return Number(pkg[field]);
+    }
+
+    // 3. Fallback matrix if pricing table rows are missing
     const tierKey = getTierKey(pkg.name);
     if (HARDCODED_PRICES[filterCarType] && HARDCODED_PRICES[filterCarType][tierKey]) {
       return HARDCODED_PRICES[filterCarType][tierKey][pricingType];

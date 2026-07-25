@@ -368,10 +368,10 @@ exports.history = async (req, res) => {
 exports.search = async (req, res) => {
   try {
     const { q } = req.query;
-    if (!q || q.length < 2) return res.json({ success: true, data: [] });
+    const hasQuery = q && q.trim().length >= 2;
+    const search = hasQuery ? `%${q.trim()}%` : null;
 
-    const search = `%${q}%`;
-    const [rows] = await pool.query(`
+    const sql = `
       SELECT u.id, u.name, u.mobile,
         COALESCE(l.credits, 0) AS credits,
         COALESCE(l.free_washes, 0) AS free_washes,
@@ -379,11 +379,12 @@ exports.search = async (req, res) => {
         COALESCE(l.points, 0) AS points
       FROM users u
       LEFT JOIN loyalty l ON u.id = l.customer_id
-      WHERE u.role = 'customer' AND (u.name LIKE ? OR u.mobile LIKE ?)
-      ORDER BY u.name
-      LIMIT 20
-    `, [search, search]);
+      WHERE u.role = 'customer' ${hasQuery ? 'AND (u.name LIKE ? OR u.mobile LIKE ?)' : ''}
+      ORDER BY l.points DESC, u.name ASC
+      LIMIT 50
+    `;
 
+    const [rows] = await pool.query(sql, hasQuery ? [search, search] : []);
     res.json({ success: true, data: rows });
   } catch (err) {
     console.error('Loyalty search error:', err);

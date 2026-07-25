@@ -57,7 +57,6 @@ function CustomerLoyaltyLookup() {
       const { data } = await api.get('/loyalty/search', { params: { q: query } });
       return data.data;
     },
-    enabled: query.length >= 2,
   });
 
   const { data: transactions = [] } = useQuery<LoyaltyTransaction[]>({
