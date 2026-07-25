@@ -28,14 +28,7 @@ const pool = mysql.createPool({
   keepAliveInitialDelay: 30000,
 });
 
-// Ensure MySQL session time_zone is set to IST (+05:30) for every pool connection
-pool.on('connection', (conn) => {
-  conn.query("SET time_zone = '+05:30'", function(err) {
-    if (err) {
-      console.error('Error setting connection time_zone:', err);
-    }
-  });
-});
+
 
 // Test connection on startup
 (async () => {
