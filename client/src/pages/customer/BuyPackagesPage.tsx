@@ -114,8 +114,7 @@ const ALL_SERVICES = [
   'Body Wax Coat',
   'Two Wheeler Wash',
   'Two Wheeler Wax Coat',
-  'Interior Dry Clean',
-  'Exterior Rubbing / Polishing',
+  'Body Hybrid Ceramic Wax Coat',
   'Deep Cleaning',
 ];
 
@@ -140,12 +139,14 @@ const INCLUDED_SERVICES: Record<string, { service_name: string, count: number }[
     { service_name: 'Body Wax Coat', count: 2 },
     { service_name: 'Two Wheeler Wash', count: 2 },
     { service_name: 'Two Wheeler Wax Coat', count: 1 },
+    { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 },
   ],
   'platinum': [
     { service_name: 'Full Foam Wash', count: 20 },
     { service_name: 'Body Wax Coat', count: 3 },
     { service_name: 'Two Wheeler Wash', count: 2 },
     { service_name: 'Two Wheeler Wax Coat', count: 1 },
+    { service_name: 'Body Hybrid Ceramic Wax Coat', count: 1 },
     { service_name: 'Deep Cleaning', count: 1 },
   ],
 };
