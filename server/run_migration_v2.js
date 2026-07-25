@@ -215,32 +215,32 @@ async function run() {
     await conn.query(`DELETE FROM package_services WHERE package_id IN (?)`, [allPkgIds]);
   }
 
-  // Define complimentary service map
+  // Define complimentary and total package service map (Total Washes = Paid Washes + Complementary Washes)
   const compMap = {
     'Bronze Package': [
-      { svcId: svcFoamWash, count: 1 },
+      { svcId: svcFoamWash, count: 4 }, // 3 paid + 1 comp
       { svcId: svcWaxCoat, count: 1 },
     ],
     'Silver Package': [
-      { svcId: svcFoamWash, count: 2 },
+      { svcId: svcFoamWash, count: 7 }, // 5 paid + 2 comp
       { svcId: svcWaxCoat, count: 2 },
       { svcId: svcTwWash, count: 1 },
     ],
     'Gold Package': [
-      { svcId: svcFoamWash, count: 4 },
+      { svcId: svcFoamWash, count: 12 }, // 8 paid + 4 comp
       { svcId: svcWaxCoat, count: 3 },
       { svcId: svcTwWash, count: 1 },
       { svcId: svcTwWax, count: 1 },
     ],
     'Diamond Package': [
-      { svcId: svcFoamWash, count: 6 },
+      { svcId: svcFoamWash, count: 16 }, // 10 paid + 6 comp
       { svcId: svcWaxCoat, count: 2 },
       { svcId: svcTwWash, count: 2 },
       { svcId: svcTwWax, count: 1 },
       { svcId: svcCeramic, count: 1 },
     ],
     'Platinum Package': [
-      { svcId: svcFoamWash, count: 8 },
+      { svcId: svcFoamWash, count: 20 }, // 12 paid + 8 comp
       { svcId: svcWaxCoat, count: 3 },
       { svcId: svcTwWash, count: 2 },
       { svcId: svcTwWax, count: 1 },

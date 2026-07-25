@@ -85,35 +85,35 @@ SET @svc_deep_clean = (SELECT id FROM services WHERE name LIKE '%Deep Clean%' AN
 -- Clean existing package_services for these new packages
 DELETE FROM package_services WHERE package_id IN (@bronze_id, @silver_id, @gold_id, @diamond_id, @platinum_id);
 
--- BRONZE: 1 Car Foam Wash, 1 Body Wax Coat
+-- BRONZE: 4 Car Foam Wash (3 paid + 1 comp), 1 Body Wax Coat
 INSERT INTO package_services (package_id, service_id, total_count) VALUES
-  (@bronze_id, @svc_foam_wash, 1),
+  (@bronze_id, @svc_foam_wash, 4),
   (@bronze_id, @svc_wax_coat, 1);
 
--- SILVER: 2 Car Foam Wash, 2 Body Wax Coat, 1 Two Wheeler Wash
+-- SILVER: 7 Car Foam Wash (5 paid + 2 comp), 2 Body Wax Coat, 1 Two Wheeler Wash
 INSERT INTO package_services (package_id, service_id, total_count) VALUES
-  (@silver_id, @svc_foam_wash, 2),
+  (@silver_id, @svc_foam_wash, 7),
   (@silver_id, @svc_wax_coat, 2),
   (@silver_id, @svc_tw_wash, 1);
 
--- GOLD: 4 Car Foam Wash, 3 Body Wax Coat, 1 Two Wheeler Wash, 1 Two Wheeler Wax Coat
+-- GOLD: 12 Car Foam Wash (8 paid + 4 comp), 3 Body Wax Coat, 1 Two Wheeler Wash, 1 Two Wheeler Wax Coat
 INSERT INTO package_services (package_id, service_id, total_count) VALUES
-  (@gold_id, @svc_foam_wash, 4),
+  (@gold_id, @svc_foam_wash, 12),
   (@gold_id, @svc_wax_coat, 3),
   (@gold_id, @svc_tw_wash, 1),
   (@gold_id, @svc_tw_wax, 1);
 
--- DIAMOND: 6 Car Foam Wash, 2 Body Wax Coat, 2 Two Wheeler Wash, 1 Two Wheeler Wax Coat, 1 Ceramic
+-- DIAMOND: 16 Car Foam Wash (10 paid + 6 comp), 2 Body Wax Coat, 2 Two Wheeler Wash, 1 Two Wheeler Wax Coat, 1 Ceramic
 INSERT INTO package_services (package_id, service_id, total_count) VALUES
-  (@diamond_id, @svc_foam_wash, 6),
+  (@diamond_id, @svc_foam_wash, 16),
   (@diamond_id, @svc_wax_coat, 2),
   (@diamond_id, @svc_tw_wash, 2),
   (@diamond_id, @svc_tw_wax, 1),
   (@diamond_id, @svc_ceramic, 1);
 
--- PLATINUM: 8 Car Foam Wash, 3 Body Wax Coat, 2 Two Wheeler Wash, 1 Two Wheeler Wax Coat, 1 Ceramic, 1 Deep Cleaning
+-- PLATINUM: 20 Car Foam Wash (12 paid + 8 comp), 3 Body Wax Coat, 2 Two Wheeler Wash, 1 Two Wheeler Wax Coat, 1 Ceramic, 1 Deep Cleaning
 INSERT INTO package_services (package_id, service_id, total_count) VALUES
-  (@platinum_id, @svc_foam_wash, 8),
+  (@platinum_id, @svc_foam_wash, 20),
   (@platinum_id, @svc_wax_coat, 3),
   (@platinum_id, @svc_tw_wash, 2),
   (@platinum_id, @svc_tw_wax, 1),
