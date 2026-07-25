@@ -84,10 +84,29 @@ exports.update = async (req, res) => {
 // ─── DELETE VENDOR ──────────────────────────
 exports.delete = async (req, res) => {
   try {
-    const [existing] = await pool.query('SELECT id FROM vendors WHERE id = ?', [req.params.id]);
+    const vendorId = req.params.id;
+    const [existing] = await pool.query('SELECT id, name FROM vendors WHERE id = ?', [vendorId]);
     if (!existing.length) return res.status(404).json({ success: false, error: 'Vendor not found' });
-    await pool.query('DELETE FROM vendors WHERE id = ?', [req.params.id]);
-    res.json({ success: true, message: 'Vendor deleted' });
+    const vendorName = existing[0].name;
+
+    // Safeguard: Check if referenced by purchase bills
+    let billCount = 0;
+    try {
+      const [bills] = await pool.query('SELECT COUNT(*) AS count FROM purchase_bills WHERE vendor_id = ?', [vendorId]);
+      billCount = bills[0]?.count || 0;
+    } catch {
+      // Table may not exist on some DB instances
+    }
+
+    if (billCount > 0) {
+      return res.status(400).json({
+        success: false,
+        error: `Cannot delete vendor "${vendorName}": ${billCount} purchase bill(s) reference this vendor. Deactivate the vendor instead to preserve financial history.`
+      });
+    }
+
+    await pool.query('DELETE FROM vendors WHERE id = ?', [vendorId]);
+    res.json({ success: true, message: 'Vendor deleted successfully' });
   } catch (err) {
     console.error('Vendor delete error:', err);
     res.status(500).json({ success: false, error: 'Server error' });

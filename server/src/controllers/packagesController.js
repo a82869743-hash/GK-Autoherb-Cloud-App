@@ -320,10 +320,27 @@ exports.toggleVisibility = async (req, res) => {
 // ─── DELETE ─────────────────────────────────
 exports.delete = async (req, res) => {
   try {
-    const [existing] = await pool.query('SELECT id FROM packages WHERE id = ?', [req.params.id]);
+    const pkgId = req.params.id;
+    const [existing] = await pool.query('SELECT id, name FROM packages WHERE id = ?', [pkgId]);
     if (!existing.length) return res.status(404).json({ success: false, error: 'Package not found' });
-    await pool.query('DELETE FROM packages WHERE id = ?', [req.params.id]);
-    res.json({ success: true, message: 'Package deleted' });
+
+    // Safeguard: Check if any customer subscriptions exist (active or historical)
+    const [subscriptions] = await pool.query(
+      'SELECT COUNT(*) AS count FROM user_packages WHERE package_id = ?',
+      [pkgId]
+    );
+    const subscriberCount = subscriptions[0]?.count || 0;
+
+    if (subscriberCount > 0) {
+      return res.status(400).json({
+        success: false,
+        error: `Cannot delete package "${existing[0].name}": ${subscriberCount} customer subscription(s) reference this package. Unpublish or hide the package to prevent new purchases while preserving existing customer balances.`
+      });
+    }
+
+    // Safe to hard delete if 0 customer subscriptions exist
+    await pool.query('DELETE FROM packages WHERE id = ?', [pkgId]);
+    res.json({ success: true, message: 'Package deleted successfully' });
   } catch (err) {
     console.error('Package delete error:', err);
     res.status(500).json({ success: false, error: 'Server error' });

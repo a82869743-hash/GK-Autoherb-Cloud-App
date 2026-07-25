@@ -105,27 +105,19 @@ exports.PACKAGE_BREAKDOWN = PACKAGE_SERVICE_MAP;
 exports.getServiceBreakdown = getServiceBreakdown;
 
 /**
- * getServiceBreakdown — DB-first with legacy fallback
+ * getServiceBreakdown — DB-first single source of truth (1:1 distinct rows)
  */
 async function getServiceBreakdown(conn, packageId, packageName) {
-  if (!packageName) {
-    try {
-      const [p] = await conn.query('SELECT name FROM packages WHERE id = ?', [packageId]);
-      if (p.length) packageName = p[0].name;
-    } catch (err) {
-      console.warn('Failed package name query in getServiceBreakdown:', err.message);
-    }
-  }
+  if (!packageId) return [];
 
-  // 1. Try database (package_services table) FIRST as the single source of truth!
+  // 1. Database (package_services table) as the single source of truth (1:1 distinct package service rows)
   try {
     const [dbServices] = await conn.query(
-      `SELECT s.name AS service_name, MAX(ps.total_count) AS total_count, MAX(COALESCE(ps.complimentary, 0)) AS complimentary
+      `SELECT ps.id AS ps_id, ps.service_id, s.name AS service_name, ps.total_count, COALESCE(ps.complimentary, 0) AS complimentary
        FROM package_services ps
        JOIN services s ON ps.service_id = s.id
        WHERE ps.package_id = ?
-       GROUP BY s.name
-       ORDER BY s.name ASC`,
+       ORDER BY ps.id ASC`,
       [packageId]
     );
 
@@ -136,24 +128,7 @@ async function getServiceBreakdown(conn, packageId, packageName) {
     console.warn('Failed dbServices query in getServiceBreakdown:', dbErr.message);
   }
 
-  // 2. Fallback for unconfigured standard tiers (hardcoded PACKAGE_SERVICE_MAP)
-  let baseTier = '';
-  const lowerName = (packageName || '').toLowerCase();
-  if (lowerName.includes('bronze')) baseTier = 'Bronze Package';
-  else if (lowerName.includes('silver')) baseTier = 'Silver Package';
-  else if (lowerName.includes('gold')) baseTier = 'Gold Package';
-  else if (lowerName.includes('diamond')) baseTier = 'Diamond Package';
-  else if (lowerName.includes('platinum')) baseTier = 'Platinum Package';
-
-  if (baseTier && PACKAGE_SERVICE_MAP[baseTier]) {
-    return PACKAGE_SERVICE_MAP[baseTier];
-  }
-
-  if (PACKAGE_SERVICE_MAP[packageName]) return PACKAGE_SERVICE_MAP[packageName];
-
-  if (PACKAGE_SERVICE_MAP[packageName]) return PACKAGE_SERVICE_MAP[packageName];
-
-  // 3. Fallback to wash_count and wax_count
+  // 2. Fallback to wash_count and wax_count defined on packages table
   const fallback = [];
   try {
     const [pkgDetails] = await conn.query(

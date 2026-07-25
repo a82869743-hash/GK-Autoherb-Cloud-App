@@ -100,10 +100,40 @@ exports.toggleActive = async (req, res) => {
 // ─── DELETE ─────────────────────────────────
 exports.delete = async (req, res) => {
   try {
-    const [existing] = await pool.query('SELECT id FROM services WHERE id = ?', [req.params.id]);
+    const serviceId = req.params.id;
+    const [existing] = await pool.query('SELECT id, name FROM services WHERE id = ?', [serviceId]);
     if (!existing.length) return res.status(404).json({ success: false, error: 'Service not found' });
-    await pool.query('DELETE FROM services WHERE id = ?', [req.params.id]);
-    res.json({ success: true, message: 'Service deleted' });
+    const serviceName = existing[0].name;
+
+    // Safeguard 1: Check if used in any packages
+    const [pkgServices] = await pool.query(
+      'SELECT COUNT(*) AS count FROM package_services WHERE service_id = ?',
+      [serviceId]
+    );
+    const pkgCount = pkgServices[0]?.count || 0;
+    if (pkgCount > 0) {
+      return res.status(400).json({
+        success: false,
+        error: `Cannot delete service "${serviceName}": It is configured in ${pkgCount} package(s). Please remove it from those packages first or deactivate the service instead.`
+      });
+    }
+
+    // Safeguard 2: Check if referenced by any bookings or quick washes
+    const [bookingRefs] = await pool.query(
+      'SELECT COUNT(*) AS count FROM bookings WHERE service_id = ?',
+      [serviceId]
+    );
+    const bookingCount = bookingRefs[0]?.count || 0;
+    if (bookingCount > 0) {
+      return res.status(400).json({
+        success: false,
+        error: `Cannot delete service "${serviceName}": ${bookingCount} historical booking(s)/quick-wash(es) reference this service. Deactivate the service to hide it from new bookings while preserving invoice accuracy.`
+      });
+    }
+
+    // Safe to delete if not used in packages or bookings
+    await pool.query('DELETE FROM services WHERE id = ?', [serviceId]);
+    res.json({ success: true, message: 'Service deleted successfully' });
   } catch (err) {
     console.error('Service delete error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
