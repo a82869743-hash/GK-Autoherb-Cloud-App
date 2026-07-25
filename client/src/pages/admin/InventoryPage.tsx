@@ -415,7 +415,6 @@ export default function InventoryPage() {
 
   const categoryOptions = Array.from(new Set([
     ...(dbCategories ? dbCategories.map((dc: any) => dc.category) : []),
-    ...INVENTORY_CATEGORIES,
     ...(allItems ? allItems.map((i: any) => i.category).filter(Boolean) : [])
   ])).filter(Boolean).sort((a: string, b: string) => a.localeCompare(b));
   

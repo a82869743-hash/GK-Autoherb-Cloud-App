@@ -365,21 +365,6 @@ exports.getCategories = async (req, res) => {
       )
     `);
 
-    // Seed default categories into DB if table is empty
-    const [countRow] = await pool.query('SELECT COUNT(*) AS cnt FROM inventory_categories');
-    if (countRow[0].cnt === 0) {
-      const defaultCats = [
-        'Seat Covers', 'Floor Mats', 'Android Stereo', 'Speakers', 'Amplifier',
-        'Subwoofer', 'Dash Camera', 'Reverse Camera', 'LED Lights', 'Fog Lamps',
-        'Horn', 'Car Perfume', 'Steering Cover', 'Wiper Blades', 'Battery',
-        'GPS Tracker', 'Mobile Holder', 'Vacuum Cleaner', 'Cleaning Products',
-        'PPF & Coating Products', 'Comfort Accessories', 'Car Electronics', 'Miscellaneous Accessories'
-      ];
-      for (const c of defaultCats) {
-        await pool.query('INSERT IGNORE INTO inventory_categories (name) VALUES (?)', [c]);
-      }
-    }
-
     const [rows] = await pool.query(`
       SELECT cat.name AS category, COUNT(i.id) AS count
       FROM (
