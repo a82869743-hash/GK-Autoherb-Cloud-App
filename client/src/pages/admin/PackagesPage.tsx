@@ -145,6 +145,7 @@ export default function PackagesPage() {
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
   const [prices, setPrices] = useState<Record<string, number>>(emptyPrices());
+  const [premiumPrices, setPremiumPrices] = useState<Record<string, number>>(emptyPrices());
   const [washCount, setWashCount] = useState(0);
   const [waxCount, setWaxCount] = useState(0);
   const [active, setActive] = useState(true);
@@ -168,6 +169,7 @@ export default function PackagesPage() {
   const inventory = inventoryData?.data || [];
 
   const updatePrice = (key: string, val: number) => setPrices(prev => ({ ...prev, [key]: val }));
+  const updatePremiumPrice = (key: string, val: number) => setPremiumPrices(prev => ({ ...prev, [key]: val }));
 
   const addServiceRow = () => {
     setServiceRows([...serviceRows, { service_id: '', total_count: 1, complimentary: false, display_order: 0 }]);
@@ -185,7 +187,7 @@ export default function PackagesPage() {
 
   const openAdd = () => {
     setEditItem(null); 
-    setName(''); setDesc(''); setPrices(emptyPrices()); 
+    setName(''); setDesc(''); setPrices(emptyPrices()); setPremiumPrices(emptyPrices());
     setWashCount(0); setWaxCount(0); setActive(true);
     setVisibleToCustomer(true);
     setServiceRows([{ service_id: '', total_count: 1, complimentary: false, display_order: 0 }]);
@@ -199,21 +201,30 @@ export default function PackagesPage() {
     setEditItem(pkg); 
     setName(pkg.name); setDesc(pkg.description || '');
 
-    const getPriceForCarType = (carType: string, defaultVal: any) => {
+    const getPriceForCarType = (carType: string, pricingType: 'basic' | 'premium', defaultVal: any) => {
       if (pkg.pricing && pkg.pricing.length > 0) {
-        const row = pkg.pricing.find((r: any) => r.car_type === carType && r.pricing_type === 'basic');
+        const row = pkg.pricing.find((r: any) => r.car_type === carType && r.pricing_type === pricingType);
         if (row && parseFloat(row.price) > 0) return parseFloat(row.price);
       }
       return parseFloat(defaultVal) || 0;
     };
 
     setPrices({
-      price_hatchback: getPriceForCarType('SMALL_HATCHBACK', pkg.price_hatchback),
-      price_medium_hatchback: getPriceForCarType('MEDIUM_HATCHBACK', pkg.price_medium_hatchback),
-      price_sedan: getPriceForCarType('SEDAN_SUV', pkg.price_sedan),
-      price_premium_sedan: getPriceForCarType('PREMIUM_SEDAN', pkg.price_premium_sedan),
-      price_suv: getPriceForCarType('LARGE_CAR', pkg.price_suv),
+      price_hatchback: getPriceForCarType('SMALL_HATCHBACK', 'basic', pkg.price_hatchback),
+      price_medium_hatchback: getPriceForCarType('MEDIUM_HATCHBACK', 'basic', pkg.price_medium_hatchback),
+      price_sedan: getPriceForCarType('SEDAN_SUV', 'basic', pkg.price_sedan),
+      price_premium_sedan: getPriceForCarType('PREMIUM_SEDAN', 'basic', pkg.price_premium_sedan),
+      price_suv: getPriceForCarType('LARGE_CAR', 'basic', pkg.price_suv),
     });
+
+    setPremiumPrices({
+      price_hatchback: getPriceForCarType('SMALL_HATCHBACK', 'premium', 0),
+      price_medium_hatchback: getPriceForCarType('MEDIUM_HATCHBACK', 'premium', 0),
+      price_sedan: getPriceForCarType('SEDAN_SUV', 'premium', 0),
+      price_premium_sedan: getPriceForCarType('PREMIUM_SEDAN', 'premium', 0),
+      price_suv: getPriceForCarType('LARGE_CAR', 'premium', 0),
+    });
+
     setWashCount(pkg.wash_count); setWaxCount(pkg.wax_count);
     setActive(!!pkg.is_published);
     setVisibleToCustomer(pkg.visible_to_customer !== undefined ? !!pkg.visible_to_customer : true);
@@ -259,11 +270,18 @@ export default function PackagesPage() {
         package_validity: packageValidity,
         pickup_enabled: pickupEnabled,
         pricing: [
+          // Basic Pricing
           { car_type: 'SMALL_HATCHBACK', pricing_type: 'basic', price: prices.price_hatchback || 0 },
           { car_type: 'MEDIUM_HATCHBACK', pricing_type: 'basic', price: prices.price_medium_hatchback || 0 },
           { car_type: 'SEDAN_SUV', pricing_type: 'basic', price: prices.price_sedan || 0 },
           { car_type: 'PREMIUM_SEDAN', pricing_type: 'basic', price: prices.price_premium_sedan || 0 },
           { car_type: 'LARGE_CAR', pricing_type: 'basic', price: prices.price_suv || 0 },
+          // Premium Pricing
+          { car_type: 'SMALL_HATCHBACK', pricing_type: 'premium', price: premiumPrices.price_hatchback || 0 },
+          { car_type: 'MEDIUM_HATCHBACK', pricing_type: 'premium', price: premiumPrices.price_medium_hatchback || 0 },
+          { car_type: 'SEDAN_SUV', pricing_type: 'premium', price: premiumPrices.price_sedan || 0 },
+          { car_type: 'PREMIUM_SEDAN', pricing_type: 'premium', price: premiumPrices.price_premium_sedan || 0 },
+          { car_type: 'LARGE_CAR', pricing_type: 'premium', price: premiumPrices.price_suv || 0 },
         ]
       };
 
@@ -472,12 +490,41 @@ export default function PackagesPage() {
             <Input label="Package Name" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Silver Package" />
             <Textarea label="Description" value={desc} onChange={e => setDesc(e.target.value)} placeholder="e.g. Pay For 5 Car Foam Wash" />
             
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2">Pricing by Vehicle Category</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {CATEGORY_LABELS.map(cat => (
-                  <Input key={cat.key} label={cat.label} type="number" value={prices[cat.key] || ''} onChange={e => updatePrice(cat.key, parseFloat(e.target.value) || 0)} />
-                ))}
+            <div className="space-y-4">
+              <div className="bg-gray-50/80 p-3 rounded-xl border border-gray-100">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                  Basic Pricing by Vehicle Category (₹)
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  {CATEGORY_LABELS.map(cat => (
+                    <Input
+                      key={`basic_${cat.key}`}
+                      label={cat.label}
+                      type="number"
+                      value={prices[cat.key] || ''}
+                      onChange={e => updatePrice(cat.key, parseFloat(e.target.value) || 0)}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-purple-50/60 p-3 rounded-xl border border-purple-100">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-purple-700 mb-2 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-purple-600"></span>
+                  Premium Pricing by Vehicle Category (₹)
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  {CATEGORY_LABELS.map(cat => (
+                    <Input
+                      key={`premium_${cat.key}`}
+                      label={cat.label}
+                      type="number"
+                      value={premiumPrices[cat.key] || ''}
+                      onChange={e => updatePremiumPrice(cat.key, parseFloat(e.target.value) || 0)}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
 
