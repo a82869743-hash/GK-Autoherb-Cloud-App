@@ -354,33 +354,10 @@ exports.bulkUpdateStatus = async (req, res) => {
   }
 };
 
-// Helper: Ensure inventory_categories table exists and seed existing inventory categories
-async function ensureCategoriesTable(conn) {
-  try {
-    await conn.query(`
-      CREATE TABLE IF NOT EXISTS inventory_categories (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL UNIQUE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-    // Seed existing distinct categories from inventory
-    await conn.query(`
-      INSERT IGNORE INTO inventory_categories (name)
-      SELECT DISTINCT category FROM inventory
-      WHERE category IS NOT NULL AND category != '' AND is_deleted = 0
-    `);
-  } catch (err) {
-    console.warn('ensureCategoriesTable error:', err.message);
-  }
-}
-
 // ─── GET CATEGORIES ──────────────────────────
 exports.getCategories = async (req, res) => {
-  const conn = await pool.getConnection();
   try {
-    await ensureCategoriesTable(conn);
-    const [rows] = await conn.query(`
+    const [rows] = await pool.query(`
       SELECT c.name AS category, COUNT(i.id) AS count
       FROM inventory_categories c
       LEFT JOIN inventory i ON (c.name = i.category AND i.is_deleted = 0)
@@ -391,23 +368,19 @@ exports.getCategories = async (req, res) => {
   } catch (err) {
     console.error('Get categories error:', err);
     res.status(500).json({ success: false, error: 'Failed to fetch categories' });
-  } finally {
-    conn.release();
   }
 };
 
 // ─── CREATE CATEGORY ─────────────────────────
 exports.createCategory = async (req, res) => {
-  const conn = await pool.getConnection();
   try {
     const { name } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ success: false, error: 'Category name required' });
     }
     const categoryName = name.trim();
-    await ensureCategoriesTable(conn);
 
-    await conn.query(
+    await pool.query(
       'INSERT INTO inventory_categories (name) VALUES (?) ON DUPLICATE KEY UPDATE name = VALUES(name)',
       [categoryName]
     );
@@ -416,8 +389,6 @@ exports.createCategory = async (req, res) => {
   } catch (err) {
     console.error('Create category error:', err);
     res.status(500).json({ success: false, error: 'Failed to create category' });
-  } finally {
-    conn.release();
   }
 };
 
@@ -432,8 +403,6 @@ exports.renameCategory = async (req, res) => {
     await conn.beginTransaction();
     const oldCat = old_name.trim();
     const newCat = new_name.trim();
-
-    await ensureCategoriesTable(conn);
 
     // Update categories master table
     await conn.query(
@@ -473,7 +442,6 @@ exports.deleteCategory = async (req, res) => {
     const targetCategory = name.trim();
 
     await conn.beginTransaction();
-    await ensureCategoriesTable(conn);
 
     const [inUse] = await conn.query(
       'SELECT COUNT(*) AS cnt FROM inventory WHERE category = ? AND is_deleted = 0',

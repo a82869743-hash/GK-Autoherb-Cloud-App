@@ -247,6 +247,19 @@ exports.deleteCar = async (req, res) => {
       });
     }
 
+    // Check if car has active bookings
+    const [activeBookings] = await conn.query(
+      "SELECT COUNT(*) AS count FROM bookings WHERE vehicle_id = ? AND status NOT IN ('completed', 'cancelled')",
+      [carId]
+    );
+    if (activeBookings[0].count > 0) {
+      await conn.rollback();
+      return res.status(422).json({
+        success: false,
+        error: `Cannot delete vehicle: It has ${activeBookings[0].count} active booking(s) attached to it. Please complete or cancel the booking(s) first.`,
+      });
+    }
+
     const wasPrimary = cars[0].is_primary;
 
     // Delete the car
