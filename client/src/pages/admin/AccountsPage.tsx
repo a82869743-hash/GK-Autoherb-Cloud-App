@@ -266,36 +266,40 @@ export default function AccountsPage() {
       />
 
       {/* Date Filter & Tab Bar */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-        <Tabs 
-          tabs={[
-            { key: 'summary', label: 'Summary Overview' },
-            { key: 'transactions', label: 'General Ledger' },
-            { key: 'purchase_bills', label: 'Purchase Bills' },
-            { key: 'gst', label: 'GST Compliance' },
-            { key: 'returns', label: 'Returns Ledger' },
-            { key: 'buy_sell', label: 'Buy & Sell Trade' },
-            { key: 'job_carts', label: 'Service Job Carts' },
-            { key: 'inventory', label: 'Inventory Capital' },
-          ]} 
-          activeTab={activeTab} 
-          onTabChange={setActiveTab} 
-        />
-        <div className="flex items-center gap-2 border border-gray-100 p-1.5 bg-gray-50 rounded-lg shrink-0">
-          <span className="text-[11px] font-bold text-gray-400 uppercase px-2">Period</span>
-          <input
-            type="date"
-            className="px-2 py-1 bg-white border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            value={dateFilter.from_date}
-            onChange={e => setDateFilter({...dateFilter, from_date: e.target.value})}
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-white p-3 sm:p-4 rounded-xl border border-gray-200 shadow-sm max-w-full overflow-hidden">
+        <div className="w-full max-w-full overflow-x-auto min-w-0 scrollbar-none">
+          <Tabs 
+            tabs={[
+              { key: 'summary', label: 'Summary Overview' },
+              { key: 'transactions', label: 'General Ledger' },
+              { key: 'purchase_bills', label: 'Purchase Bills' },
+              { key: 'gst', label: 'GST Compliance' },
+              { key: 'returns', label: 'Returns Ledger' },
+              { key: 'buy_sell', label: 'Buy & Sell Trade' },
+              { key: 'job_carts', label: 'Service Job Carts' },
+              { key: 'inventory', label: 'Inventory Capital' },
+            ]} 
+            activeTab={activeTab} 
+            onTabChange={setActiveTab} 
           />
-          <span className="text-gray-400 text-xs">to</span>
-          <input
-            type="date"
-            className="px-2 py-1 bg-white border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            value={dateFilter.to_date}
-            onChange={e => setDateFilter({...dateFilter, to_date: e.target.value})}
-          />
+        </div>
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 border border-gray-100 p-2 bg-gray-50 rounded-lg shrink-0 w-full lg:w-auto">
+          <span className="text-[11px] font-bold text-gray-400 uppercase px-1 shrink-0">Period</span>
+          <div className="flex items-center gap-1.5 flex-1 min-w-[220px]">
+            <input
+              type="date"
+              className="w-full px-2 py-1 bg-white border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              value={dateFilter.from_date}
+              onChange={e => setDateFilter({...dateFilter, from_date: e.target.value})}
+            />
+            <span className="text-gray-400 text-xs shrink-0">to</span>
+            <input
+              type="date"
+              className="w-full px-2 py-1 bg-white border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              value={dateFilter.to_date}
+              onChange={e => setDateFilter({...dateFilter, to_date: e.target.value})}
+            />
+          </div>
         </div>
       </div>
 
