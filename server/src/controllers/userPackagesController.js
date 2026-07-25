@@ -800,7 +800,7 @@ exports.getActivePackage = async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 // PACKAGE HISTORY (all packages for a user)
 // ═══════════════════════════════════════════════════════════
-exports.listUserPackages = async (req, res) => {
+exports.listUserPackages = async (req, res, next) => {
   try {
     const userId = req.user.role === 'admin' && req.query.user_id
       ? req.query.user_id

@@ -62,6 +62,11 @@ exports.delete = async (req, res) => {
     const [existing] = await pool.query('SELECT * FROM shared_files WHERE id = ?', [req.params.id]);
     if (!existing.length) return res.status(404).json({ success: false, error: 'File not found' });
 
+    // Ownership check: Only uploader or admin can delete file
+    if (req.user.role !== 'admin' && existing[0].uploaded_by !== req.user.id) {
+      return res.status(403).json({ success: false, error: 'Access denied — Cannot delete a file uploaded by another user' });
+    }
+
     const filePath = path.join(__dirname, '../../public', existing[0].file_path);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);

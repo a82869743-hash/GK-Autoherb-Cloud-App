@@ -4,6 +4,12 @@ const pool = require('../config/db');
 exports.getWallet = async (req, res, next) => {
   try {
     const { customer_id } = req.params;
+
+    // IDOR Protection: Customers can only view their own wallet
+    if (req.user && req.user.role === 'customer' && parseInt(customer_id) !== parseInt(req.user.id)) {
+      return res.status(403).json({ success: false, error: "Access denied — Cannot view another customer's wallet" });
+    }
+
     const [rows] = await pool.query('SELECT * FROM wallets WHERE customer_id = ?', [customer_id]);
     
     if (!rows.length) {
@@ -20,6 +26,11 @@ exports.getTransactions = async (req, res, next) => {
   try {
     const { customer_id } = req.params;
     const { limit = 50, offset = 0 } = req.query;
+
+    // IDOR Protection: Customers can only view their own transaction history
+    if (req.user && req.user.role === 'customer' && parseInt(customer_id) !== parseInt(req.user.id)) {
+      return res.status(403).json({ success: false, error: "Access denied — Cannot view another customer's wallet transactions" });
+    }
 
     const [rows] = await pool.query(
       `SELECT * FROM wallet_transactions 

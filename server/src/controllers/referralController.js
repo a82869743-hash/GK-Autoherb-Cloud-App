@@ -3,7 +3,16 @@ const pool = require('../config/db');
 // ─── Generate/Get Referral Code ──────────────────────────
 exports.getReferralCode = async (req, res, next) => {
   try {
-    const customer_id = req.params.customer_id === 'mine' ? req.user.id : req.params.customer_id;
+    let customer_id;
+    if (req.user && req.user.role === 'customer') {
+      if (req.params.customer_id !== 'mine' && parseInt(req.params.customer_id) !== parseInt(req.user.id)) {
+        return res.status(403).json({ success: false, error: "Access denied — Cannot view another customer's referral code" });
+      }
+      customer_id = req.user.id;
+    } else {
+      customer_id = req.params.customer_id === 'mine' ? req.user.id : req.params.customer_id;
+    }
+
     let [rows] = await pool.query('SELECT * FROM referral_codes WHERE customer_id = ?', [customer_id]);
     
     if (!rows.length) {
@@ -79,7 +88,16 @@ exports.applyReferral = async (req, res, next) => {
 // ─── Get Referral History ───────────────────────────────
 exports.getHistory = async (req, res, next) => {
   try {
-    const customer_id = req.params.customer_id === 'mine' ? req.user.id : req.params.customer_id;
+    let customer_id;
+    if (req.user && req.user.role === 'customer') {
+      if (req.params.customer_id !== 'mine' && parseInt(req.params.customer_id) !== parseInt(req.user.id)) {
+        return res.status(403).json({ success: false, error: "Access denied — Cannot view another customer's referral history" });
+      }
+      customer_id = req.user.id;
+    } else {
+      customer_id = req.params.customer_id === 'mine' ? req.user.id : req.params.customer_id;
+    }
+
     const [rows] = await pool.query(
       `SELECT r.*, u.name as referred_name 
        FROM referral_rewards r 

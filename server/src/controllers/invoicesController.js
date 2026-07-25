@@ -259,6 +259,11 @@ exports.exportPdf = async (req, res) => {
 
     if (!invoiceData) return res.status(404).json({ success: false, error: 'Invoice not found' });
 
+    // IDOR Protection: Customers can only download their own invoice
+    if (req.user && req.user.role === 'customer' && invoiceData.customer_id && parseInt(invoiceData.customer_id) !== parseInt(req.user.id)) {
+      return res.status(403).json({ success: false, error: "Access denied — Cannot access another customer's invoice PDF" });
+    }
+
     const PDFDocument = require('pdfkit');
     const doc = new PDFDocument({ margin: 50 });
     

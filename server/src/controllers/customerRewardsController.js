@@ -3,18 +3,24 @@ const pool = require('../config/db');
 // ─── LIST CUSTOMER REWARDS ─────────────────────────────
 exports.list = async (req, res) => {
   try {
-    const { customer_id, redeemed } = req.query;
+    let { customer_id, redeemed } = req.query;
+
+    // IDOR Protection: Customers can only view their own rewards
+    if (req.user && req.user.role === 'customer') {
+      customer_id = req.user.id;
+    }
+
     let where = '1=1';
     const params = [];
 
-    if (customer_id) { where += ' AND customer_id = ?'; params.push(customer_id); }
-    if (redeemed !== undefined) { where += ' AND redeemed = ?'; params.push(redeemed === 'true' ? 1 : 0); }
+    if (customer_id) { where += ' AND cr.customer_id = ?'; params.push(customer_id); }
+    if (redeemed !== undefined) { where += ' AND cr.redeemed = ?'; params.push(redeemed === 'true' ? 1 : 0); }
 
     const [rows] = await pool.query(
       `SELECT cr.*, u.name as customer_name, u.mobile as customer_mobile 
        FROM customer_rewards cr 
        LEFT JOIN users u ON u.id = cr.customer_id 
-       WHERE ${where.replace(/customer_id/g, 'cr.customer_id').replace(/redeemed/g, 'cr.redeemed')} 
+       WHERE ${where} 
        ORDER BY cr.created_at DESC`,
       params
     );
