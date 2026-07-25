@@ -56,7 +56,7 @@ export default function InventoryPage() {
   const [categoryFilter, setCategoryFilter] = useState('');
 
   const { data, isLoading, refetch } = useInventory({ search, page, limit: 100, category: categoryFilter, brand: brandFilter });
-  const { data: dbCategories, refetch: refetchCategories } = useInventoryCategories();
+  const { data: dbCategories, isLoading: isLoadingCategories, refetch: refetchCategories } = useInventoryCategories();
 
   // Multi-select state
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -413,10 +413,21 @@ export default function InventoryPage() {
   // Compute stat totals
   const allItems = data?.data || [];
 
-  const categoryOptions = Array.from(new Set([
-    ...(dbCategories ? dbCategories.map((dc: any) => dc.category) : []),
-    ...(allItems ? allItems.map((i: any) => i.category).filter(Boolean) : [])
-  ])).filter(Boolean).sort((a: string, b: string) => a.localeCompare(b));
+  const masterCategoryList = Array.from(
+    new Set([
+      ...(dbCategories ? dbCategories.map((dc: any) => dc.category) : []),
+      ...(allItems ? allItems.map((i: any) => i.category).filter(Boolean) : [])
+    ])
+  ).filter(Boolean).map((catName: string) => {
+    const existing = dbCategories?.find((dc: any) => dc.category === catName);
+    const countFromItems = allItems.filter((i: any) => i.category === catName).length;
+    return {
+      category: catName,
+      count: Math.max(existing?.count || 0, countFromItems)
+    };
+  }).sort((a, b) => a.category.localeCompare(b.category));
+
+  const categoryOptions = masterCategoryList.map(c => c.category);
   
   // Filter items based on statusFilter, categoryFilter, brandFilter
   const filteredItems = allItems.filter((item: any) => {
@@ -935,8 +946,10 @@ export default function InventoryPage() {
           {/* List of Existing Categories */}
           <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
             <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Active Categories</h4>
-            {dbCategories && dbCategories.length > 0 ? (
-              dbCategories.map((c: any) => (
+            {isLoadingCategories ? (
+              <div className="text-xs text-gray-500 py-4 text-center animate-pulse">Loading categories...</div>
+            ) : masterCategoryList && masterCategoryList.length > 0 ? (
+              masterCategoryList.map((c: any) => (
                 <div key={c.category} className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-gray-200 text-xs">
                   {editingCatName === c.category ? (
                     <div className="flex-1 flex gap-2 items-center mr-2">
@@ -952,6 +965,8 @@ export default function InventoryPage() {
                             const res = await renameCatMut.mutateAsync({ old_name: c.category, new_name: renameCatVal.trim() });
                             toast('success', res.message);
                             setEditingCatName(null);
+                            await refetchCategories();
+                            await refetch();
                           } catch (err: any) {
                             toast('error', err.response?.data?.error || 'Failed to rename category');
                           }
