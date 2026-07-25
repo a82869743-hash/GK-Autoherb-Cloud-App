@@ -1022,8 +1022,8 @@ export default function InventoryPage() {
                 value={reassignCatTarget}
                 onChange={(e) => setReassignCatTarget(e.target.value)}
               >
-                <option value="">-- Select Re-assignment Category --</option>
-                {dbCategories?.filter((dc: any) => dc.category !== deletingCatName).map((dc: any) => (
+                <option value="">-- Select Re-assignment Category (Optional if 0 products) --</option>
+                {masterCategoryList?.filter((dc: any) => dc.category !== deletingCatName).map((dc: any) => (
                   <option key={dc.category} value={dc.category}>{dc.category}</option>
                 ))}
               </select>
@@ -1039,6 +1039,8 @@ export default function InventoryPage() {
                       const res = await deleteCatMut.mutateAsync({ name: deletingCatName, reassign_to: reassignCatTarget });
                       toast('success', res.message);
                       setDeletingCatName(null);
+                      await refetchCategories();
+                      await refetch();
                     } catch (err: any) {
                       toast('error', err.response?.data?.error || 'Failed to delete category');
                     }
