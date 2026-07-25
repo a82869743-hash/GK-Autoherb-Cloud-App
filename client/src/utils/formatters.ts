@@ -4,18 +4,25 @@ export const formatINR = (amount: number | string | null | undefined): string =>
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(isNaN(parsed) ? 0 : parsed);
 };
 
-// Date formatter
+// Date formatter (IST Asia/Kolkata)
 export const formatDate = (date: string | Date | null | undefined): string => {
   if (!date) return '-';
   let d: Date;
   if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    // For date-only string (YYYY-MM-DD), parse using local midnight
     d = new Date(`${date}T00:00:00`);
   } else {
     d = new Date(date);
   }
   if (isNaN(d.getTime())) return '-';
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+};
+
+// Date-Time formatter (IST Asia/Kolkata 12-hour format)
+export const formatDateTime = (date: string | Date | null | undefined): string => {
+  if (!date) return '-';
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return '-';
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
 };
 
 // Time formatter (12-hour)

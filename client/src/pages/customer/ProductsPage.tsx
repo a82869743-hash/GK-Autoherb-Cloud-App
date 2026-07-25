@@ -957,7 +957,7 @@ export default function ProductsPage() {
                         Qty: <strong>{parseInt(order.quantity)}</strong> &bull; Total: <strong>₹{order.total_amount}</strong>
                       </p>
                       <p className="text-[10px] text-gray-400">
-                        Ordered: {new Date(order.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        Ordered: {new Date(order.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}
                       </p>
                     </div>
                   </div>

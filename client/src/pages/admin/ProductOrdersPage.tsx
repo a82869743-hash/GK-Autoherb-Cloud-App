@@ -298,7 +298,7 @@ export default function ProductOrdersPage() {
                         )}
                       </span>
                       <div className="text-[9px] text-gray-400 mt-1 font-semibold">
-                        {new Date(order.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                        {new Date(order.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}
                       </div>
                     </td>
 
