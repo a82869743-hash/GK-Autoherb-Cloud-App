@@ -157,22 +157,25 @@ exports.listAll = async (req, res) => {
       const params = [];
       if (from_date) { where += ' AND DATE(b.completed_at) >= ?'; params.push(from_date); }
       if (to_date)   { where += ' AND DATE(b.completed_at) <= ?'; params.push(to_date); }
-      if (search)    { where += ' AND (u.name LIKE ? OR b.vehicle_reg_no LIKE ?)'; const s = `%${search}%`; params.push(s,s); }
+      if (search)    { where += ' AND (u.name LIKE ? OR COALESCE(v.registration_no, b.vehicle_reg_no) LIKE ?)'; const s = `%${search}%`; params.push(s,s); }
 
       const [rows] = await pool.query(`
         SELECT
           b.id,
           'quick_wash' AS type,
           CONCAT('QW-', b.id) AS reference,
-          u.name AS party_name,
-          u.mobile AS party_mobile,
+          COALESCE(u.name, 'Walk-in Customer') AS party_name,
+          COALESCE(u.mobile, 'N/A') AS party_mobile,
           COALESCE(b.completed_at, b.created_at) AS date,
           s.price AS amount,
-          b.vehicle_reg_no AS registration_no,
+          COALESCE(v.registration_no, b.vehicle_reg_no) AS registration_no,
+          COALESCE(v.brand, b.vehicle_brand) AS brand,
+          COALESCE(v.model, b.vehicle_model) AS model,
           NULL AS discount_type,
           NULL AS discount_value
         FROM bookings b
-        JOIN users u ON b.customer_id = u.id
+        LEFT JOIN vehicles v ON b.vehicle_id = v.id
+        LEFT JOIN users u ON (b.customer_id = u.id OR v.customer_id = u.id)
         LEFT JOIN services s ON b.service_id = s.id
         WHERE ${where}
         ORDER BY date DESC
@@ -228,15 +231,29 @@ exports.exportPdf = async (req, res) => {
       }
     } else if (type === 'quick_wash') {
       const [rows] = await pool.query(`
-        SELECT b.*, u.name as customer_name, u.mobile as customer_mobile, s.name as service_name, s.price
+        SELECT b.*,
+               COALESCE(u.name, 'Walk-in Customer') as customer_name,
+               COALESCE(u.mobile, 'N/A') as customer_mobile,
+               COALESCE(v.registration_no, b.vehicle_reg_no) as registration_no,
+               COALESCE(v.brand, b.vehicle_brand) as brand,
+               COALESCE(v.model, b.vehicle_model) as model,
+               s.name as service_name,
+               s.price
         FROM bookings b
-        JOIN users u ON b.customer_id = u.id
+        LEFT JOIN vehicles v ON b.vehicle_id = v.id
+        LEFT JOIN users u ON (b.customer_id = u.id OR v.customer_id = u.id)
         LEFT JOIN services s ON b.service_id = s.id
         WHERE b.id = ? AND b.job_type = 'quick_wash'
       `, [id]);
       if (rows.length) {
         const b = rows[0];
-        invoiceData = { ...b, title: 'Quick Wash Receipt', reference: `QW-${b.id}`, date: b.completed_at || b.created_at, items: [{ name: b.service_name || 'Quick Wash', price: Number(b.price || 0) }] };
+        invoiceData = {
+          ...b,
+          title: 'Quick Wash Receipt',
+          reference: `QW-${b.id}`,
+          date: b.completed_at || b.created_at,
+          items: [{ name: b.service_name || 'Quick Wash', price: Number(b.price || 0) }]
+        };
       }
     }
 

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Plus, Package, Edit2, Trash2, Check, Upload, Search, ShieldAlert, BarChart3, HelpCircle, RefreshCw, FolderPlus, CheckSquare, Square, Layers } from 'lucide-react';
-import { useInventory, useCreateInventory, useUpdateInventory, useAdjustQuantity, useDeleteInventory, useInventoryCategories } from '../../api/hooks/useInventory';
+import { useInventory, useCreateInventory, useUpdateInventory, useAdjustQuantity, useDeleteInventory, useInventoryCategories, useCreateCategory, useRenameCategory, useDeleteCategory } from '../../api/hooks/useInventory';
 import PremiumPageHeader from '../../components/shared/PremiumPageHeader';
 import PremiumStatCard from '../../components/shared/PremiumStatCard';
 import Button from '../../components/ui/Button';
@@ -66,6 +66,18 @@ export default function InventoryPage() {
   // Custom Category State in Modal
   const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [customCategoryInput, setCustomCategoryInput] = useState('');
+
+  // Category Manager Modal State
+  const [catManagerOpen, setCatManagerOpen] = useState(false);
+  const [newCatInput, setNewCatInput] = useState('');
+  const [editingCatName, setEditingCatName] = useState<string | null>(null);
+  const [renameCatVal, setRenameCatVal] = useState('');
+  const [deletingCatName, setDeletingCatName] = useState<string | null>(null);
+  const [reassignCatTarget, setReassignCatTarget] = useState('');
+
+  const createCatMut = useCreateCategory();
+  const renameCatMut = useRenameCategory();
+  const deleteCatMut = useDeleteCategory();
 
   // ─── Add/Edit Modal ─────────────────────
   const [modalOpen, setModalOpen] = useState(false);
@@ -440,6 +452,9 @@ export default function InventoryPage() {
               accept=".xlsx,.xls,.csv"
               className="hidden"
             />
+            <Button variant="secondary" onClick={() => setCatManagerOpen(true)} icon={<FolderPlus size={16} />}>
+              Manage Categories
+            </Button>
             <Button variant="secondary" onClick={() => fileInputRef.current?.click()} icon={<Upload size={16} />} loading={isUploading}>
               Import Excel
             </Button>
@@ -890,6 +905,142 @@ export default function InventoryPage() {
           </div>
         )}
       </div>
+
+      {/* Category Manager Modal */}
+      <Modal open={catManagerOpen} onClose={() => setCatManagerOpen(false)} title="Manage Categories" size="md">
+        <div className="space-y-4 text-left">
+          {/* Add New Category */}
+          <div className="flex gap-2 items-center bg-gray-50 p-3 rounded-lg border border-gray-200">
+            <input
+              type="text"
+              placeholder="Enter new category name..."
+              value={newCatInput}
+              onChange={(e) => setNewCatInput(e.target.value)}
+              className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            />
+            <Button
+              size="sm"
+              loading={createCatMut.isPending}
+              disabled={!newCatInput.trim()}
+              onClick={async () => {
+                try {
+                  const res = await createCatMut.mutateAsync(newCatInput.trim());
+                  toast('success', res.message || 'Category added');
+                  setNewCatInput('');
+                } catch (err: any) {
+                  toast('error', err.response?.data?.error || 'Failed to add category');
+                }
+              }}
+              icon={<Plus size={14} />}
+            >
+              Add Category
+            </Button>
+          </div>
+
+          {/* List of Existing Categories */}
+          <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+            <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Active Categories</h4>
+            {dbCategories && dbCategories.length > 0 ? (
+              dbCategories.map((c: any) => (
+                <div key={c.category} className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-gray-200 text-xs">
+                  {editingCatName === c.category ? (
+                    <div className="flex-1 flex gap-2 items-center mr-2">
+                      <input
+                        type="text"
+                        value={renameCatVal}
+                        onChange={(e) => setRenameCatVal(e.target.value)}
+                        className="flex-1 px-2 py-1 border border-blue-400 rounded text-xs font-medium focus:outline-none"
+                      />
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await renameCatMut.mutateAsync({ old_name: c.category, new_name: renameCatVal.trim() });
+                            toast('success', res.message);
+                            setEditingCatName(null);
+                          } catch (err: any) {
+                            toast('error', err.response?.data?.error || 'Failed to rename category');
+                          }
+                        }}
+                        className="text-green-600 hover:text-green-700 p-1 font-bold"
+                      >
+                        <Check size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-gray-800">{c.category}</span>
+                      <span className="bg-gray-100 text-gray-600 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                        {c.count} product(s)
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-1">
+                    {editingCatName !== c.category && (
+                      <button
+                        onClick={() => { setEditingCatName(c.category); setRenameCatVal(c.category); }}
+                        className="p-1 text-gray-500 hover:text-blue-600 rounded"
+                        title="Rename Category"
+                      >
+                        <Edit2 size={13} />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => { setDeletingCatName(c.category); setReassignCatTarget(''); }}
+                      className="p-1 text-gray-500 hover:text-red-600 rounded"
+                      title="Delete Category"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-gray-400 italic">No categories found.</p>
+            )}
+          </div>
+
+          {/* Delete Category Sub-Dialog */}
+          {deletingCatName && (
+            <div className="p-3 bg-red-50 rounded-lg border border-red-200 text-xs space-y-2 mt-3">
+              <p className="font-bold text-red-800">Delete Category "{deletingCatName}"?</p>
+              <p className="text-gray-600 text-[11px]">
+                If products are assigned to this category, select a target category to reassign them to:
+              </p>
+              <select
+                className="w-full px-2 py-1.5 border border-red-300 rounded text-xs bg-white focus:outline-none"
+                value={reassignCatTarget}
+                onChange={(e) => setReassignCatTarget(e.target.value)}
+              >
+                <option value="">-- Select Re-assignment Category --</option>
+                {dbCategories?.filter((dc: any) => dc.category !== deletingCatName).map((dc: any) => (
+                  <option key={dc.category} value={dc.category}>{dc.category}</option>
+                ))}
+              </select>
+              <div className="flex justify-end gap-2 pt-1">
+                <Button size="sm" variant="secondary" onClick={() => setDeletingCatName(null)}>Cancel</Button>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                  loading={deleteCatMut.isPending}
+                  onClick={async () => {
+                    try {
+                      const res = await deleteCatMut.mutateAsync({ name: deletingCatName, reassign_to: reassignCatTarget });
+                      toast('success', res.message);
+                      setDeletingCatName(null);
+                    } catch (err: any) {
+                      toast('error', err.response?.data?.error || 'Failed to delete category');
+                    }
+                  }}
+                >
+                  Confirm Delete
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
 
       {/* Add / Edit Product Modal */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editItem ? 'Edit Product' : 'Add Product'} size="md"

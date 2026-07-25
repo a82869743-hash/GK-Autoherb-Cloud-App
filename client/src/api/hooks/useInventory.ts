@@ -73,3 +73,45 @@ export const useDeleteInventory = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory'] }),
   });
 };
+
+export const useCreateCategory = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (name: string) => {
+      const res = await api.post('/inventory/categories', { name });
+      return res.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventory-categories'] });
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+    },
+  });
+};
+
+export const useRenameCategory = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ old_name, new_name }: { old_name: string; new_name: string }) => {
+      const res = await api.put('/inventory/categories', { old_name, new_name });
+      return res.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventory-categories'] });
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+    },
+  });
+};
+
+export const useDeleteCategory = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ name, reassign_to }: { name: string; reassign_to?: string }) => {
+      const res = await api.delete('/inventory/categories', { data: { name, reassign_to } });
+      return res.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventory-categories'] });
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+    },
+  });
+};

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ShoppingBag, CreditCard, CheckCircle, Clock, AlertTriangle, ArrowRight, Star, ThumbsUp, Check, Truck, ShieldCheck, ShoppingCart, RefreshCw, X, QrCode } from 'lucide-react';
+import { ShoppingBag, CreditCard, CheckCircle, Clock, AlertTriangle, ArrowRight, Star, ThumbsUp, Check, Truck, ShieldCheck, ShoppingCart, RefreshCw, X, QrCode, Search } from 'lucide-react';
 import api from '../../api/axiosInstance';
 import { useUIStore } from '../../store/uiStore';
 
@@ -305,6 +305,10 @@ export default function ProductsPage() {
   const [submittingQr, setSubmittingQr] = useState(false);
   const [activeTab, setActiveTab] = useState<'shop' | 'orders'>('shop');
 
+  // Search & Filter State
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+
   // Normalize product name for fuzzy matching
   const normalizeProductName = (name: string) => {
     return (name || '')
@@ -466,6 +470,24 @@ export default function ProductsPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Dynamically derive distinct categories from loaded products
+  const availableCategories = Array.from(
+    new Set(products.map((p) => p.specs?.Category).filter(Boolean))
+  ) as string[];
+
+  // Filter products by search term and selected category
+  const filteredProducts = products.filter((p) => {
+    const matchesSearch =
+      !searchTerm ||
+      p.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.description && p.description.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    const matchesCategory =
+      !selectedCategory || p.specs?.Category === selectedCategory;
+
+    return matchesSearch && matchesCategory;
+  });
 
   const loadRazorpayScript = () => {
     return new Promise((resolve) => {
@@ -669,83 +691,208 @@ export default function ProductsPage() {
           <RefreshCw className="animate-spin text-gray-400" size={32} />
         </div>
       ) : activeTab === 'shop' ? (
-        /* Products Grid */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {products.map((product, idx) => (
-            <div
-              key={idx}
-              className="bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col group"
-            >
-              {/* Product Image */}
-              <div className="relative aspect-video bg-gray-50 overflow-hidden">
-                <img
-                  src={product.image || 'https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=500&q=80'}
-                  alt={product.displayName}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=500&q=80';
-                  }}
+        <div className="space-y-6">
+          {/* Search & Category Filter Bar */}
+          <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 space-y-3">
+            <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+              {/* Search Input */}
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                <input
+                  type="text"
+                  placeholder="Search accessories by name or keyword..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:bg-white transition-all"
                 />
-                {product.discount && (
-                  <span className="absolute top-3 left-3 bg-red-600 text-white text-[11px] font-black px-2 py-0.5 rounded-full uppercase">
-                    {product.discount}
-                  </span>
-                )}
-                {!product.inStock && (
-                  <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center">
-                    <span className="bg-white text-black font-extrabold text-xs px-3 py-1 rounded-full uppercase tracking-wider">
-                      Out of Stock
-                    </span>
-                  </div>
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X size={14} />
+                  </button>
                 )}
               </div>
 
-              {/* Card Body */}
-              <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between items-start">
-                    <span className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">
-                      {product.specs.Material || product.specs.GSM || 'Premium Utility'}
-                    </span>
-                    <div className="flex items-center gap-0.5 text-amber-500">
-                      <Star size={12} fill="currentColor" />
-                      <span className="text-xs font-bold text-gray-700">{product.rating}</span>
-                    </div>
-                  </div>
-                  <h3 className="font-bold text-gray-900 group-hover:text-[#D32F2F] transition-colors leading-tight line-clamp-1">
-                    {product.displayName}
-                  </h3>
-                  <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed">
-                    {product.description}
-                  </p>
-                </div>
+              {/* Category Select Dropdown */}
+              <div className="w-full md:w-56 flex items-center gap-2">
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:bg-white transition-all cursor-pointer"
+                >
+                  <option value="">All Categories ({products.length})</option>
+                  {availableCategories.map((cat) => {
+                    const count = products.filter((p) => p.specs?.Category === cat).length;
+                    return (
+                      <option key={cat} value={cat}>
+                        {cat} ({count})
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
 
-                <div className="pt-2 flex items-center justify-between">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-lg font-black text-gray-900">₹{product.dbPrice.toLocaleString('en-IN')}</span>
-                    {product.mrp > product.dbPrice && (
-                      <span className="text-xs text-gray-400 line-through">₹{product.mrp.toLocaleString('en-IN')}</span>
+              {/* Reset Filters */}
+              {(searchTerm || selectedCategory) && (
+                <button
+                  onClick={() => {
+                    setSearchTerm('');
+                    setSelectedCategory('');
+                  }}
+                  className="px-3.5 py-2 text-xs font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-xl transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                >
+                  <RefreshCw size={13} />
+                  Reset Filters
+                </button>
+              )}
+            </div>
+
+            {/* Category Quick Pills */}
+            {availableCategories.length > 0 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs pt-2 border-t border-gray-100">
+                <button
+                  onClick={() => setSelectedCategory('')}
+                  className={`px-3 py-1 rounded-lg font-bold transition-all shrink-0 cursor-pointer ${
+                    selectedCategory === ''
+                      ? 'bg-[#D32F2F] text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  All ({products.length})
+                </button>
+                {availableCategories.map((cat) => {
+                  const count = products.filter((p) => p.specs?.Category === cat).length;
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`px-3 py-1 rounded-lg font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
+                        selectedCategory === cat
+                          ? 'bg-[#D32F2F] text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      <span>{cat}</span>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                          selectedCategory === cat ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'
+                        }`}
+                      >
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Empty State vs Products Grid */}
+          {filteredProducts.length === 0 ? (
+            <div className="bg-white rounded-2xl p-12 text-center border border-gray-100 shadow-sm space-y-4">
+              <div className="w-14 h-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto">
+                <ShoppingBag size={26} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-gray-800">No Accessories Found</h3>
+                <p className="text-xs text-gray-500 max-w-sm mx-auto">
+                  We couldn't find any products matching your search query or selected category filter.
+                </p>
+              </div>
+              {(searchTerm || selectedCategory) && (
+                <button
+                  onClick={() => {
+                    setSearchTerm('');
+                    setSelectedCategory('');
+                  }}
+                  className="px-4 py-2 bg-gray-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredProducts.map((product, idx) => (
+                <div
+                  key={idx}
+                  className="bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col group"
+                >
+                  {/* Product Image */}
+                  <div className="relative aspect-video bg-gray-50 overflow-hidden">
+                    <img
+                      src={product.image || 'https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=500&q=80'}
+                      alt={product.displayName}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=500&q=80';
+                      }}
+                    />
+                    {product.discount && (
+                      <span className="absolute top-3 left-3 bg-red-600 text-white text-[11px] font-black px-2 py-0.5 rounded-full uppercase">
+                        {product.discount}
+                      </span>
+                    )}
+                    {!product.inStock && (
+                      <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center">
+                        <span className="bg-white text-black font-extrabold text-xs px-3 py-1 rounded-full uppercase tracking-wider">
+                          Out of Stock
+                        </span>
+                      </div>
                     )}
                   </div>
-                  <button
-                    onClick={() => {
-                      setSelectedProduct(product);
-                      setQuantity(1);
-                    }}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
-                      product.inStock
-                        ? 'bg-[#111111] text-white hover:bg-[#D32F2F]'
-                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    }`}
-                    disabled={!product.inStock}
-                  >
-                    Buy Now
-                    <ArrowRight size={12} />
-                  </button>
+
+                  {/* Card Body */}
+                  <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-start">
+                        <span className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">
+                          {product.specs?.Category || product.specs?.Material || product.specs?.GSM || 'Premium Utility'}
+                        </span>
+                        <div className="flex items-center gap-0.5 text-amber-500">
+                          <Star size={12} fill="currentColor" />
+                          <span className="text-xs font-bold text-gray-700">{product.rating}</span>
+                        </div>
+                      </div>
+                      <h3 className="font-bold text-gray-900 group-hover:text-[#D32F2F] transition-colors leading-tight line-clamp-1">
+                        {product.displayName}
+                      </h3>
+                      <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed">
+                        {product.description}
+                      </p>
+                    </div>
+
+                    {/* Price & Buy Button */}
+                    <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
+                      <div>
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-lg font-black text-gray-900">₹{product.price}</span>
+                          {product.mrp > product.price && (
+                            <span className="text-xs text-gray-400 line-through">₹{product.mrp}</span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-emerald-600 font-bold">In Stock &bull; Free Delivery</span>
+                      </div>
+                      <button
+                        onClick={() => setSelectedProduct(product)}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer ${
+                          product.inStock
+                            ? 'bg-[#D32F2F] hover:bg-[#B71C1C] text-white shadow-red-500/20'
+                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        }`}
+                        disabled={!product.inStock}
+                      >
+                        Buy Now
+                        <ArrowRight size={12} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       ) : (
         /* Orders Tab */

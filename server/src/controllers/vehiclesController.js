@@ -335,3 +335,123 @@ exports.updateCar = async (req, res) => {
     conn.release();
   }
 };
+
+// ─── VEHICLE MASTER CRUD (ADMIN) ───────────────────────────
+exports.getAllMaster = async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM vehicle_master ORDER BY make ASC, model ASC');
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('Error fetching vehicle master list:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch vehicle master entries' });
+  }
+};
+
+exports.createMaster = async (req, res) => {
+  try {
+    const { make, model, variant } = req.body;
+    if (!make || !model) {
+      return res.status(400).json({ success: false, error: 'Make and model are required' });
+    }
+
+    const [result] = await pool.query(
+      'INSERT INTO vehicle_master (make, model, variant) VALUES (?, ?, ?)',
+      [make.trim(), model.trim(), variant?.trim() || null]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: `Car Make/Model "${make} ${model}" created successfully`,
+      data: { id: result.insertId, make: make.trim(), model: model.trim(), variant: variant?.trim() || null }
+    });
+  } catch (error) {
+    console.error('Error creating vehicle master entry:', error);
+    res.status(500).json({ success: false, error: 'Failed to create vehicle master entry' });
+  }
+};
+
+exports.updateMaster = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const { id } = req.params;
+    const { make, model, variant } = req.body;
+
+    if (!make || !model) {
+      return res.status(400).json({ success: false, error: 'Make and model are required' });
+    }
+
+    await conn.beginTransaction();
+
+    const [existing] = await conn.query('SELECT * FROM vehicle_master WHERE id = ?', [id]);
+    if (!existing.length) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, error: 'Vehicle master entry not found' });
+    }
+
+    const oldMake = existing[0].make;
+    const oldModel = existing[0].model;
+    const newMake = make.trim();
+    const newModel = model.trim();
+
+    await conn.query(
+      'UPDATE vehicle_master SET make = ?, model = ?, variant = ? WHERE id = ?',
+      [newMake, newModel, variant?.trim() || null, id]
+    );
+
+    // Cascade rename to vehicles table if brand/model changed
+    if (oldMake !== newMake || oldModel !== newModel) {
+      await conn.query(
+        'UPDATE vehicles SET brand = ?, model = ? WHERE brand = ? AND model = ?',
+        [newMake, newModel, oldMake, oldModel]
+      );
+    }
+
+    await conn.commit();
+    res.json({ success: true, message: `Vehicle master "${newMake} ${newModel}" updated successfully` });
+  } catch (error) {
+    await conn.rollback();
+    console.error('Error updating vehicle master entry:', error);
+    res.status(500).json({ success: false, error: 'Failed to update vehicle master entry' });
+  } finally {
+    conn.release();
+  }
+};
+
+exports.deleteMaster = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const { id } = req.params;
+    await conn.beginTransaction();
+
+    const [existing] = await conn.query('SELECT * FROM vehicle_master WHERE id = ?', [id]);
+    if (!existing.length) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, error: 'Vehicle master entry not found' });
+    }
+
+    const { make, model } = existing[0];
+
+    const [inUse] = await conn.query(
+      'SELECT COUNT(*) AS cnt FROM vehicles WHERE brand = ? AND model = ?',
+      [make, model]
+    );
+
+    if (inUse[0].cnt > 0) {
+      await conn.rollback();
+      return res.status(400).json({
+        success: false,
+        error: `Cannot delete "${make} ${model}" because it is currently assigned to ${inUse[0].cnt} customer vehicle(s).`
+      });
+    }
+
+    await conn.query('DELETE FROM vehicle_master WHERE id = ?', [id]);
+    await conn.commit();
+    res.json({ success: true, message: `Vehicle master entry "${make} ${model}" deleted successfully` });
+  } catch (error) {
+    await conn.rollback();
+    console.error('Error deleting vehicle master entry:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete vehicle master entry' });
+  } finally {
+    conn.release();
+  }
+};

@@ -391,33 +391,31 @@ exports.listCustomerProducts = async (req, res) => {
   try {
     let rows;
     try {
-      // Try with status filter first — GROUP BY to de-duplicate
+      // Return 1:1 distinct product rows without arbitrary GROUP BY aggregation
       [rows] = await pool.query(
-        `SELECT MIN(id) as id, product_name, 
-                MAX(selling_price) as selling_price, MAX(cost_price) as cost_price, 
-                SUM(quantity) as quantity, 
-                MAX(sku) as sku, MAX(brand) as brand, MAX(category) as category,
-                MAX(sub_category) as sub_category,
-                MAX(CAST(images_json AS CHAR(2000))) as images_json, 
-                MAX(description) as description
+        `SELECT id, product_name, unit, quantity, low_stock_threshold,
+                sku, barcode, category, sub_category, brand, vehicle_compatibility, variant,
+                cost_price, selling_price, discount_pct, gst_pct,
+                supplier, purchase_date, purchase_invoice_no, warehouse_location,
+                warranty, serial_number, expiry_date, status, description,
+                CAST(images_json AS CHAR(2000)) as images_json
          FROM inventory 
          WHERE is_deleted = 0 AND status = 'active'
-         GROUP BY product_name`
+         ORDER BY product_name ASC, id DESC`
       );
     } catch (statusErr) {
       // status column may not exist — fallback without it
       console.warn('status column not found in inventory, querying without it:', statusErr.message);
       [rows] = await pool.query(
-        `SELECT MIN(id) as id, product_name, 
-                MAX(selling_price) as selling_price, MAX(cost_price) as cost_price, 
-                SUM(quantity) as quantity, 
-                MAX(sku) as sku, MAX(brand) as brand, MAX(category) as category,
-                MAX(sub_category) as sub_category,
-                MAX(CAST(images_json AS CHAR(2000))) as images_json, 
-                MAX(description) as description
+        `SELECT id, product_name, unit, quantity, low_stock_threshold,
+                sku, barcode, category, sub_category, brand, vehicle_compatibility, variant,
+                cost_price, selling_price, discount_pct, gst_pct,
+                supplier, purchase_date, purchase_invoice_no, warehouse_location,
+                warranty, serial_number, expiry_date, description,
+                CAST(images_json AS CHAR(2000)) as images_json
          FROM inventory 
          WHERE is_deleted = 0
-         GROUP BY product_name`
+         ORDER BY product_name ASC, id DESC`
       );
     }
     res.json({ success: true, data: rows });

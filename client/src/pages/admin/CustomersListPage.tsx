@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axiosInstance';
-import { Search, Users, ChevronRight, UserCircle, Trash2 } from 'lucide-react';
+import { Search, Users, ChevronRight, UserCircle, Trash2, Car } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ConfirmModal from '../../components/ui/ConfirmModal';
+import VehicleMasterModal from '../../components/admin/VehicleMasterModal';
 
 interface Customer {
   id: number;
@@ -24,6 +25,7 @@ export default function CustomersListPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [archiveTarget, setArchiveTarget] = useState<{ id: number; name: string } | null>(null);
   const [archiving, setArchiving] = useState(false);
+  const [vmModalOpen, setVmModalOpen] = useState(false);
 
   const fetchCustomers = async () => {
     setLoading(true);
@@ -81,6 +83,13 @@ export default function CustomersListPage() {
           </h1>
           <p className="text-sm text-[#5f5e5e] mt-1">Manage customers, view their vehicles, and maintain a chronological history of notes.</p>
         </div>
+        <button
+          onClick={() => setVmModalOpen(true)}
+          className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all shrink-0"
+        >
+          <Car size={15} />
+          Manage Car Companies & Models
+        </button>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -210,6 +219,8 @@ export default function CustomersListPage() {
         isDestructive={true}
         loading={archiving}
       />
+
+      <VehicleMasterModal open={vmModalOpen} onClose={() => setVmModalOpen(false)} />
     </div>
   );
 }

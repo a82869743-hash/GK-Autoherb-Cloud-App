@@ -14,6 +14,12 @@ router.get('/variants', vehiclesController.getVariants);
 router.get('/all',                    auth, role(['admin']), vehiclesController.getAllVehicles);
 router.get('/by-customer/:customerId', auth, role(['admin']), vehiclesController.getByCustomer);
 
+// ─── Vehicle Master Admin Routes ───────────────────────────
+router.get('/master',       auth, role(['admin']), vehiclesController.getAllMaster);
+router.post('/master',      auth, role(['admin']), vehiclesController.createMaster);
+router.put('/master/:id',   auth, role(['admin']), vehiclesController.updateMaster);
+router.delete('/master/:id', auth, role(['admin']), vehiclesController.deleteMaster);
+
 // ─── Car Management Routes ──────────────────────────────────
 router.post('/add',          auth, vehiclesController.addCar);
 router.patch('/:id/primary', auth, vehiclesController.setPrimary);

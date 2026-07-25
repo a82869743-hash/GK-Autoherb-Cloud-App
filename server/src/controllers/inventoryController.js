@@ -367,3 +367,94 @@ exports.getCategories = async (req, res) => {
   }
 };
 
+// ─── CREATE CATEGORY ─────────────────────────
+exports.createCategory = async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, error: 'Category name required' });
+    }
+    const categoryName = name.trim();
+    res.json({ success: true, message: `Category "${categoryName}" ready` });
+  } catch (err) {
+    console.error('Create category error:', err);
+    res.status(500).json({ success: false, error: 'Failed to create category' });
+  }
+};
+
+// ─── RENAME CATEGORY ─────────────────────────
+exports.renameCategory = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const { old_name, new_name } = req.body;
+    if (!old_name || !new_name || !old_name.trim() || !new_name.trim()) {
+      return res.status(400).json({ success: false, error: 'Old name and new name required' });
+    }
+    await conn.beginTransaction();
+    const oldCat = old_name.trim();
+    const newCat = new_name.trim();
+
+    const [result] = await conn.query(
+      'UPDATE inventory SET category = ? WHERE category = ? AND is_deleted = 0',
+      [newCat, oldCat]
+    );
+
+    await conn.commit();
+    res.json({
+      success: true,
+      message: `Renamed category "${oldCat}" to "${newCat}" across ${result.affectedRows} product(s)`
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Rename category error:', err);
+    res.status(500).json({ success: false, error: 'Failed to rename category' });
+  } finally {
+    conn.release();
+  }
+};
+
+// ─── DELETE CATEGORY ─────────────────────────
+exports.deleteCategory = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const { name, reassign_to } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, error: 'Category name required' });
+    }
+    const targetCategory = name.trim();
+
+    await conn.beginTransaction();
+
+    const [inUse] = await conn.query(
+      'SELECT COUNT(*) AS cnt FROM inventory WHERE category = ? AND is_deleted = 0',
+      [targetCategory]
+    );
+    const activeCount = inUse[0]?.cnt || 0;
+
+    if (activeCount > 0 && (!reassign_to || !reassign_to.trim())) {
+      await conn.rollback();
+      return res.status(400).json({
+        success: false,
+        error: `Category "${targetCategory}" is currently assigned to ${activeCount} product(s). Select a target category to reassign them.`
+      });
+    }
+
+    if (activeCount > 0 && reassign_to) {
+      const reassignName = reassign_to.trim();
+      await conn.query(
+        'UPDATE inventory SET category = ? WHERE category = ? AND is_deleted = 0',
+        [reassignName, targetCategory]
+      );
+    }
+
+    await conn.commit();
+    res.json({ success: true, message: `Category "${targetCategory}" deleted successfully` });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Delete category error:', err);
+    res.status(500).json({ success: false, error: 'Failed to delete category' });
+  } finally {
+    conn.release();
+  }
+};
+
