@@ -364,12 +364,32 @@ exports.getCategories = async (req, res) => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Seed default categories into DB if table is empty
+    const [countRow] = await pool.query('SELECT COUNT(*) AS cnt FROM inventory_categories');
+    if (countRow[0].cnt === 0) {
+      const defaultCats = [
+        'Seat Covers', 'Floor Mats', 'Android Stereo', 'Speakers', 'Amplifier',
+        'Subwoofer', 'Dash Camera', 'Reverse Camera', 'LED Lights', 'Fog Lamps',
+        'Horn', 'Car Perfume', 'Steering Cover', 'Wiper Blades', 'Battery',
+        'GPS Tracker', 'Mobile Holder', 'Vacuum Cleaner', 'Cleaning Products',
+        'PPF & Coating Products', 'Comfort Accessories', 'Car Electronics', 'Miscellaneous Accessories'
+      ];
+      for (const c of defaultCats) {
+        await pool.query('INSERT IGNORE INTO inventory_categories (name) VALUES (?)', [c]);
+      }
+    }
+
     const [rows] = await pool.query(`
-      SELECT c.name AS category, COUNT(i.id) AS count
-      FROM inventory_categories c
-      LEFT JOIN inventory i ON (c.name = i.category AND i.is_deleted = 0)
-      GROUP BY c.id, c.name
-      ORDER BY c.name ASC
+      SELECT cat.name AS category, COUNT(i.id) AS count
+      FROM (
+        SELECT name FROM inventory_categories
+        UNION
+        SELECT DISTINCT category AS name FROM inventory WHERE category IS NOT NULL AND category != '' AND is_deleted = 0
+      ) cat
+      LEFT JOIN inventory i ON (cat.name = i.category AND i.is_deleted = 0)
+      GROUP BY cat.name
+      ORDER BY cat.name ASC
     `);
     res.json({ success: true, data: rows });
   } catch (err) {

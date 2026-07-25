@@ -412,6 +412,12 @@ export default function InventoryPage() {
 
   // Compute stat totals
   const allItems = data?.data || [];
+
+  const categoryOptions = Array.from(new Set([
+    ...(dbCategories ? dbCategories.map((dc: any) => dc.category) : []),
+    ...INVENTORY_CATEGORIES,
+    ...(allItems ? allItems.map((i: any) => i.category).filter(Boolean) : [])
+  ])).filter(Boolean).sort((a: string, b: string) => a.localeCompare(b));
   
   // Filter items based on statusFilter, categoryFilter, brandFilter
   const filteredItems = allItems.filter((item: any) => {
@@ -529,9 +535,11 @@ export default function InventoryPage() {
           >
             All Products ({allItems.length})
           </button>
-          {INVENTORY_CATEGORIES.map(c => {
+          {categoryOptions.map(c => {
             const count = allItems.filter((i: any) => i.category === c).length;
-            if (count === 0 && categoryFilter !== c) return null;
+            const dbCount = dbCategories?.find((dc: any) => dc.category === c)?.count || 0;
+            const displayCount = Math.max(count, dbCount);
+            if (displayCount === 0 && categoryFilter !== c) return null;
             return (
               <button
                 key={c}
@@ -542,25 +550,11 @@ export default function InventoryPage() {
               >
                 <span>{c}</span>
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${categoryFilter === c ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'}`}>
-                  {count}
+                  {displayCount}
                 </span>
               </button>
             );
           })}
-          {dbCategories && dbCategories.filter((dc: any) => !INVENTORY_CATEGORIES.includes(dc.category)).map((dc: any) => (
-            <button
-              key={dc.category}
-              onClick={() => { setCategoryFilter(dc.category); setPage(1); }}
-              className={`px-3 py-1 rounded-lg font-bold transition-all shrink-0 flex items-center gap-1 ${
-                categoryFilter === dc.category ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              <span>{dc.category}</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${categoryFilter === dc.category ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'}`}>
-                {dc.count}
-              </span>
-            </button>
-          ))}
         </div>
       </div>
 
@@ -583,11 +577,8 @@ export default function InventoryPage() {
             onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
           >
             <option value="">All Categories</option>
-            {INVENTORY_CATEGORIES.map(c => (
+            {categoryOptions.map(c => (
               <option key={c} value={c}>{c}</option>
-            ))}
-            {dbCategories && dbCategories.filter((dc: any) => !INVENTORY_CATEGORIES.includes(dc.category)).map((dc: any) => (
-              <option key={dc.category} value={dc.category}>{dc.category}</option>
             ))}
           </select>
         </div>
@@ -629,7 +620,7 @@ export default function InventoryPage() {
                 onChange={(e) => setBulkCategoryTarget(e.target.value)}
               >
                 <option value="">Move to Category...</option>
-                {INVENTORY_CATEGORIES.map(c => (
+                {categoryOptions.map(c => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
@@ -1093,11 +1084,8 @@ export default function InventoryPage() {
                         }
                       }}
                     >
-                      {INVENTORY_CATEGORIES.map(c => (
+                      {categoryOptions.map(c => (
                         <option key={c} value={c}>{c}</option>
-                      ))}
-                      {dbCategories && dbCategories.filter((dc: any) => !INVENTORY_CATEGORIES.includes(dc.category)).map((dc: any) => (
-                        <option key={dc.category} value={dc.category}>{dc.category}</option>
                       ))}
                       <option value="__custom__">➕ Add Custom Category...</option>
                     </select>
