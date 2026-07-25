@@ -5,9 +5,15 @@ export const formatINR = (amount: number | string | null | undefined): string =>
 };
 
 // Date formatter
-export const formatDate = (date: string | null | undefined): string => {
+export const formatDate = (date: string | Date | null | undefined): string => {
   if (!date) return '-';
-  const d = new Date(date);
+  let d: Date;
+  if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    // For date-only string (YYYY-MM-DD), parse using local midnight
+    d = new Date(`${date}T00:00:00`);
+  } else {
+    d = new Date(date);
+  }
   if (isNaN(d.getTime())) return '-';
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };

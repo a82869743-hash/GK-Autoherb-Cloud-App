@@ -538,7 +538,8 @@ export default function InventoryPage() {
             const count = allItems.filter((i: any) => i.category === c).length;
             const dbCount = dbCategories?.find((dc: any) => dc.category === c)?.count || 0;
             const displayCount = Math.max(count, dbCount);
-            if (displayCount === 0 && categoryFilter !== c) return null;
+            const isExplicitCategory = dbCategories?.some((dc: any) => dc.category === c);
+            if (displayCount === 0 && categoryFilter !== c && !isExplicitCategory) return null;
             return (
               <button
                 key={c}
@@ -913,12 +914,14 @@ export default function InventoryPage() {
               loading={createCatMut.isPending}
               disabled={!newCatInput.trim()}
               onClick={async () => {
+                const nameToAdd = newCatInput.trim();
                 try {
-                  const res = await createCatMut.mutateAsync(newCatInput.trim());
+                  const res = await createCatMut.mutateAsync(nameToAdd);
                   toast('success', res.message || 'Category added');
                   setNewCatInput('');
-                  refetchCategories();
-                  refetch();
+                  await refetchCategories();
+                  await refetch();
+                  setCategoryFilter(nameToAdd);
                 } catch (err: any) {
                   toast('error', err.response?.data?.error || 'Failed to add category');
                 }

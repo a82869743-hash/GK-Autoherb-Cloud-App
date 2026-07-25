@@ -308,6 +308,7 @@ export default function ProductsPage() {
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [dbCategories, setDbCategories] = useState<string[]>([]);
 
   // Normalize product name for fuzzy matching
   const normalizeProductName = (name: string) => {
@@ -321,6 +322,14 @@ export default function ProductsPage() {
   const loadData = async () => {
     try {
       setLoading(true);
+      // Fetch master categories list
+      try {
+        const catRes = await api.get('/inventory/categories');
+        if (catRes.data?.data) {
+          setDbCategories(catRes.data.data.map((c: any) => c.category).filter(Boolean));
+        }
+      } catch { /* ignore if categories endpoint fails */ }
+
       // 1. Fetch DB Products (secure customer endpoint) to match live price/stock
       const invRes = await api.get('/products');
       const dbItems = invRes.data?.data || [];
@@ -471,10 +480,13 @@ export default function ProductsPage() {
     loadData();
   }, []);
 
-  // Dynamically derive distinct categories from loaded products
+  // Derive all categories from master dbCategories and loaded products
   const availableCategories = Array.from(
-    new Set(products.map((p) => p.specs?.Category).filter(Boolean))
-  ) as string[];
+    new Set([
+      ...dbCategories,
+      ...products.map((p) => p.specs?.Category).filter(Boolean)
+    ])
+  ).filter(Boolean).sort((a: string, b: string) => a.localeCompare(b)) as string[];
 
   // Filter products by search term and selected category
   const filteredProducts = products.filter((p) => {

@@ -11,7 +11,7 @@ router.post('/upload-image', auth, role(['admin']), upload.single('image'), ctrl
 router.post('/bulk-delete', auth, role(['admin']), ctrl.bulkDelete);
 router.post('/bulk-update-category', auth, role(['admin']), ctrl.bulkUpdateCategory);
 router.post('/bulk-update-status', auth, role(['admin']), ctrl.bulkUpdateStatus);
-router.get('/categories', auth, role(['admin', 'staff']), ctrl.getCategories);
+router.get('/categories', auth, role(['admin', 'staff', 'customer']), ctrl.getCategories);
 router.post('/categories', auth, role(['admin']), ctrl.createCategory);
 router.put('/categories', auth, role(['admin']), ctrl.renameCategory);
 router.delete('/categories', auth, role(['admin']), ctrl.deleteCategory);
