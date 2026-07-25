@@ -927,6 +927,8 @@ export default function InventoryPage() {
                   const res = await createCatMut.mutateAsync(newCatInput.trim());
                   toast('success', res.message || 'Category added');
                   setNewCatInput('');
+                  refetchCategories();
+                  refetch();
                 } catch (err: any) {
                   toast('error', err.response?.data?.error || 'Failed to add category');
                 }

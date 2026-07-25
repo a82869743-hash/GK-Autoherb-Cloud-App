@@ -198,12 +198,21 @@ export default function PackagesPage() {
   const openEdit = (pkg: any) => {
     setEditItem(pkg); 
     setName(pkg.name); setDesc(pkg.description || '');
+
+    const getPriceForCarType = (carType: string, defaultVal: any) => {
+      if (pkg.pricing && pkg.pricing.length > 0) {
+        const row = pkg.pricing.find((r: any) => r.car_type === carType && r.pricing_type === 'basic');
+        if (row && parseFloat(row.price) > 0) return parseFloat(row.price);
+      }
+      return parseFloat(defaultVal) || 0;
+    };
+
     setPrices({
-      price_hatchback: parseFloat(pkg.price_hatchback) || 0,
-      price_medium_hatchback: parseFloat(pkg.price_medium_hatchback) || 0,
-      price_sedan: parseFloat(pkg.price_sedan) || 0,
-      price_premium_sedan: parseFloat(pkg.price_premium_sedan) || 0,
-      price_suv: parseFloat(pkg.price_suv) || 0,
+      price_hatchback: getPriceForCarType('SMALL_HATCHBACK', pkg.price_hatchback),
+      price_medium_hatchback: getPriceForCarType('MEDIUM_HATCHBACK', pkg.price_medium_hatchback),
+      price_sedan: getPriceForCarType('SEDAN_SUV', pkg.price_sedan),
+      price_premium_sedan: getPriceForCarType('PREMIUM_SEDAN', pkg.price_premium_sedan),
+      price_suv: getPriceForCarType('LARGE_CAR', pkg.price_suv),
     });
     setWashCount(pkg.wash_count); setWaxCount(pkg.wax_count);
     setActive(!!pkg.is_published);
@@ -249,6 +258,13 @@ export default function PackagesPage() {
         products: selectedProducts,
         package_validity: packageValidity,
         pickup_enabled: pickupEnabled,
+        pricing: [
+          { car_type: 'SMALL_HATCHBACK', pricing_type: 'basic', price: prices.price_hatchback || 0 },
+          { car_type: 'MEDIUM_HATCHBACK', pricing_type: 'basic', price: prices.price_medium_hatchback || 0 },
+          { car_type: 'SEDAN_SUV', pricing_type: 'basic', price: prices.price_sedan || 0 },
+          { car_type: 'PREMIUM_SEDAN', pricing_type: 'basic', price: prices.price_premium_sedan || 0 },
+          { car_type: 'LARGE_CAR', pricing_type: 'basic', price: prices.price_suv || 0 },
+        ]
       };
 
       // Use new format: services with total_count

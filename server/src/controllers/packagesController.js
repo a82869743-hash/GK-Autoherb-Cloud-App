@@ -197,6 +197,41 @@ exports.update = async (req, res) => {
       await conn.query(`UPDATE packages SET ${updates.join(', ')} WHERE id = ?`, params);
     }
 
+    // Sync v2 pricing matrix table
+    if (req.body.pricing && Array.isArray(req.body.pricing) && req.body.pricing.length > 0) {
+      for (const p of req.body.pricing) {
+        if (p.car_type && p.pricing_type && p.price !== undefined) {
+          await conn.query(
+            `INSERT INTO package_pricing (package_id, car_type, pricing_type, price)
+             VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE price = VALUES(price)`,
+            [id, p.car_type, p.pricing_type, Number(p.price) || 0]
+          );
+        }
+      }
+    } else if (
+      price_hatchback !== undefined || price_medium_hatchback !== undefined ||
+      price_sedan !== undefined || price_premium_sedan !== undefined || price_suv !== undefined
+    ) {
+      const categoryPriceMap = {
+        SMALL_HATCHBACK: price_hatchback,
+        MEDIUM_HATCHBACK: price_medium_hatchback,
+        SEDAN_SUV: price_sedan,
+        PREMIUM_SEDAN: price_premium_sedan,
+        LARGE_CAR: price_suv,
+      };
+      for (const [carType, priceVal] of Object.entries(categoryPriceMap)) {
+        if (priceVal !== undefined) {
+          await conn.query(
+            `INSERT INTO package_pricing (package_id, car_type, pricing_type, price)
+             VALUES (?, ?, 'basic', ?)
+             ON DUPLICATE KEY UPDATE price = VALUES(price)`,
+            [id, carType, Number(priceVal) || 0]
+          );
+        }
+      }
+    }
+
     // Replace service links — new format with total_count
     if (services !== undefined) {
       await conn.query('DELETE FROM package_services WHERE package_id = ?', [id]);
