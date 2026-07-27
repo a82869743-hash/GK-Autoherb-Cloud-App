@@ -1,15 +1,14 @@
 /**
  * ═══════════════════════════════════════════════════════════
- * DATABASE MIGRATION: Add missing columns for live server
+ * [DEPRECATED / SUPERSEDED] DATABASE MIGRATION SCRIPT
  * ═══════════════════════════════════════════════════════════
  * 
- * This script safely adds columns that the application code
- * references but may not exist in the live database.
+ * NOTE: Schema definitions in this standalone script are now
+ * fully included in standard migration file:
+ * server/migrations/072_vendor_gst_purchases_v2.sql
  * 
- * Run: node server/scripts/migrate_columns.js
- * 
- * Safe to run multiple times — all operations use IF NOT EXISTS
- * or check for column existence before adding.
+ * Standard runner (`node server/scripts/migrate.js`) handles table creation.
+ * This file is retained for backwards compatibility only.
  */
 
 const path = require('path');

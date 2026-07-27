@@ -6,7 +6,8 @@ import { z } from 'zod';
 import toast from 'react-hot-toast';
 import { useRegister } from '../../api/hooks/useAuth';
 import { useAuthStore } from '../../store/authStore';
-import { carBrands, getModelsForBrand } from '../../utils/carData';
+import { carBrands as fallbackCarBrands, getModelsForBrand } from '../../utils/carData';
+import { useBrands, useModels } from '../../api/hooks/useVehicles';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -36,7 +37,17 @@ export default function RegisterPage() {
   const [customBrand, setCustomBrand] = useState('');
   const [customModel, setCustomModel] = useState('');
 
-  const models = selectedBrand ? getModelsForBrand(selectedBrand) : [];
+  const { data: brandsRes } = useBrands();
+  const { data: modelsRes } = useModels(selectedBrand);
+
+  const liveBrands: string[] = brandsRes?.data || [];
+  const carBrands = liveBrands.length > 0 ? Array.from(new Set([...liveBrands, 'Others'])) : fallbackCarBrands;
+
+  const liveModels: string[] = modelsRes?.data || [];
+  const models = selectedBrand
+    ? (liveModels.length > 0 ? Array.from(new Set([...liveModels, 'Other'])) : getModelsForBrand(selectedBrand))
+    : [];
+
   const isOtherBrand = selectedBrand === 'Others';
   const isOtherModel = selectedModel === 'Other';
 

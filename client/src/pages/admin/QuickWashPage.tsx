@@ -294,6 +294,7 @@ function CreateQuickWashModal({ onClose }: { onClose: () => void }) {
   const [selectedCustomerName, setSelectedCustomerName] = useState('');
   const [customBrand, setCustomBrand] = useState('');
   const [customModel, setCustomModel] = useState('');
+  const [isAutoFilled, setIsAutoFilled] = useState(false);
 
   // Data hooks
   const { data: searchResults = [] } = useCustomerSearch(customerQuery);
@@ -307,6 +308,39 @@ function CreateQuickWashModal({ onClose }: { onClose: () => void }) {
   const brands: string[] = brandsData?.data || [];
   const models: string[] = modelsData?.data || [];
   const services: { id: number; name: string }[] = servicesData?.data || [];
+
+  // Auto-fill customer/vehicle details when typing registration number
+  useEffect(() => {
+    const reg = form.vehicle_reg_no.trim();
+    if (reg.length < 4) {
+      setIsAutoFilled(false);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const { default: api } = await import('../../api/axiosInstance');
+        const res = await api.get(`/vehicles/all?search=${encodeURIComponent(reg)}`);
+        const matches = res.data.data || [];
+        const match = matches.find((v: any) => v.registration_no?.toUpperCase() === reg.toUpperCase()) || matches[0];
+        if (match && match.registration_no?.toUpperCase() === reg.toUpperCase()) {
+          setForm((f) => ({
+            ...f,
+            customer_id: match.customer_id,
+            vehicle_id: match.id,
+            vehicle_brand: match.brand || f.vehicle_brand,
+            vehicle_model: match.model || f.vehicle_model,
+            vehicle_category: match.category || f.vehicle_category,
+          }));
+          if (match.customer_name) {
+            setSelectedCustomerName(`${match.customer_name} (${match.customer_mobile || 'No mobile'})`);
+            setCustomerQuery(match.customer_name);
+          }
+          setIsAutoFilled(true);
+        }
+      } catch {}
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [form.vehicle_reg_no]);
 
   // Auto-fill customer's vehicles when a customer is selected
   const handleSelectCustomer = useCallback(async (c: { id: number; name: string; mobile: string }) => {
@@ -424,8 +458,13 @@ function CreateQuickWashModal({ onClose }: { onClose: () => void }) {
               value={form.vehicle_reg_no}
               onChange={(e) => setForm((f) => ({ ...f, vehicle_reg_no: e.target.value.toUpperCase() }))}
               placeholder="MH12AB1234"
-              className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-red-100 focus:border-red-300 outline-none uppercase font-mono tracking-wider"
+              className="w-full px-4 py-2.5 bg-[#f6f3f2] focus:bg-white border border-transparent focus:border-red-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-red-100 outline-none uppercase font-mono tracking-wider transition-all"
             />
+            {isAutoFilled && (
+              <p className="text-[10px] text-emerald-700 font-bold mt-1.5 flex items-center gap-1">
+                <Check size={11} className="text-emerald-600" /> Auto-filled customer and vehicle details from record
+              </p>
+            )}
           </div>
 
           {/* Brand & Model dropdowns */}

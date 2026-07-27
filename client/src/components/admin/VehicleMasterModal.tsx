@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Check, Car } from 'lucide-react';
+import { Plus, Edit2, Trash2, Check, Car, Search } from 'lucide-react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import api from '../../api/axiosInstance';
@@ -21,6 +21,7 @@ interface VehicleMasterModalProps {
 export default function VehicleMasterModal({ open, onClose }: VehicleMasterModalProps) {
   const [items, setItems] = useState<VehicleMasterItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Form states for creating new entry
   const [makeInput, setMakeInput] = useState('');
@@ -165,6 +166,18 @@ export default function VehicleMasterModal({ open, onClose }: VehicleMasterModal
           </div>
         </div>
 
+        {/* Search bar */}
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search by brand, model, or variant..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+          />
+        </div>
+
         {/* List of Entries Table */}
         <div className="max-h-[400px] overflow-y-auto border border-gray-200 rounded-xl">
           <table className="w-full text-left text-xs">
@@ -182,12 +195,32 @@ export default function VehicleMasterModal({ open, onClose }: VehicleMasterModal
                 <tr>
                   <td colSpan={5} className="p-4 text-center text-gray-400 italic">Loading vehicle master catalog...</td>
                 </tr>
-              ) : items.length === 0 ? (
+              ) : items.filter(item => {
+                  if (!searchQuery.trim()) return true;
+                  const q = searchQuery.toLowerCase().trim();
+                  return (
+                    item.make?.toLowerCase().includes(q) ||
+                    item.model?.toLowerCase().includes(q) ||
+                    item.variant?.toLowerCase().includes(q) ||
+                    item.vehicle_category?.toLowerCase().includes(q)
+                  );
+                }).length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-4 text-center text-gray-400 italic">No car brands or models found.</td>
+                  <td colSpan={5} className="p-4 text-center text-gray-400 italic">
+                    {searchQuery.trim() ? `No car brand or model matching "${searchQuery}"` : 'No car brands or models found.'}
+                  </td>
                 </tr>
               ) : (
-                items.map((item) => (
+                items.filter(item => {
+                  if (!searchQuery.trim()) return true;
+                  const q = searchQuery.toLowerCase().trim();
+                  return (
+                    item.make?.toLowerCase().includes(q) ||
+                    item.model?.toLowerCase().includes(q) ||
+                    item.variant?.toLowerCase().includes(q) ||
+                    item.vehicle_category?.toLowerCase().includes(q)
+                  );
+                }).map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50/80 transition-colors">
                     {editingId === item.id ? (
                       <>

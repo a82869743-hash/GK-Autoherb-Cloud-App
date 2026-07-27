@@ -89,19 +89,22 @@ exports.delete = async (req, res) => {
     if (!existing.length) return res.status(404).json({ success: false, error: 'Vendor not found' });
     const vendorName = existing[0].name;
 
-    // Safeguard: Check if referenced by purchase bills
+    // Safeguard: Check if referenced by purchase bills or expenses
     let billCount = 0;
     try {
-      const [bills] = await pool.query('SELECT COUNT(*) AS count FROM purchase_bills WHERE vendor_id = ?', [vendorId]);
-      billCount = bills[0]?.count || 0;
-    } catch {
-      // Table may not exist on some DB instances
-    }
+      const [bills] = await pool.query('SELECT COUNT(*) AS count FROM v2_purchases WHERE vendor_id = ?', [vendorId]);
+      billCount += (bills[0]?.count || 0);
+    } catch (chkErr) {}
+
+    try {
+      const [expenses] = await pool.query('SELECT COUNT(*) AS count FROM v2_expenses WHERE vendor_id = ?', [vendorId]);
+      billCount += (expenses[0]?.count || 0);
+    } catch (chkErr) {}
 
     if (billCount > 0) {
       return res.status(400).json({
         success: false,
-        error: `Cannot delete vendor "${vendorName}": ${billCount} purchase bill(s) reference this vendor. Deactivate the vendor instead to preserve financial history.`
+        error: `Cannot delete vendor "${vendorName}": ${billCount} purchase record(s) or expense bill(s) reference this vendor. Deactivate the vendor instead to preserve financial history.`
       });
     }
 

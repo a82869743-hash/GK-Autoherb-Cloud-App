@@ -11,28 +11,79 @@ exports.create = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Vendor, date, and items are required' });
     }
 
-    // Calculate total amount from items
-    let totalAmount = 0;
-    for (const item of items) {
-      totalAmount += parseFloat(item.quantity || 0) * parseFloat(item.unit_price || 0);
-    }
-    const finalTotal = totalAmount + parseFloat(tax_amount);
+    // 1. Calculate item totals and GST split per line item
+    let totalTaxable = 0;
+    let totalGstAmount = 0;
 
-    // 1. Insert header
+    const processedItems = items.map((item) => {
+      const qty = parseFloat(item.quantity || 1);
+      const unitCost = parseFloat(item.unit_price || 0);
+      const lineTaxable = qty * unitCost;
+      const gstRate = parseFloat(item.gst_rate || 0);
+      const isIgst = Boolean(item.is_igst);
+
+      let lineGst = 0;
+      let cgst = 0;
+      let sgst = 0;
+      let igst = 0;
+
+      if (gstRate > 0) {
+        lineGst = (lineTaxable * gstRate) / 100;
+        if (isIgst) {
+          igst = lineGst;
+        } else {
+          cgst = lineGst / 2;
+          sgst = lineGst / 2;
+        }
+      }
+
+      totalTaxable += lineTaxable;
+      totalGstAmount += lineGst;
+
+      return {
+        item_id: item.item_id,
+        hsn_sac: item.hsn_sac || null,
+        quantity: qty,
+        unit_price: unitCost,
+        gst_rate: gstRate,
+        cgst_amount: cgst,
+        sgst_amount: sgst,
+        igst_amount: igst,
+        total_price: lineTaxable + lineGst
+      };
+    });
+
+    const finalTaxAmount = totalGstAmount > 0 ? totalGstAmount : parseFloat(tax_amount || 0);
+    const finalTotal = totalTaxable + finalTaxAmount;
+
+    // 2. Fetch vendor's previous running balance
+    const [prevBalRow] = await connection.query(
+      `SELECT running_balance FROM v2_purchases 
+       WHERE vendor_id = ? 
+       ORDER BY purchase_date DESC, id DESC LIMIT 1`,
+      [vendor_id]
+    );
+    const previousBalance = prevBalRow.length ? parseFloat(prevBalRow[0].running_balance || 0) : 0;
+    const runningBalance = previousBalance + finalTotal;
+
+    // 3. Insert header
     const [headerResult] = await connection.query(
-      `INSERT INTO v2_purchases (vendor_id, purchase_date, invoice_number, total_amount, tax_amount, status, notes)
-       VALUES (?, ?, ?, ?, ?, 'received', ?)`,
-      [vendor_id, purchase_date, invoice_number || null, finalTotal, tax_amount, notes || '']
+      `INSERT INTO v2_purchases (vendor_id, purchase_date, invoice_number, taxable_amount, tax_amount, total_amount, previous_balance, running_balance, status, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'received', ?)`,
+      [vendor_id, purchase_date, invoice_number || null, totalTaxable, finalTaxAmount, finalTotal, previousBalance, runningBalance, notes || '']
     );
     const purchaseId = headerResult.insertId;
 
-    // 2. Insert line items & update inventory
-    for (const item of items) {
-      const lineTotal = parseFloat(item.quantity) * parseFloat(item.unit_price);
+    // 4. Insert line items & update inventory stock
+    for (const item of processedItems) {
       await connection.query(
-        `INSERT INTO v2_purchase_items (purchase_id, item_id, quantity, unit_price, total_price, received_quantity)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [purchaseId, item.item_id, item.quantity, item.unit_price, lineTotal, item.quantity]
+        `INSERT INTO v2_purchase_items (purchase_id, item_id, hsn_sac, quantity, unit_price, gst_rate, cgst_amount, sgst_amount, igst_amount, total_price, received_quantity)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          purchaseId, item.item_id, item.hsn_sac, item.quantity, item.unit_price,
+          item.gst_rate, item.cgst_amount, item.sgst_amount, item.igst_amount,
+          item.total_price, item.quantity
+        ]
       );
 
       // Increment stock in inventory
@@ -42,29 +93,36 @@ exports.create = async (req, res) => {
       );
     }
 
-    // 3. GST auto-logging
+    // 5. GST auto-logging
     const [gstSetting] = await connection.query("SELECT value FROM settings WHERE key_name = 'is_gst_applicable'");
     const isGstEnabled = gstSetting.length && gstSetting[0].value === '1';
 
-    if (isGstEnabled) {
+    if (isGstEnabled || finalTaxAmount > 0) {
       const periodMonth = new Date(purchase_date).getMonth() + 1;
       const periodYear = new Date(purchase_date).getFullYear();
       const [gstSettingNo] = await connection.query("SELECT value FROM settings WHERE key_name = 'gstin'");
       const gstin = gstSettingNo.length ? gstSettingNo[0].value : '';
 
-      const taxableAmount = totalAmount;
-      const cgst = parseFloat(tax_amount) / 2;
-      const sgst = parseFloat(tax_amount) / 2;
-      const igst = 0;
+      let totalCgst = 0; let totalSgst = 0; let totalIgst = 0;
+      processedItems.forEach(i => {
+        totalCgst += i.cgst_amount;
+        totalSgst += i.sgst_amount;
+        totalIgst += i.igst_amount;
+      });
+
+      if (totalCgst === 0 && totalSgst === 0 && totalIgst === 0 && finalTaxAmount > 0) {
+        totalCgst = finalTaxAmount / 2;
+        totalSgst = finalTaxAmount / 2;
+      }
 
       await connection.query(
         `INSERT INTO v2_gst_records (record_type, purchase_id, gstin, taxable_amount, cgst, sgst, igst, total_gst, period_month, period_year)
          VALUES ('purchase', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [purchaseId, gstin, taxableAmount, cgst, sgst, igst, tax_amount, periodMonth, periodYear]
+        [purchaseId, gstin, totalTaxable, totalCgst, totalSgst, totalIgst, finalTaxAmount, periodMonth, periodYear]
       );
     }
 
-    // 4. Create an expense record to link to balance sheet
+    // 6. Create expense record linked to balance sheet
     await connection.query(
       `INSERT INTO v2_expenses (category, description, amount, expense_date, payment_mode, vendor_id, added_by)
        VALUES ('Inventory Purchase', ?, ?, ?, 'cash', ?, ?)`,
@@ -72,7 +130,11 @@ exports.create = async (req, res) => {
     );
 
     await connection.commit();
-    res.status(201).json({ success: true, data: { id: purchaseId }, message: 'Purchase bill recorded and inventory updated.' });
+    res.status(201).json({
+      success: true,
+      data: { id: purchaseId, previous_balance: previousBalance, running_balance: runningBalance },
+      message: 'Purchase bill recorded and inventory updated.'
+    });
   } catch (err) {
     await connection.rollback();
     console.error('Create purchase bill error:', err);
@@ -98,7 +160,7 @@ exports.list = async (req, res) => {
        FROM v2_purchases p
        LEFT JOIN vendors v ON p.vendor_id = v.id
        WHERE ${where}
-       ORDER BY p.purchase_date DESC, p.created_at DESC
+       ORDER BY p.purchase_date DESC, p.id DESC
        LIMIT ? OFFSET ?`,
       [...params, parseInt(limit), offset]
     );
@@ -116,12 +178,12 @@ exports.list = async (req, res) => {
   }
 };
 
-// Get details of a single purchase bill
+// Get details of a single purchase bill (with tax analysis breakdown & vendor balance)
 exports.getDetail = async (req, res) => {
   try {
     const { id } = req.params;
     const [header] = await pool.query(
-      `SELECT p.*, v.name as vendor_name, v.mobile as vendor_mobile, v.email as vendor_email
+      `SELECT p.*, v.name as vendor_name, v.phone as vendor_phone, v.email as vendor_email, v.address as vendor_address
        FROM v2_purchases p
        LEFT JOIN vendors v ON p.vendor_id = v.id
        WHERE p.id = ?`,
@@ -138,11 +200,33 @@ exports.getDetail = async (req, res) => {
       [id]
     );
 
+    // Group items for GST Tax Analysis breakdown table
+    const taxSummary: Record<string, { hsn_sac: string; rate: number; taxable: number; cgst: number; sgst: number; igst: number }> = {};
+    items.forEach((item: any) => {
+      const key = `${item.hsn_sac || 'N/A'}_${item.gst_rate || 0}`;
+      const lineTaxable = parseFloat(item.quantity) * parseFloat(item.unit_price);
+      if (!taxSummary[key]) {
+        taxSummary[key] = {
+          hsn_sac: item.hsn_sac || 'N/A',
+          rate: parseFloat(item.gst_rate || 0),
+          taxable: 0,
+          cgst: 0,
+          sgst: 0,
+          igst: 0,
+        };
+      }
+      taxSummary[key].taxable += lineTaxable;
+      taxSummary[key].cgst += parseFloat(item.cgst_amount || 0);
+      taxSummary[key].sgst += parseFloat(item.sgst_amount || 0);
+      taxSummary[key].igst += parseFloat(item.igst_amount || 0);
+    });
+
     res.json({
       success: true,
       data: {
         ...header[0],
-        items
+        items,
+        tax_summary: Object.values(taxSummary)
       }
     });
   } catch (err) {

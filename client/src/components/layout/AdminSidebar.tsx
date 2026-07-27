@@ -78,6 +78,7 @@ const navCategories: NavCategory[] = [
     label: 'Finance',
     items: [
       { to: '/admin/accounts', icon: DollarSign, label: 'Accounts', permission: 'accounts.view' },
+      { to: '/admin/vendors', icon: Users, label: 'Vendors', permission: 'accounts.view' },
       { to: '/admin/payments', icon: CreditCard, label: 'Payments', badge: 'New', permission: 'payments.view' },
       { to: '/admin/billing', icon: FileText, label: 'Manual Billing', permission: 'accounts.view' },
       { to: '/admin/invoices', icon: Archive, label: 'All Invoices', permission: 'accounts.view' },

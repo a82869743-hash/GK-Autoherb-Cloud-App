@@ -648,7 +648,7 @@ export default function CustomerBookingsPage() {
                   <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Search by name or mobile..."
+                    placeholder="Search by name, mobile, or vehicle reg no..."
                     value={searchCustomerQuery}
                     onChange={(e) => setSearchCustomerQuery(e.target.value)}
                     className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-gray-200 text-sm font-medium bg-white focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F] outline-none transition-all"
@@ -660,35 +660,52 @@ export default function CustomerBookingsPage() {
                   )}
                 </div>
                 {searchCustomerQuery.trim().length > 0 && (
-                  <div className="border border-gray-100 rounded-xl max-h-40 overflow-y-auto divide-y divide-gray-50 bg-white">
+                  <div className="border border-gray-100 rounded-xl max-h-48 overflow-y-auto divide-y divide-gray-50 bg-white">
                     {customersList
-                      .filter(c =>
-                        c.name.toLowerCase().includes(searchCustomerQuery.toLowerCase()) ||
-                        c.mobile.includes(searchCustomerQuery)
-                      )
-                      .slice(0, 5)
-                      .map(c => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => {
-                            setManualForm(prev => ({ ...prev, customer_id: String(c.id) }));
-                            setSearchCustomerQuery('');
-                          }}
-                          className="w-full text-left px-4 py-2 hover:bg-gray-50 text-sm font-medium text-[#1c1b1b] flex items-center justify-between"
-                        >
-                          <div>
-                            <p className="font-bold">{c.name}</p>
-                            <p className="text-xs text-[#5f5e5e]">{c.mobile}</p>
-                          </div>
-                          <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded font-black text-[#5f5e5e] uppercase">Select</span>
-                        </button>
-                      ))}
-                    {customersList.filter(c =>
-                      c.name.toLowerCase().includes(searchCustomerQuery.toLowerCase()) ||
-                      c.mobile.includes(searchCustomerQuery)
-                    ).length === 0 && (
-                      <p className="text-xs text-[#5f5e5e] p-3 text-center">No customers found matching search.</p>
+                      .filter(c => {
+                        const q = searchCustomerQuery.toLowerCase().trim();
+                        const nameMatch = c.name?.toLowerCase().includes(q);
+                        const mobileMatch = c.mobile?.includes(q);
+                        const regMatch = c.vehicles?.some((v: any) => v.registration_no?.toLowerCase().includes(q));
+                        return nameMatch || mobileMatch || regMatch;
+                      })
+                      .slice(0, 7)
+                      .map(c => {
+                        const q = searchCustomerQuery.toLowerCase().trim();
+                        const matchedVeh = c.vehicles?.find((v: any) => v.registration_no?.toLowerCase().includes(q));
+
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => {
+                              setManualForm(prev => ({ ...prev, customer_id: String(c.id) }));
+                              setSearchCustomerQuery('');
+                            }}
+                            className="w-full text-left px-4 py-2.5 hover:bg-gray-50 text-sm font-medium text-[#1c1b1b] flex items-center justify-between transition-colors"
+                          >
+                            <div>
+                              <p className="font-bold">{c.name}</p>
+                              <p className="text-xs text-[#5f5e5e]">{c.mobile}</p>
+                              {matchedVeh && (
+                                <p className="text-[10px] text-blue-600 font-bold mt-0.5">
+                                  🚗 Matched Reg: {matchedVeh.registration_no} ({matchedVeh.brand} {matchedVeh.model})
+                                </p>
+                              )}
+                            </div>
+                            <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded font-black text-[#5f5e5e] uppercase">Select</span>
+                          </button>
+                        );
+                      })}
+                    {customersList.filter(c => {
+                      const q = searchCustomerQuery.toLowerCase().trim();
+                      return (
+                        c.name?.toLowerCase().includes(q) ||
+                        c.mobile?.includes(q) ||
+                        c.vehicles?.some((v: any) => v.registration_no?.toLowerCase().includes(q))
+                      );
+                    }).length === 0 && (
+                      <p className="text-xs text-[#5f5e5e] p-3 text-center">No customers or vehicles found matching search.</p>
                     )}
                   </div>
                 )}

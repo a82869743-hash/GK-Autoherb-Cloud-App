@@ -18,6 +18,7 @@ export const useInventoryCategories = () =>
       const res = await api.get<{ success: boolean; data: Array<{ category: string; count: number }> }>('/inventory/categories');
       return res.data.data;
     },
+    placeholderData: (prev) => prev,
   });
 
 export const useInventoryItem = (id: number | undefined) =>

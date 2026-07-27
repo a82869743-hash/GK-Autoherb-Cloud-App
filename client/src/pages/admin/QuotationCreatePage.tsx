@@ -6,6 +6,8 @@ import toast from 'react-hot-toast';
 import { useServices } from '../../api/hooks/useServices';
 import { usePackages } from '../../api/hooks/usePackages';
 import { useCreateQuotation, useUpdateQuotation, useQuotation } from '../../api/hooks/useQuotations';
+import { useBrands, useModels } from '../../api/hooks/useVehicles';
+import { getCategoryForModel, carBrands as fallbackCarBrands, getModelsForBrand } from '../../utils/carData';
 
 const CAR_SEGMENTS = [
   { value: 'hatchback', label: 'Small Hatchback', packageCarType: 'SMALL_HATCHBACK', serviceCol: 'price_hatchback' },
@@ -56,6 +58,17 @@ export default function QuotationCreatePage() {
   const { data: servicesRes, isLoading: loadingServices } = useServices({ active_only: true });
   const { data: packagesRes, isLoading: loadingPackages } = usePackages({ published_only: true });
   const { data: existingQuotation, isLoading: loadingQuotation } = useQuotation(isEdit ? Number(id) : undefined);
+
+  const { data: brandsRes } = useBrands();
+  const { data: modelsRes } = useModels(carBrand);
+
+  const liveBrands: string[] = brandsRes?.data || [];
+  const carBrandsList = liveBrands.length > 0 ? Array.from(new Set([...liveBrands, 'Others'])) : fallbackCarBrands;
+
+  const liveModels: string[] = modelsRes?.data || [];
+  const carModelsList = carBrand
+    ? (liveModels.length > 0 ? Array.from(new Set([...liveModels, 'Other'])) : getModelsForBrand(carBrand))
+    : [];
 
   const createMutation = useCreateQuotation();
   const updateMutation = useUpdateQuotation();
@@ -368,22 +381,42 @@ export default function QuotationCreatePage() {
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#5f5e5e', marginBottom: '6px' }}>Car Brand</label>
-                <input
+                <select
                   value={carBrand}
-                  onChange={e => setCarBrand(e.target.value)}
-                  placeholder="e.g. Maruti Suzuki"
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #ede8e7', fontSize: '13px', outline: 'none' }}
-                />
+                  onChange={e => {
+                    const selectedB = e.target.value;
+                    setCarBrand(selectedB);
+                    setCarModel('');
+                  }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #ede8e7', fontSize: '13px', outline: 'none', background: 'white', cursor: 'pointer' }}
+                >
+                  <option value="">Select brand...</option>
+                  {carBrandsList.map(b => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#5f5e5e', marginBottom: '6px' }}>Car Model</label>
-                <input
+                <select
                   value={carModel}
-                  onChange={e => setCarModel(e.target.value)}
-                  placeholder="e.g. Swift"
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #ede8e7', fontSize: '13px', outline: 'none' }}
-                />
+                  onChange={e => {
+                    const selectedM = e.target.value;
+                    setCarModel(selectedM);
+                    if (carBrand && selectedM && selectedM !== 'Other') {
+                      const autoCat = getCategoryForModel(carBrand, selectedM);
+                      if (autoCat) handleSegmentChange(autoCat);
+                    }
+                  }}
+                  disabled={!carBrand}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #ede8e7', fontSize: '13px', outline: 'none', background: 'white', cursor: 'pointer' }}
+                >
+                  <option value="">{carBrand ? 'Select model...' : 'Select brand first'}</option>
+                  {carModelsList.map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="quotation-segment-col">

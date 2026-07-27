@@ -161,7 +161,7 @@ export default function AccountsPage() {
   const handleAddPurchaseItem = () => {
     setPurchaseForm(prev => ({
       ...prev,
-      items: [...prev.items, { item_id: '', quantity: '1', unit_price: '0' }]
+      items: [...prev.items, { item_id: '', hsn_sac: '', quantity: '1', unit_price: '0', gst_rate: '18' }]
     }));
   };
 
@@ -1145,10 +1145,10 @@ export default function AccountsPage() {
 
             <div className="space-y-3">
               {purchaseForm.items.map((item, idx) => (
-                <div key={idx} className="flex gap-2 items-end border border-gray-50 p-2 rounded-lg bg-gray-50/50">
-                  <div className="flex-1">
+                <div key={idx} className="grid grid-cols-12 gap-2 items-end border border-gray-100 p-2 rounded-lg bg-gray-50/50">
+                  <div className="col-span-4">
                     <Select
-                      label="Select Product *"
+                      label="Product *"
                       value={item.item_id}
                       onChange={e => handlePurchaseItemChange(idx, 'item_id', e.target.value)}
                       options={[
@@ -1158,7 +1158,16 @@ export default function AccountsPage() {
                       required
                     />
                   </div>
-                  <div className="w-20">
+                  <div className="col-span-2">
+                    <Input
+                      type="text"
+                      label="HSN/SAC"
+                      placeholder="e.g. 3402"
+                      value={item.hsn_sac || ''}
+                      onChange={e => handlePurchaseItemChange(idx, 'hsn_sac', e.target.value)}
+                    />
+                  </div>
+                  <div className="col-span-2">
                     <Input
                       type="number"
                       label="Qty *"
@@ -1168,7 +1177,7 @@ export default function AccountsPage() {
                       required
                     />
                   </div>
-                  <div className="w-24">
+                  <div className="col-span-2">
                     <Input
                       type="number"
                       label="Unit Cost *"
@@ -1178,15 +1187,31 @@ export default function AccountsPage() {
                       required
                     />
                   </div>
-                  {purchaseForm.items.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemovePurchaseItem(idx)}
-                      className="p-2 border border-red-100 text-red-600 hover:bg-red-50 rounded-lg transition"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  )}
+                  <div className="col-span-2 flex items-center gap-1">
+                    <div className="flex-1">
+                      <Select
+                        label="GST %"
+                        value={item.gst_rate || '18'}
+                        onChange={e => handlePurchaseItemChange(idx, 'gst_rate', e.target.value)}
+                        options={[
+                          { value: '0', label: '0%' },
+                          { value: '5', label: '5%' },
+                          { value: '12', label: '12%' },
+                          { value: '18', label: '18%' },
+                          { value: '28', label: '28%' }
+                        ]}
+                      />
+                    </div>
+                    {purchaseForm.items.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePurchaseItem(idx)}
+                        className="p-2 border border-red-100 text-red-600 hover:bg-red-50 rounded-lg transition mt-5 shrink-0"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

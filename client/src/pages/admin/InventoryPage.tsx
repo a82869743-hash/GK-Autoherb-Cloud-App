@@ -946,7 +946,7 @@ export default function InventoryPage() {
           {/* List of Existing Categories */}
           <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
             <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Active Categories</h4>
-            {isLoadingCategories ? (
+            {!dbCategories && isLoadingCategories ? (
               <div className="text-xs text-gray-500 py-4 text-center animate-pulse">Loading categories...</div>
             ) : masterCategoryList && masterCategoryList.length > 0 ? (
               masterCategoryList.map((c: any) => (

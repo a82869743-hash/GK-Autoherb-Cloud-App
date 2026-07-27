@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus, ShoppingCart, Download, Search, Filter, RefreshCw, BarChart3, TrendingUp, TrendingDown, Clock, CheckCircle } from 'lucide-react';
 import { useBuySellList, useCreateBuySell, useCompleteBuySell, downloadBuySellInvoice } from '../../api/hooks/useBuySell';
 import { useInventory } from '../../api/hooks/useInventory';
+import { useVendors } from '../../api/hooks/useVendors';
 import { useUIStore } from '../../store/uiStore';
 import PremiumPageHeader from '../../components/shared/PremiumPageHeader';
 import PremiumStatCard from '../../components/shared/PremiumStatCard';
@@ -21,6 +22,7 @@ export default function BuySellPage() {
 
   const { data: buySell, isLoading: isBuySellLoading, refetch } = useBuySellList({ limit: 100 });
   const { data: inventory } = useInventory({});
+  const { data: vendorsList } = useVendors();
   
   const createBuySellMutation = useCreateBuySell();
   const completeBuySellMutation = useCompleteBuySell();
@@ -28,7 +30,7 @@ export default function BuySellPage() {
 
   const [showBsModal, setShowBsModal] = useState(false);
   const [bsForm, setBsForm] = useState({
-    type: 'buy', party_name: '', party_mobile: '', product_id: '', product_name: '',
+    type: 'buy', vendor_id: '', party_name: '', party_mobile: '', product_id: '', product_name: '',
     quantity: '', unit_price: '', transaction_date: new Date().toISOString().slice(0,10)
   });
 
@@ -305,6 +307,27 @@ export default function BuySellPage() {
             onChange={e => setBsForm({ ...bsForm, type: e.target.value })}
           />
           
+          {bsForm.type === 'buy' && (
+            <Select
+              label="Select Vendor (Optional)"
+              options={[
+                { value: '', label: 'Ad-hoc Vendor (Not Registered)' },
+                ...((vendorsList?.data || []).map((v: any) => ({ value: String(v.id), label: `${v.name} (${v.phone || 'No phone'})` })))
+              ]}
+              value={bsForm.vendor_id || ''}
+              onChange={e => {
+                const vId = e.target.value;
+                const foundV = (vendorsList?.data || []).find((x: any) => String(x.id) === vId);
+                setBsForm({
+                  ...bsForm,
+                  vendor_id: vId,
+                  party_name: foundV ? foundV.name : bsForm.party_name,
+                  party_mobile: foundV ? (foundV.phone || bsForm.party_mobile) : bsForm.party_mobile
+                });
+              }}
+            />
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Party Name *" placeholder="e.g. Acme Corp" value={bsForm.party_name} onChange={e => setBsForm({ ...bsForm, party_name: e.target.value })} />
             <Input label="Party Mobile" placeholder="e.g. 9876543210" value={bsForm.party_mobile} onChange={e => setBsForm({ ...bsForm, party_mobile: e.target.value })} />

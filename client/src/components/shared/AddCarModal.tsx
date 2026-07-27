@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { X, Car, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { carBrands, getModelsForBrand, getCategoryForModel } from '../../utils/carData';
+import { carBrands as fallbackCarBrands, getModelsForBrand, getCategoryForModel } from '../../utils/carData';
+import { useBrands, useModels } from '../../api/hooks/useVehicles';
 import api from '../../api/axiosInstance';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -22,6 +23,17 @@ export default function AddCarModal({ isOpen, onClose, editVehicle }: AddCarModa
   const [category, setCategory] = useState('sedan');
   const [isPending, setIsPending] = useState(false);
 
+  const { data: brandsRes } = useBrands();
+  const { data: modelsRes } = useModels(brand);
+
+  const liveBrands: string[] = brandsRes?.data || [];
+  const carBrands = liveBrands.length > 0 ? Array.from(new Set([...liveBrands, 'Others'])) : fallbackCarBrands;
+
+  const liveModels: string[] = modelsRes?.data || [];
+  const models = brand
+    ? (liveModels.length > 0 ? Array.from(new Set([...liveModels, 'Other'])) : getModelsForBrand(brand))
+    : [];
+
   useEffect(() => {
     if (editVehicle) {
       setBrand(editVehicle.brand || '');
@@ -34,7 +46,6 @@ export default function AddCarModal({ isOpen, onClose, editVehicle }: AddCarModa
     }
   }, [editVehicle, isOpen]);
 
-  const models = brand ? getModelsForBrand(brand) : [];
   const isOtherBrand = brand === 'Others';
   const isOtherModel = model === 'Other';
 
