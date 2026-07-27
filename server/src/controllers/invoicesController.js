@@ -210,7 +210,7 @@ exports.exportPdf = async (req, res) => {
 
     if (type === 'job_cart') {
       const [rows] = await pool.query(`
-        SELECT jc.*, u.name as customer_name, u.mobile as customer_mobile, v.registration_no, v.brand, v.model
+        SELECT jc.*, v.customer_id AS customer_id, u.name as customer_name, u.mobile as customer_mobile, v.registration_no, v.brand, v.model
         FROM job_carts jc
         JOIN vehicles v ON jc.vehicle_id = v.id
         JOIN users u ON v.customer_id = u.id
@@ -223,7 +223,7 @@ exports.exportPdf = async (req, res) => {
         invoiceData = { ...jc, title: 'Job Cart Invoice', reference: jc.invoice_number || `JC-${jc.id}`, items: [...services.map(s => ({ name: s.service_name, price: Number(s.service_price) + Number(s.labor_charges) })), ...products.map(p => ({ name: p.part_name, price: Number(p.quantity) * Number(p.unit_cost) }))] };
       }
     } else if (type === 'manual_bill') {
-      const [rows] = await pool.query('SELECT mb.* FROM manual_bills mb WHERE id = ?', [id]);
+      const [rows] = await pool.query('SELECT mb.*, mb.customer_id FROM manual_bills mb WHERE id = ?', [id]);
       if (rows.length) {
         const mb = rows[0];
         const [items] = await pool.query('SELECT item_name, quantity, rate FROM manual_bill_items WHERE manual_bill_id = ?', [id]);
@@ -232,6 +232,7 @@ exports.exportPdf = async (req, res) => {
     } else if (type === 'quick_wash') {
       const [rows] = await pool.query(`
         SELECT b.*,
+               COALESCE(b.customer_id, v.customer_id) as customer_id,
                COALESCE(u.name, 'Walk-in Customer') as customer_name,
                COALESCE(u.mobile, 'N/A') as customer_mobile,
                COALESCE(v.registration_no, b.vehicle_reg_no) as registration_no,
@@ -260,8 +261,11 @@ exports.exportPdf = async (req, res) => {
     if (!invoiceData) return res.status(404).json({ success: false, error: 'Invoice not found' });
 
     // IDOR Protection: Customers can only download their own invoice
-    if (req.user && req.user.role === 'customer' && invoiceData.customer_id && parseInt(invoiceData.customer_id) !== parseInt(req.user.id)) {
-      return res.status(403).json({ success: false, error: "Access denied — Cannot access another customer's invoice PDF" });
+    if (req.user && req.user.role === 'customer') {
+      const isOwner = invoiceData.customer_id && parseInt(invoiceData.customer_id) === parseInt(req.user.id);
+      if (!isOwner) {
+        return res.status(403).json({ success: false, error: "Access denied — Cannot access another customer's invoice PDF" });
+      }
     }
 
     const PDFDocument = require('pdfkit');
