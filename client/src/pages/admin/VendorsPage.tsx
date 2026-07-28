@@ -1,13 +1,35 @@
 import { useState } from 'react';
 import {
   Users, Plus, Search, Edit2, Trash2, Phone, Mail,
-  MapPin, Wrench, Shield, Check, X, AlertCircle
+  MapPin, Wrench, AlertCircle, ShoppingBag, ArrowUpRight, ArrowDownLeft, FileText
 } from 'lucide-react';
 import {
   useVendors, useCreateVendor, useUpdateVendor, useDeleteVendor
 } from '../../api/hooks/useVendors';
 import PremiumPageHeader from '../../components/shared/PremiumPageHeader';
 import { PageTransition, AnimatedCard, RippleButton, AnimatedModal } from '../../components/ui/Animations';
+
+interface BuySellHistoryItem {
+  id: number;
+  type: string;
+  product_name: string;
+  quantity: number;
+  unit_price: number;
+  total_amount: number;
+  transaction_date: string;
+  status?: string;
+}
+
+interface PurchaseHistoryItem {
+  purchase_id: number;
+  invoice_number?: string;
+  purchase_date: string;
+  bill_total: number;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+  product_name: string;
+}
 
 interface Vendor {
   id: number;
@@ -17,6 +39,8 @@ interface Vendor {
   service_type?: string;
   address?: string;
   is_active: number;
+  buy_sell_history?: BuySellHistoryItem[];
+  purchase_history?: PurchaseHistoryItem[];
 }
 
 export default function VendorsPage() {
@@ -25,6 +49,8 @@ export default function VendorsPage() {
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [historyVendor, setHistoryVendor] = useState<Vendor | null>(null);
 
   // Form states
   const [formData, setFormData] = useState({
@@ -74,6 +100,11 @@ export default function VendorsPage() {
   const handleOpenDelete = (vendor: Vendor) => {
     setSelectedVendor(vendor);
     setIsDeleteModalOpen(true);
+  };
+
+  const handleOpenHistory = (vendor: Vendor) => {
+    setHistoryVendor(vendor);
+    setIsHistoryModalOpen(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -156,84 +187,152 @@ export default function VendorsPage() {
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="h-48 bg-gray-100 rounded-2xl animate-pulse" />
+            <div key={i} className="h-64 bg-gray-100 rounded-2xl animate-pulse" />
           ))}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {vendors.map((vendor: Vendor, idx: number) => (
-            <AnimatedCard
-              key={vendor.id}
-              className={`bg-white border rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between hover:shadow-md transition-shadow duration-200 ${
-                vendor.is_active === 0 ? 'border-gray-200/60 opacity-75' : 'border-gray-100'
-              }`}
-              delay={idx * 0.05}
-            >
-              {/* Active Badge */}
-              <div className="absolute right-4 top-4">
-                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                  vendor.is_active === 1
-                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                    : 'bg-gray-100 text-gray-400 border border-gray-200'
-                }`}>
-                  {vendor.is_active === 1 ? 'ACTIVE' : 'INACTIVE'}
-                </span>
-              </div>
+          {vendors.map((vendor: Vendor, idx: number) => {
+            const hasBsHistory = (vendor.buy_sell_history?.length || 0) > 0;
+            const hasPurHistory = (vendor.purchase_history?.length || 0) > 0;
+            const totalTxns = (vendor.buy_sell_history?.length || 0) + (vendor.purchase_history?.length || 0);
 
-              <div className="space-y-4">
-                {/* Info Header */}
-                <div>
-                  <h4 className="font-bold text-base text-[#1c1b1b] pr-12 truncate">{vendor.name}</h4>
-                  {vendor.service_type && (
-                    <span className="inline-flex items-center gap-1 mt-1 text-[11px] font-medium text-gray-500 bg-gray-50 px-2 py-0.5 rounded-lg">
-                      <Wrench size={10} />
-                      {vendor.service_type}
-                    </span>
-                  )}
+            return (
+              <AnimatedCard
+                key={vendor.id}
+                className={`bg-white border rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between hover:shadow-md transition-shadow duration-200 ${
+                  vendor.is_active === 0 ? 'border-gray-200/60 opacity-75' : 'border-gray-100'
+                }`}
+                delay={idx * 0.05}
+              >
+                {/* Active Badge */}
+                <div className="absolute right-4 top-4">
+                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                    vendor.is_active === 1
+                      ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                      : 'bg-gray-100 text-gray-400 border border-gray-200'
+                  }`}>
+                    {vendor.is_active === 1 ? 'ACTIVE' : 'INACTIVE'}
+                  </span>
                 </div>
 
-                {/* Contacts */}
-                <div className="space-y-2 text-xs text-gray-600 border-t border-gray-50 pt-3">
-                  {vendor.phone && (
-                    <div className="flex items-center gap-2">
-                      <Phone size={12} className="text-gray-400" />
-                      <span>{vendor.phone}</span>
-                    </div>
-                  )}
-                  {vendor.email && (
-                    <div className="flex items-center gap-2">
-                      <Mail size={12} className="text-gray-400 shrink-0" />
-                      <span className="truncate" title={vendor.email}>{vendor.email}</span>
-                    </div>
-                  )}
-                  {vendor.address && (
-                    <div className="flex items-start gap-2">
-                      <MapPin size={12} className="text-gray-400 shrink-0 mt-0.5" />
-                      <span className="line-clamp-2" title={vendor.address}>{vendor.address}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
+                <div className="space-y-4">
+                  {/* Info Header */}
+                  <div>
+                    <h4 className="font-bold text-base text-[#1c1b1b] pr-12 truncate">{vendor.name}</h4>
+                    {vendor.service_type && (
+                      <span className="inline-flex items-center gap-1 mt-1 text-[11px] font-medium text-gray-500 bg-gray-50 px-2 py-0.5 rounded-lg">
+                        <Wrench size={10} />
+                        {vendor.service_type}
+                      </span>
+                    )}
+                  </div>
 
-              {/* Actions Footer */}
-              <div className="flex justify-end gap-2 border-t border-gray-50 pt-4 mt-4">
-                <RippleButton
-                  onClick={() => handleOpenEdit(vendor)}
-                  className="p-1.5 text-gray-400 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
-                  title="Edit Vendor"
-                >
-                  <Edit2 size={13} />
-                </RippleButton>
-                <RippleButton
-                  onClick={() => handleOpenDelete(vendor)}
-                  className="p-1.5 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition-colors"
-                  title="Delete Vendor"
-                >
-                  <Trash2 size={13} />
-                </RippleButton>
-              </div>
-            </AnimatedCard>
-          ))}
+                  {/* Contacts */}
+                  <div className="space-y-1.5 text-xs text-gray-600 border-t border-gray-50 pt-3">
+                    {vendor.phone && (
+                      <div className="flex items-center gap-2">
+                        <Phone size={12} className="text-gray-400" />
+                        <span>{vendor.phone}</span>
+                      </div>
+                    )}
+                    {vendor.email && (
+                      <div className="flex items-center gap-2">
+                        <Mail size={12} className="text-gray-400 shrink-0" />
+                        <span className="truncate" title={vendor.email}>{vendor.email}</span>
+                      </div>
+                    )}
+                    {vendor.address && (
+                      <div className="flex items-start gap-2">
+                        <MapPin size={12} className="text-gray-400 shrink-0 mt-0.5" />
+                        <span className="line-clamp-2" title={vendor.address}>{vendor.address}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Products Bought / Sold Summary */}
+                  <div className="border-t border-gray-100 pt-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-gray-700 flex items-center gap-1">
+                        <ShoppingBag size={12} className="text-red-500" />
+                        Products Bought / Sold
+                      </span>
+                      <button
+                        onClick={() => handleOpenHistory(vendor)}
+                        className="text-[10px] font-bold text-red-600 hover:text-red-700 underline"
+                      >
+                        View All ({totalTxns})
+                      </button>
+                    </div>
+
+                    {hasBsHistory || hasPurHistory ? (
+                      <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
+                        {vendor.buy_sell_history?.slice(0, 3).map((bs) => (
+                          <div key={`bs-${bs.id}`} className="flex items-center justify-between text-[11px] bg-gray-50 p-1.5 rounded-lg border border-gray-100">
+                            <div className="flex items-center gap-1.5 truncate">
+                              {bs.type === 'buy' ? (
+                                <span className="p-0.5 bg-blue-100 text-blue-700 rounded text-[9px] font-bold flex items-center gap-0.5">
+                                  <ArrowDownLeft size={10} /> BOUGHT
+                                </span>
+                              ) : (
+                                <span className="p-0.5 bg-emerald-100 text-emerald-700 rounded text-[9px] font-bold flex items-center gap-0.5">
+                                  <ArrowUpRight size={10} /> SOLD
+                                </span>
+                              )}
+                              <span className="font-medium text-gray-800 truncate">{bs.product_name}</span>
+                            </div>
+                            <span className="font-semibold text-gray-700 shrink-0">₹{Number(bs.total_amount || (bs.quantity * bs.unit_price)).toLocaleString()}</span>
+                          </div>
+                        ))}
+
+                        {vendor.purchase_history?.slice(0, 2).map((pur, idx) => (
+                          <div key={`pur-${pur.purchase_id}-${idx}`} className="flex items-center justify-between text-[11px] bg-purple-50/60 p-1.5 rounded-lg border border-purple-100">
+                            <div className="flex items-center gap-1.5 truncate">
+                              <span className="p-0.5 bg-purple-100 text-purple-700 rounded text-[9px] font-bold flex items-center gap-0.5">
+                                <FileText size={10} /> PURCHASE
+                              </span>
+                              <span className="font-medium text-gray-800 truncate">{pur.product_name || 'Inventory Item'}</span>
+                            </div>
+                            <span className="font-semibold text-gray-700 shrink-0">₹{Number(pur.line_total || pur.bill_total).toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-gray-400 italic">No products bought or sold yet</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Actions Footer */}
+                <div className="flex justify-between items-center border-t border-gray-50 pt-3 mt-3">
+                  <button
+                    onClick={() => handleOpenHistory(vendor)}
+                    className="text-xs font-semibold text-gray-600 hover:text-red-600 flex items-center gap-1"
+                  >
+                    <ShoppingBag size={13} />
+                    Transactions History
+                  </button>
+
+                  <div className="flex gap-2">
+                    <RippleButton
+                      onClick={() => handleOpenEdit(vendor)}
+                      className="p-1.5 text-gray-400 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+                      title="Edit Vendor"
+                    >
+                      <Edit2 size={13} />
+                    </RippleButton>
+                    <RippleButton
+                      onClick={() => handleOpenDelete(vendor)}
+                      className="p-1.5 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Delete Vendor"
+                    >
+                      <Trash2 size={13} />
+                    </RippleButton>
+                  </div>
+                </div>
+              </AnimatedCard>
+            );
+          })}
 
           {!vendors.length && (
             <div className="col-span-full py-16 text-center">
@@ -243,6 +342,127 @@ export default function VendorsPage() {
           )}
         </div>
       )}
+
+      {/* DETAILED VENDOR TRANSACTIONS & PRODUCTS MODAL */}
+      <AnimatedModal isOpen={isHistoryModalOpen} onClose={() => setIsHistoryModalOpen(false)}>
+        <div className="p-6 space-y-5 max-w-2xl w-full">
+          <div>
+            <div className="flex items-center gap-2">
+              <ShoppingBag size={20} className="text-red-500" />
+              <h3 className="text-lg font-bold text-[#1c1b1b]">
+                {historyVendor?.name} — Products & Transactions History
+              </h3>
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Complete log of products bought, sold, and inventory purchase bills for this vendor.
+            </p>
+          </div>
+
+          {/* Buy & Sell Section */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+              <ArrowDownLeft size={14} className="text-blue-500" />
+              Buy & Sell Products Ledger
+            </h4>
+            {(historyVendor?.buy_sell_history?.length || 0) > 0 ? (
+              <div className="overflow-x-auto border border-gray-200 rounded-xl">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-gray-50 border-b border-gray-200 text-gray-600 font-semibold">
+                    <tr>
+                      <th className="p-2.5">Date</th>
+                      <th className="p-2.5">Type</th>
+                      <th className="p-2.5">Product Name</th>
+                      <th className="p-2.5">Qty</th>
+                      <th className="p-2.5">Unit Price</th>
+                      <th className="p-2.5 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {historyVendor?.buy_sell_history?.map((bs) => (
+                      <tr key={bs.id} className="hover:bg-gray-50/80">
+                        <td className="p-2.5 text-gray-500">
+                          {bs.transaction_date ? new Date(bs.transaction_date).toLocaleDateString() : 'N/A'}
+                        </td>
+                        <td className="p-2.5">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            bs.type === 'buy' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'
+                          }`}>
+                            {bs.type?.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="p-2.5 font-semibold text-gray-800">{bs.product_name}</td>
+                        <td className="p-2.5 text-gray-700">{bs.quantity}</td>
+                        <td className="p-2.5 text-gray-700">₹{Number(bs.unit_price).toLocaleString()}</td>
+                        <td className="p-2.5 text-right font-bold text-gray-900">
+                          ₹{Number(bs.total_amount || (bs.quantity * bs.unit_price)).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 italic bg-gray-50 p-3 rounded-xl border border-gray-100">
+                No Buy & Sell entries recorded for this vendor.
+              </p>
+            )}
+          </div>
+
+          {/* Inventory Purchases Section */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+              <FileText size={14} className="text-purple-500" />
+              Inventory Purchase Bills
+            </h4>
+            {(historyVendor?.purchase_history?.length || 0) > 0 ? (
+              <div className="overflow-x-auto border border-gray-200 rounded-xl">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-gray-50 border-b border-gray-200 text-gray-600 font-semibold">
+                    <tr>
+                      <th className="p-2.5">Date</th>
+                      <th className="p-2.5">Invoice #</th>
+                      <th className="p-2.5">Item Name</th>
+                      <th className="p-2.5">Qty</th>
+                      <th className="p-2.5">Rate</th>
+                      <th className="p-2.5 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {historyVendor?.purchase_history?.map((pur, idx) => (
+                      <tr key={`pur-modal-${pur.purchase_id}-${idx}`} className="hover:bg-gray-50/80">
+                        <td className="p-2.5 text-gray-500">
+                          {pur.purchase_date ? new Date(pur.purchase_date).toLocaleDateString() : 'N/A'}
+                        </td>
+                        <td className="p-2.5 font-mono text-gray-600">{pur.invoice_number || `#${pur.purchase_id}`}</td>
+                        <td className="p-2.5 font-semibold text-gray-800">{pur.product_name || 'Inventory Item'}</td>
+                        <td className="p-2.5 text-gray-700">{pur.quantity}</td>
+                        <td className="p-2.5 text-gray-700">₹{Number(pur.unit_price).toLocaleString()}</td>
+                        <td className="p-2.5 text-right font-bold text-gray-900">
+                          ₹{Number(pur.line_total || pur.bill_total).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 italic bg-gray-50 p-3 rounded-xl border border-gray-100">
+                No Inventory Purchase bills recorded for this vendor.
+              </p>
+            )}
+          </div>
+
+          <div className="flex justify-end pt-3 border-t border-gray-100">
+            <RippleButton
+              type="button"
+              variant="ghost"
+              onClick={() => setIsHistoryModalOpen(false)}
+            >
+              Close
+            </RippleButton>
+          </div>
+        </div>
+      </AnimatedModal>
 
       {/* CREATE / EDIT MODAL */}
       <AnimatedModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>

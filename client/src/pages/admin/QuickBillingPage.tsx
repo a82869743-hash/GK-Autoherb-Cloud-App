@@ -15,6 +15,7 @@ import api from '../../api/axiosInstance';
 import { useInventory } from '../../api/hooks/useInventory';
 import { useServices } from '../../api/hooks/useServices';
 import { useLoyaltySearch } from '../../api/hooks/useLoyalty';
+import { useBrands, useModels } from '../../api/hooks/useVehicles';
 import { formatINR } from '../../utils/formatters';
 
 const schema = z.object({
@@ -72,8 +73,15 @@ export default function QuickBillingPage() {
 
   const { fields, append, remove } = useFieldArray({
     control,
-    name: "items"
+    name: 'items'
   });
+
+  const selectedBrand = watch('vehicle_brand');
+  const { data: brandsResponse } = useBrands();
+  const { data: modelsResponse } = useModels(selectedBrand || '');
+
+  const brandsList = brandsResponse?.data || [];
+  const modelsList = modelsResponse?.data || [];
 
   const watchedItems = watch("items") || [];
   const discountType = watch("discount_type");
@@ -237,21 +245,40 @@ export default function QuickBillingPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-[#5f5e5e] mb-1">Vehicle Brand</label>
-                <input
-                  type="text"
+                <select
                   {...register("vehicle_brand")}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-[#D32F2F] focus:ring-1 focus:ring-[#D32F2F] outline-none transition-all"
-                  placeholder="e.g. Maruti, Hyundai"
-                />
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-[#D32F2F] outline-none bg-white"
+                  onChange={(e) => {
+                    setValue("vehicle_brand", e.target.value);
+                    setValue("vehicle_model", "");
+                  }}
+                >
+                  <option value="">-- Select Brand --</option>
+                  {brandsList.map((b: string) => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-bold text-[#5f5e5e] mb-1">Vehicle Model</label>
-                <input
-                  type="text"
+                <select
                   {...register("vehicle_model")}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-[#D32F2F] focus:ring-1 focus:ring-[#D32F2F] outline-none transition-all"
-                  placeholder="e.g. Swift, i20"
-                />
+                  disabled={!selectedBrand}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-[#D32F2F] outline-none bg-white disabled:bg-gray-100 disabled:text-gray-400"
+                  onChange={(e) => {
+                    const modelName = e.target.value;
+                    setValue("vehicle_model", modelName);
+                    const selectedModelObj = modelsList.find((m: any) => m.model === modelName);
+                    if (selectedModelObj && selectedModelObj.category) {
+                      setValue("vehicle_category", selectedModelObj.category);
+                    }
+                  }}
+                >
+                  <option value="">{selectedBrand ? '-- Select Model --' : 'Select Brand First'}</option>
+                  {modelsList.map((m: any) => (
+                    <option key={m.model} value={m.model}>{m.model}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-bold text-[#5f5e5e] mb-1">Registration Number</label>
