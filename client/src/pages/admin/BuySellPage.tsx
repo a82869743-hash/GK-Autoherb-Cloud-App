@@ -43,6 +43,7 @@ export default function BuySellPage() {
       const payload = {
         ...bsForm,
         type: bsForm.type as any,
+        vendor_id: bsForm.vendor_id ? parseInt(bsForm.vendor_id) : undefined,
         quantity: parseFloat(bsForm.quantity),
         unit_price: parseFloat(bsForm.unit_price),
         product_id: bsForm.product_id ? parseInt(bsForm.product_id) : undefined
@@ -307,26 +308,24 @@ export default function BuySellPage() {
             onChange={e => setBsForm({ ...bsForm, type: e.target.value })}
           />
           
-          {bsForm.type === 'buy' && (
-            <Select
-              label="Select Vendor (Optional)"
-              options={[
-                { value: '', label: 'Ad-hoc Vendor (Not Registered)' },
-                ...((vendorsList?.data || []).map((v: any) => ({ value: String(v.id), label: `${v.name} (${v.phone || 'No phone'})` })))
-              ]}
-              value={bsForm.vendor_id || ''}
-              onChange={e => {
-                const vId = e.target.value;
-                const foundV = (vendorsList?.data || []).find((x: any) => String(x.id) === vId);
-                setBsForm({
-                  ...bsForm,
-                  vendor_id: vId,
-                  party_name: foundV ? foundV.name : bsForm.party_name,
-                  party_mobile: foundV ? (foundV.phone || bsForm.party_mobile) : bsForm.party_mobile
-                });
-              }}
-            />
-          )}
+          <Select
+            label="Link Registered Vendor (Optional)"
+            options={[
+              { value: '', label: '-- Custom Party / Unregistered --' },
+              ...((vendorsList?.data || []).map((v: any) => ({ value: String(v.id), label: `${v.name} (${v.phone || 'No phone'})` })))
+            ]}
+            value={bsForm.vendor_id || ''}
+            onChange={e => {
+              const vId = e.target.value;
+              const foundV = (vendorsList?.data || []).find((x: any) => String(x.id) === vId);
+              setBsForm({
+                ...bsForm,
+                vendor_id: vId,
+                party_name: foundV ? foundV.name : bsForm.party_name,
+                party_mobile: foundV ? (foundV.phone || bsForm.party_mobile) : bsForm.party_mobile
+              });
+            }}
+          />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Party Name *" placeholder="e.g. Acme Corp" value={bsForm.party_name} onChange={e => setBsForm({ ...bsForm, party_name: e.target.value })} />

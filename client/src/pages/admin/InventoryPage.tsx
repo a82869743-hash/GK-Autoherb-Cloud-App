@@ -158,6 +158,30 @@ export default function InventoryPage() {
     }
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const uploadFormData = new FormData();
+    uploadFormData.append('image', file);
+
+    try {
+      setUploadingImage(true);
+      const res = await api.post('/inventory/upload-image', uploadFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      if (res.data?.url) {
+        setFormImage(res.data.url);
+        toast('success', 'Image uploaded successfully');
+      }
+    } catch (err: any) {
+      toast('error', err.response?.data?.error || 'Failed to upload image');
+    } finally {
+      setUploadingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = '';
+    }
+  };
+
   const openAddModal = () => {
     setEditItem(null);
     setFormName('');

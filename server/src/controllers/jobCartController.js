@@ -771,27 +771,60 @@ exports.uploadPhoto = async (req, res) => {
       return res.status(403).json({ success: false, error: 'Staff can only modify today\'s job carts' });
     }
 
-    // Upload to Cloudinary
-    const result = await new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        { folder: `gk-autoherb/job-photos/${id}`, resource_type: 'image' },
-        (err, result) => { if (err) reject(err); else resolve(result); }
-      );
-      stream.end(req.file.buffer);
-    });
+    let photoUrl = '';
+    let publicId = null;
+
+    // Try Cloudinary if configured
+    if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
+      try {
+        const cloudinary = require('../config/cloudinary');
+        const result = await new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream(
+            { folder: `gk-autoherb/job-photos/${id}`, resource_type: 'image' },
+            (err, res) => { if (err) reject(err); else resolve(res); }
+          );
+          stream.end(req.file.buffer);
+        });
+        photoUrl = result.secure_url;
+        publicId = result.public_id;
+      } catch (cloudErr) {
+        console.warn('Cloudinary upload failed, falling back to local disk:', cloudErr.message);
+      }
+    }
+
+    // Local disk fallback
+    if (!photoUrl) {
+      const fs = require('fs');
+      const pathModule = require('path');
+      const uploadsDir = pathModule.join(__dirname, '..', '..', 'uploads', 'job-photos', String(id));
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+
+      const ext = pathModule.extname(req.file.originalname) || '.jpg';
+      const safeName = req.file.originalname
+        .replace(ext, '')
+        .replace(/[^a-zA-Z0-9_-]/g, '_')
+        .substring(0, 50);
+      const fileName = `${Date.now()}_${safeName}${ext}`;
+      const filePath = pathModule.join(uploadsDir, fileName);
+
+      fs.writeFileSync(filePath, req.file.buffer);
+      photoUrl = `/uploads/job-photos/${id}/${fileName}`;
+    }
 
     const [insertResult] = await pool.query(
       'INSERT INTO job_photos (job_cart_id, type, url, public_id) VALUES (?, ?, ?, ?)',
-      [id, photoType, result.secure_url, result.public_id]
+      [id, photoType, photoUrl, publicId]
     );
 
     res.status(201).json({
       success: true,
-      data: { id: insertResult.insertId, url: result.secure_url, type: photoType, public_id: result.public_id },
+      data: { id: insertResult.insertId, url: photoUrl, type: photoType, public_id: publicId },
     });
   } catch (err) {
     console.error('Upload photo error:', err);
-    res.status(500).json({ success: false, error: 'Server error' });
+    res.status(500).json({ success: false, error: 'Failed to upload photo' });
   }
 };
 

@@ -31,9 +31,11 @@ exports.list = async (req, res) => {
         const [bsItems] = await pool.query(
           `SELECT id, type, product_name, quantity, unit_price, total_amount, transaction_date, status
            FROM buy_sell
-           WHERE vendor_id = ? OR party_name = ? OR (party_mobile IS NOT NULL AND party_mobile != '' AND party_mobile = ?)
-           ORDER BY transaction_date DESC, id DESC LIMIT 10`,
-          [v.id, v.name, v.phone || '']
+           WHERE vendor_id = ? 
+              OR LOWER(TRIM(party_name)) = LOWER(TRIM(?))
+              OR (? != '' AND party_mobile IS NOT NULL AND party_mobile = ?)
+           ORDER BY transaction_date DESC, id DESC LIMIT 50`,
+          [v.id, v.name || '', v.phone || '', v.phone || '']
         );
         v.buy_sell_history = bsItems || [];
       } catch (bsErr) {
@@ -49,7 +51,7 @@ exports.list = async (req, res) => {
            JOIN v2_purchase_items pi ON p.id = pi.purchase_id
            LEFT JOIN inventory inv ON pi.item_id = inv.id
            WHERE p.vendor_id = ?
-           ORDER BY p.purchase_date DESC LIMIT 10`,
+           ORDER BY p.purchase_date DESC LIMIT 50`,
           [v.id]
         );
         v.purchase_history = purItems || [];
@@ -79,9 +81,11 @@ exports.getOne = async (req, res) => {
       const [bsItems] = await pool.query(
         `SELECT id, type, product_name, quantity, unit_price, total_amount, transaction_date, status
          FROM buy_sell
-         WHERE vendor_id = ? OR party_name = ? OR (party_mobile IS NOT NULL AND party_mobile != '' AND party_mobile = ?)
+         WHERE vendor_id = ? 
+            OR LOWER(TRIM(party_name)) = LOWER(TRIM(?))
+            OR (? != '' AND party_mobile IS NOT NULL AND party_mobile = ?)
          ORDER BY transaction_date DESC, id DESC`,
-        [vendor.id, vendor.name, vendor.phone || '']
+        [vendor.id, vendor.name || '', vendor.phone || '', vendor.phone || '']
       );
       vendor.buy_sell_history = bsItems || [];
     } catch (e) {}

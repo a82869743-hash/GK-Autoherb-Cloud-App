@@ -18,9 +18,10 @@ exports.list = async (req, res) => {
     );
 
     const [rows] = await pool.query(
-      `SELECT bs.*, i.product_name AS inventory_product_name
+      `SELECT bs.*, i.product_name AS inventory_product_name, v.name AS vendor_name
        FROM buy_sell bs
        LEFT JOIN inventory i ON bs.product_id = i.id
+       LEFT JOIN vendors v ON bs.vendor_id = v.id
        WHERE ${where}
        ORDER BY bs.transaction_date DESC, bs.created_at DESC
        LIMIT ? OFFSET ?`,
@@ -42,7 +43,7 @@ exports.list = async (req, res) => {
 exports.create = async (req, res) => {
   try {
     const {
-      type, party_name, party_mobile, product_id,
+      type, vendor_id, party_name, party_mobile, product_id,
       product_name, quantity, unit_price, total_amount,
       note, transaction_date,
     } = req.body;
@@ -58,10 +59,10 @@ exports.create = async (req, res) => {
     const calculatedTotal = total_amount || (quantity * unit_price);
 
     const [result] = await pool.query(
-      `INSERT INTO buy_sell (type, party_name, party_mobile, product_id, product_name,
+      `INSERT INTO buy_sell (type, vendor_id, party_name, party_mobile, product_id, product_name,
         quantity, unit_price, total_amount, note, transaction_date, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [type, party_name, party_mobile || null, product_id || null,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [type, vendor_id || null, party_name, party_mobile || null, product_id || null,
        product_name, quantity, unit_price, calculatedTotal,
        note || null, transaction_date, req.user.id]
     );
