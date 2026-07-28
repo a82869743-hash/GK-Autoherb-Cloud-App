@@ -44,11 +44,11 @@ exports.customers = async (req, res) => {
         vehicle_brand,
         vehicle_model,
         vehicle_reg_no,
-        vehicle_category
+        NULL AS vehicle_category
       FROM manual_bills
       WHERE customer_name IS NOT NULL AND customer_name != ''
         AND (customer_name LIKE ? OR customer_mobile LIKE ? OR vehicle_reg_no LIKE ?)
-      ORDER BY id DESC
+      ORDER BY customer_name ASC
       LIMIT ?
     `, [search, search, search, parseInt(limit)]);
 

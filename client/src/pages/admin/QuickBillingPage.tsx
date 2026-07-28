@@ -250,14 +250,12 @@ export default function QuickBillingPage() {
   const handleSelectExistingCustomer = (key: string) => {
     setSelectedCustKey(key);
     if (!key) return;
-    const found = existingCustomers.find(c => (c.mobile || c.name || '') === key);
+    const found = existingCustomers.find((c: any, idx: number) => {
+      const uniqueVal = c.id ? `user_${c.id}` : `bill_${c.mobile}_${c.name}_${idx}`;
+      return uniqueVal === key;
+    });
     if (found) {
-      setValue('customer_name', found.name || '');
-      setValue('customer_mobile', found.mobile || '');
-      if (found.vehicle_brand) setValue('vehicle_brand', found.vehicle_brand);
-      if (found.vehicle_model) setValue('vehicle_model', found.vehicle_model);
-      if (found.vehicle_reg_no) setValue('vehicle_reg_no', found.vehicle_reg_no);
-      if (found.vehicle_category) setValue('vehicle_category', found.vehicle_category);
+      applyCustomerMatch(found);
       toast.success(`Auto-filled details for ${found.name}`);
     }
   };
@@ -280,21 +278,24 @@ export default function QuickBillingPage() {
 
             {/* Auto-fill Customer Selector */}
             {existingCustomers.length > 0 && (
-              <div className="mb-4 bg-gradient-to-r from-red-50/60 to-orange-50/60 p-3.5 rounded-xl border border-red-100">
-                <label className="block text-[11px] font-bold text-red-700 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                  <span>⚡ Auto-fill Existing Customer / Manual Bill</span>
+              <div className="mb-4 bg-gradient-to-r from-red-50/80 to-orange-50/80 p-3.5 rounded-xl border border-red-200 shadow-sm">
+                <label className="block text-xs font-bold text-red-700 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                  <span>⚡ Select Existing Customer to Auto-fill ({existingCustomers.length} available)</span>
                 </label>
                 <select
                   value={selectedCustKey}
                   onChange={(e) => handleSelectExistingCustomer(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-red-200 text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-red-500 bg-white shadow-sm"
+                  className="w-full px-3 py-2.5 rounded-lg border border-red-300 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 bg-white shadow-sm"
                 >
-                  <option value="">-- Select Existing Customer to Auto-fill --</option>
-                  {existingCustomers.map((c: any, idx: number) => (
-                    <option key={idx} value={c.mobile || c.name}>
-                      {c.name} {c.mobile ? `(${c.mobile})` : ''} {c.vehicle_reg_no ? `— [${c.vehicle_reg_no}]` : ''}
-                    </option>
-                  ))}
+                  <option value="">-- Click to Select Existing Customer to Auto-fill --</option>
+                  {existingCustomers.map((c: any, idx: number) => {
+                    const uniqueVal = c.id ? `user_${c.id}` : `bill_${c.mobile}_${c.name}_${idx}`;
+                    return (
+                      <option key={uniqueVal} value={uniqueVal}>
+                        {c.name} {c.mobile ? `(${c.mobile})` : ''} {c.vehicle_reg_no ? `— [${c.vehicle_reg_no}]` : ''} {c.vehicle_brand ? `(${c.vehicle_brand} ${c.vehicle_model || ''})` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             )}
