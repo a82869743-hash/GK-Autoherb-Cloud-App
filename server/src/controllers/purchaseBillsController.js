@@ -201,8 +201,8 @@ exports.getDetail = async (req, res) => {
     );
 
     // Group items for GST Tax Analysis breakdown table
-    const taxSummary: Record<string, { hsn_sac: string; rate: number; taxable: number; cgst: number; sgst: number; igst: number }> = {};
-    items.forEach((item: any) => {
+    const taxSummary = {};
+    items.forEach((item) => {
       const key = `${item.hsn_sac || 'N/A'}_${item.gst_rate || 0}`;
       const lineTaxable = parseFloat(item.quantity) * parseFloat(item.unit_price);
       if (!taxSummary[key]) {
