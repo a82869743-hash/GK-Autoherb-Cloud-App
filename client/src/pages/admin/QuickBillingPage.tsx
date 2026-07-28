@@ -96,6 +96,11 @@ export default function QuickBillingPage() {
   const currentModel = watch("vehicle_model") || '';
   const currentCategory = watch("vehicle_category") || '';
 
+  // Lookup loyalty by mobile if length >= 10
+  const { data: loyaltyCustomers } = useLoyaltySearch(watchedCustomerMobile?.length >= 10 ? watchedCustomerMobile : '');
+  const matchedCustomer = loyaltyCustomers?.find((c: any) => c.mobile === watchedCustomerMobile);
+  const availableCredits = matchedCustomer?.credits || 0;
+
   const effectiveBrands = currentBrand && !brandsList.includes(currentBrand)
     ? [currentBrand, ...brandsList]
     : brandsList;
