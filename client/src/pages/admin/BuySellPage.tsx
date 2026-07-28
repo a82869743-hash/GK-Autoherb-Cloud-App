@@ -52,7 +52,7 @@ export default function BuySellPage() {
       setShowBsModal(false);
       // Reset form
       setBsForm({
-        type: 'buy', party_name: '', party_mobile: '', product_id: '', product_name: '',
+        type: 'buy', vendor_id: '', party_name: '', party_mobile: '', product_id: '', product_name: '',
         quantity: '', unit_price: '', transaction_date: new Date().toISOString().slice(0,10)
       });
       refetch();

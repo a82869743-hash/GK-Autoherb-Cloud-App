@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Droplets, Clock, CheckCircle2, Truck, Plus, RefreshCw, Hash, Search, Car, X, ChevronDown, Download } from 'lucide-react';
+import { Droplets, Clock, CheckCircle2, Truck, Plus, RefreshCw, Hash, Search, Car, X, ChevronDown, Download, Check } from 'lucide-react';
 import { useQuickWashes, useQuickWashStats, useCreateQuickWash, useUpdateWashStatus } from '../../api/hooks/useQuickWash';
 import { useCustomerSearch } from '../../api/hooks/useSearch';
 import { useBrands, useModels } from '../../api/hooks/useVehicles';

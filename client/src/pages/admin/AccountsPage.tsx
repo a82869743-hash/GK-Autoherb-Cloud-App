@@ -84,7 +84,7 @@ export default function AccountsPage() {
     invoice_number: '',
     tax_amount: '0',
     notes: '',
-    items: [{ item_id: '', quantity: '1', unit_price: '0' }]
+    items: [{ item_id: '', hsn_sac: '', quantity: '1', unit_price: '0', gst_rate: '18' }] as Array<{ item_id: string; hsn_sac?: string; quantity: string; unit_price: string; gst_rate?: string }>
   });
 
   // Return Form State
