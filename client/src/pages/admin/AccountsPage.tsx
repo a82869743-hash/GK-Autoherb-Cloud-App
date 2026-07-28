@@ -1105,8 +1105,19 @@ export default function AccountsPage() {
       </Modal>
 
       {/* Add Purchase Bill Modal */}
-      <Modal open={purchaseModalOpen} onClose={() => setPurchaseModalOpen(false)} title="Record Purchase Bill">
-        <form onSubmit={handlePurchaseSubmit} className="space-y-4 py-2 max-h-[80vh] overflow-y-auto pr-2">
+      <Modal
+        open={purchaseModalOpen}
+        onClose={() => setPurchaseModalOpen(false)}
+        title="Record Purchase Bill"
+        size="lg"
+        footer={
+          <div className="flex justify-end gap-2.5 w-full">
+            <Button variant="secondary" type="button" onClick={() => setPurchaseModalOpen(false)}>Cancel</Button>
+            <Button variant="primary" type="button" onClick={handlePurchaseSubmit} loading={createPurchaseMutation.isPending}>Record Bill</Button>
+          </div>
+        }
+      >
+        <form onSubmit={handlePurchaseSubmit} className="space-y-4 py-1">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select
               label="Select Vendor *"
@@ -1233,11 +1244,6 @@ export default function AccountsPage() {
             value={purchaseForm.notes}
             onChange={e => setPurchaseForm({ ...purchaseForm, notes: e.target.value })}
           />
-
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button variant="secondary" onClick={() => setPurchaseModalOpen(false)}>Cancel</Button>
-            <Button variant="primary" type="submit" loading={createPurchaseMutation.isPending}>Record Bill</Button>
-          </div>
         </form>
       </Modal>
 

@@ -81,15 +81,28 @@ exports.create = async (req, res) => {
 
     // 4. Insert line items & update inventory stock
     for (const item of processedItems) {
-      await connection.query(
-        `INSERT INTO v2_purchase_items (purchase_id, item_id, hsn_sac, quantity, unit_price, gst_rate, cgst_amount, sgst_amount, igst_amount, total_price, received_quantity)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          purchaseId, item.item_id, item.hsn_sac, item.quantity, item.unit_price,
-          item.gst_rate, item.cgst_amount, item.sgst_amount, item.igst_amount,
-          item.total_price, item.quantity
-        ]
-      );
+      try {
+        await connection.query(
+          `INSERT INTO v2_purchase_items (purchase_id, item_id, hsn_sac, quantity, unit_price, gst_rate, cgst_amount, sgst_amount, igst_amount, total_price, received_quantity)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            purchaseId, item.item_id, item.hsn_sac || null, item.quantity, item.unit_price,
+            item.gst_rate, item.cgst_amount, item.sgst_amount, item.igst_amount,
+            item.total_price, item.quantity
+          ]
+        );
+      } catch (itemErr) {
+        console.warn('Notice: inserting line item without hsn_sac:', itemErr.message);
+        await connection.query(
+          `INSERT INTO v2_purchase_items (purchase_id, item_id, quantity, unit_price, gst_rate, cgst_amount, sgst_amount, igst_amount, total_price, received_quantity)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            purchaseId, item.item_id, item.quantity, item.unit_price,
+            item.gst_rate, item.cgst_amount, item.sgst_amount, item.igst_amount,
+            item.total_price, item.quantity
+          ]
+        );
+      }
 
       // Increment stock in inventory
       await connection.query(
