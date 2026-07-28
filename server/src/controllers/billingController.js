@@ -68,6 +68,13 @@ exports.create = async (req, res) => {
       [result.insertId, amount, `Manual Bill #${result.insertId}: ${description || 'POS Sale'}`, req.user.id]
     );
 
+    // Emit real-time customer and manual bill updates
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('manual_bill_created', { id: result.insertId, customer_name, customer_mobile });
+      io.emit('customer_updated', { customer_name, customer_mobile });
+    }
+
     // If customer has mobile, send SMS
     if (customer_mobile) {
       try {

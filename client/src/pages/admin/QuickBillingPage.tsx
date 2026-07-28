@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import io from 'socket.io-client';
 import {
   IndianRupee, Package, Search, Plus, Trash2, User, Car,
   FileText, ShieldCheck, Tag, AlertTriangle
@@ -241,11 +242,40 @@ export default function QuickBillingPage() {
   const [existingCustomers, setExistingCustomers] = useState<any[]>([]);
   const [selectedCustKey, setSelectedCustKey] = useState('');
 
-  useEffect(() => {
-    api.get('/search/customers?limit=100').then(res => {
-      setExistingCustomers(res.data?.data || []);
+  const refreshCustomerList = (searchQuery?: string) => {
+    const q = searchQuery || '';
+    api.get(`/search/customers?q=${encodeURIComponent(q)}&limit=100`).then(res => {
+      const data = res.data?.data || [];
+      setExistingCustomers(data);
     }).catch(err => console.error(err));
+  };
+
+  useEffect(() => {
+    refreshCustomerList();
+
+    // Setup Socket.io real-time listener for customer & bill updates
+    const socketUrl = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || window.location.origin;
+    const socket = io(socketUrl, { transports: ['websocket', 'polling'] });
+
+    socket.on('customer_updated', () => refreshCustomerList());
+    socket.on('new_booking', () => refreshCustomerList());
+    socket.on('customer_created', () => refreshCustomerList());
+    socket.on('manual_bill_created', () => refreshCustomerList());
+
+    return () => {
+      socket.disconnect();
+    };
   }, []);
+
+  // Real-time auto-search filtering as the user types
+  useEffect(() => {
+    const q = watchedCustomerMobile || watchedCustomerName || watchedRegNo || '';
+    if (q.trim().length >= 2) {
+      refreshCustomerList(q.trim());
+    } else if (q.trim().length === 0) {
+      refreshCustomerList();
+    }
+  }, [watchedCustomerMobile, watchedCustomerName, watchedRegNo]);
 
   const handleSelectExistingCustomer = (key: string) => {
     setSelectedCustKey(key);
