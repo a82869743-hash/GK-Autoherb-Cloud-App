@@ -90,11 +90,46 @@ export default function QuickBillingPage() {
   const subtotal = watchedItems.reduce((acc, item) => acc + ((item.price || 0) * (item.quantity || 1)), 0);
   
   const watchedCustomerMobile = watch("customer_mobile");
+  const watchedCustomerName = watch("customer_name");
   
   // Lookup loyalty by mobile if length >= 10
   const { data: loyaltyCustomers } = useLoyaltySearch(watchedCustomerMobile?.length >= 10 ? watchedCustomerMobile : '');
   const matchedCustomer = loyaltyCustomers?.find((c: any) => c.mobile === watchedCustomerMobile);
   const availableCredits = matchedCustomer?.credits || 0;
+
+  // Auto-fill details when mobile number is typed (length >= 10)
+  useEffect(() => {
+    if (watchedCustomerMobile && watchedCustomerMobile.length >= 10) {
+      api.get(`/search/customers?q=${watchedCustomerMobile}`).then(res => {
+        const list = res.data?.data || [];
+        const match = list.find((c: any) => c.mobile === watchedCustomerMobile || (c.mobile && c.mobile.includes(watchedCustomerMobile)));
+        if (match) {
+          if (match.name) setValue('customer_name', match.name);
+          if (match.vehicle_brand) setValue('vehicle_brand', match.vehicle_brand);
+          if (match.vehicle_model) setValue('vehicle_model', match.vehicle_model);
+          if (match.vehicle_reg_no) setValue('vehicle_reg_no', match.vehicle_reg_no);
+          if (match.vehicle_category) setValue('vehicle_category', match.vehicle_category);
+        }
+      }).catch(err => console.error(err));
+    }
+  }, [watchedCustomerMobile]);
+
+  // Auto-fill details when customer name is typed (length >= 3)
+  useEffect(() => {
+    if (watchedCustomerName && watchedCustomerName.trim().length >= 3) {
+      api.get(`/search/customers?q=${encodeURIComponent(watchedCustomerName.trim())}`).then(res => {
+        const list = res.data?.data || [];
+        const match = list.find((c: any) => c.name && c.name.toLowerCase() === watchedCustomerName.trim().toLowerCase());
+        if (match) {
+          if (match.mobile) setValue('customer_mobile', match.mobile);
+          if (match.vehicle_brand) setValue('vehicle_brand', match.vehicle_brand);
+          if (match.vehicle_model) setValue('vehicle_model', match.vehicle_model);
+          if (match.vehicle_reg_no) setValue('vehicle_reg_no', match.vehicle_reg_no);
+          if (match.vehicle_category) setValue('vehicle_category', match.vehicle_category);
+        }
+      }).catch(err => console.error(err));
+    }
+  }, [watchedCustomerName]);
 
   let discountAmount = 0;
   if (discountType === 'percentage') {
@@ -108,10 +143,10 @@ export default function QuickBillingPage() {
   const applyLoyaltyCredits = () => {
     if (availableCredits > 0) {
       setValue('discount_type', 'fixed');
-      // Limit discount to subtotal
-      setValue('discount_value', Math.min(availableCredits, subtotal));
+      const redeemAmt = subtotal > 0 ? Math.min(availableCredits, subtotal) : availableCredits;
+      setValue('discount_value', redeemAmt);
       setValue('loyalty_redeemed', true);
-      toast.success(`Applied ${formatINR(Math.min(availableCredits, subtotal))} loyalty credits as discount!`);
+      toast.success(`Applied ${formatINR(redeemAmt)} loyalty credits as discount!`);
     }
   };
 
