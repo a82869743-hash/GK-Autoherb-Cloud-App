@@ -460,7 +460,7 @@ export default function InventoryPage() {
         iconColor="#2563EB"
         accentGradient="from-blue-600 to-indigo-600"
         actions={
-          <div className="flex gap-2">
+          <div className="grid grid-cols-1 xs:grid-cols-3 sm:flex gap-2 w-full sm:w-auto">
             <input
               type="file"
               ref={fileInputRef}
@@ -468,13 +468,13 @@ export default function InventoryPage() {
               accept=".xlsx,.xls,.csv"
               className="hidden"
             />
-            <Button variant="secondary" onClick={() => setCatManagerOpen(true)} icon={<FolderPlus size={16} />}>
+            <Button variant="secondary" onClick={() => setCatManagerOpen(true)} icon={<FolderPlus size={16} />} className="w-full sm:w-auto justify-center">
               Manage Categories
             </Button>
-            <Button variant="secondary" onClick={() => fileInputRef.current?.click()} icon={<Upload size={16} />} loading={isUploading}>
+            <Button variant="secondary" onClick={() => fileInputRef.current?.click()} icon={<Upload size={16} />} loading={isUploading} className="w-full sm:w-auto justify-center">
               Import Excel
             </Button>
-            <Button onClick={openAddModal} icon={<Plus size={16} />} className="shadow-lg shadow-blue-500/20">
+            <Button onClick={openAddModal} icon={<Plus size={16} />} className="w-full sm:w-auto justify-center shadow-lg shadow-blue-500/20">
               Add Product
             </Button>
           </div>

@@ -885,7 +885,7 @@ export default function ProductsPage() {
                             <span className="text-xs text-gray-400 line-through">₹{product.mrp}</span>
                           )}
                         </div>
-                        <span className="text-[10px] text-emerald-600 font-bold">In Stock &bull; Free Delivery</span>
+                        <span className="text-[10px] text-emerald-600 font-bold">In Stock</span>
                       </div>
                       <button
                         onClick={() => setSelectedProduct(product)}
@@ -896,7 +896,7 @@ export default function ProductsPage() {
                         }`}
                         disabled={!product.inStock}
                       >
-                        Buy Now
+                        See More
                         <ArrowRight size={12} />
                       </button>
                     </div>

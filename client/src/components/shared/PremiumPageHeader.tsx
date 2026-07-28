@@ -79,7 +79,7 @@ export default function PremiumPageHeader({
             initial={{ opacity: 0, x: 10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.25 }}
-            className="flex flex-wrap items-center gap-2"
+            className="flex flex-wrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0"
           >
             {actions}
           </motion.div>

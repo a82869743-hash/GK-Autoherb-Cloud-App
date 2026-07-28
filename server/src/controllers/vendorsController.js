@@ -21,30 +21,41 @@ exports.list = async (req, res) => {
       params
     );
 
-    // Enrich each vendor with products bought/sold from buy_sell and v2_purchases
+    // Safely enrich vendors with products bought/sold without breaking vendor listing
     for (let v of vendors) {
-      // 1. Fetch Buy & Sell transactions
-      const [bsItems] = await pool.query(
-        `SELECT id, type, product_name, quantity, unit_price, total_amount, transaction_date, status
-         FROM buy_sell
-         WHERE vendor_id = ? OR party_name = ? OR (party_mobile IS NOT NULL AND party_mobile != '' AND party_mobile = ?)
-         ORDER BY transaction_date DESC, id DESC LIMIT 10`,
-        [v.id, v.name, v.phone || '']
-      );
-      v.buy_sell_history = bsItems;
+      v.buy_sell_history = [];
+      v.purchase_history = [];
 
-      // 2. Fetch v2_purchases items
-      const [purItems] = await pool.query(
-        `SELECT p.id as purchase_id, p.invoice_number, p.purchase_date, p.total_amount as bill_total,
-                pi.quantity, pi.unit_price, pi.amount as line_total, inv.product_name
-         FROM v2_purchases p
-         JOIN v2_purchase_items pi ON p.id = pi.purchase_id
-         LEFT JOIN inventory inv ON pi.item_id = inv.id
-         WHERE p.vendor_id = ?
-         ORDER BY p.purchase_date DESC LIMIT 10`,
-        [v.id]
-      );
-      v.purchase_history = purItems;
+      // 1. Fetch Buy & Sell transactions safely
+      try {
+        const [bsItems] = await pool.query(
+          `SELECT id, type, product_name, quantity, unit_price, total_amount, transaction_date, status
+           FROM buy_sell
+           WHERE vendor_id = ? OR party_name = ? OR (party_mobile IS NOT NULL AND party_mobile != '' AND party_mobile = ?)
+           ORDER BY transaction_date DESC, id DESC LIMIT 10`,
+          [v.id, v.name, v.phone || '']
+        );
+        v.buy_sell_history = bsItems || [];
+      } catch (bsErr) {
+        console.error(`Notice: Buy/Sell history query failed for vendor ${v.id}:`, bsErr.message);
+      }
+
+      // 2. Fetch v2_purchases items safely
+      try {
+        const [purItems] = await pool.query(
+          `SELECT p.id as purchase_id, p.invoice_number, p.purchase_date, p.total_amount as bill_total,
+                  pi.quantity, pi.unit_price, pi.total_price as line_total, inv.product_name
+           FROM v2_purchases p
+           JOIN v2_purchase_items pi ON p.id = pi.purchase_id
+           LEFT JOIN inventory inv ON pi.item_id = inv.id
+           WHERE p.vendor_id = ?
+           ORDER BY p.purchase_date DESC LIMIT 10`,
+          [v.id]
+        );
+        v.purchase_history = purItems || [];
+      } catch (purErr) {
+        console.error(`Notice: Purchase history query failed for vendor ${v.id}:`, purErr.message);
+      }
     }
 
     res.json({ success: true, data: vendors });
@@ -61,26 +72,33 @@ exports.getOne = async (req, res) => {
     if (!rows.length) return res.status(404).json({ success: false, error: 'Vendor not found' });
     const vendor = rows[0];
 
-    const [bsItems] = await pool.query(
-      `SELECT id, type, product_name, quantity, unit_price, total_amount, transaction_date, status
-       FROM buy_sell
-       WHERE vendor_id = ? OR party_name = ? OR (party_mobile IS NOT NULL AND party_mobile != '' AND party_mobile = ?)
-       ORDER BY transaction_date DESC, id DESC`,
-      [vendor.id, vendor.name, vendor.phone || '']
-    );
-    vendor.buy_sell_history = bsItems;
+    vendor.buy_sell_history = [];
+    vendor.purchase_history = [];
 
-    const [purItems] = await pool.query(
-      `SELECT p.id as purchase_id, p.invoice_number, p.purchase_date, p.total_amount as bill_total,
-              pi.quantity, pi.unit_price, pi.amount as line_total, inv.product_name
-       FROM v2_purchases p
-       JOIN v2_purchase_items pi ON p.id = pi.purchase_id
-       LEFT JOIN inventory inv ON pi.item_id = inv.id
-       WHERE p.vendor_id = ?
-       ORDER BY p.purchase_date DESC`,
-      [vendor.id]
-    );
-    vendor.purchase_history = purItems;
+    try {
+      const [bsItems] = await pool.query(
+        `SELECT id, type, product_name, quantity, unit_price, total_amount, transaction_date, status
+         FROM buy_sell
+         WHERE vendor_id = ? OR party_name = ? OR (party_mobile IS NOT NULL AND party_mobile != '' AND party_mobile = ?)
+         ORDER BY transaction_date DESC, id DESC`,
+        [vendor.id, vendor.name, vendor.phone || '']
+      );
+      vendor.buy_sell_history = bsItems || [];
+    } catch (e) {}
+
+    try {
+      const [purItems] = await pool.query(
+        `SELECT p.id as purchase_id, p.invoice_number, p.purchase_date, p.total_amount as bill_total,
+                pi.quantity, pi.unit_price, pi.total_price as line_total, inv.product_name
+         FROM v2_purchases p
+         JOIN v2_purchase_items pi ON p.id = pi.purchase_id
+         LEFT JOIN inventory inv ON pi.item_id = inv.id
+         WHERE p.vendor_id = ?
+         ORDER BY p.purchase_date DESC`,
+        [vendor.id]
+      );
+      vendor.purchase_history = purItems || [];
+    } catch (e) {}
 
     res.json({ success: true, data: vendor });
   } catch (err) {

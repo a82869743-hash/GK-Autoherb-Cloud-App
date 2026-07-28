@@ -234,12 +234,12 @@ export default function CustomerBookingsPage() {
       {/* Tabs + Search Row */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         {/* Tabs */}
-        <div className="flex gap-1 bg-[#f6f3f2] rounded-xl p-1">
+        <div className="flex gap-1 bg-[#f6f3f2] rounded-xl p-1 overflow-x-auto max-w-full w-full sm:w-auto scrollbar-none">
           {TABS.map((tab) => (
             <button
               key={tab.key}
               onClick={() => { setActiveTab(tab.key); setPage(1); }}
-              className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-200 ${
+              className={`px-3.5 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-200 shrink-0 whitespace-nowrap ${
                 activeTab === tab.key
                   ? 'bg-white text-[#1c1b1b] shadow-sm'
                   : 'text-[#5f5e5e] hover:text-[#1c1b1b]'
