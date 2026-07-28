@@ -14,26 +14,68 @@ const pool = require('../config/db');
 // ─── SEARCH CUSTOMERS ────────────────────────
 exports.customers = async (req, res) => {
   try {
-    const { q, limit = 10 } = req.query;
-    if (!q || q.length < 2) return res.json({ success: true, data: [] });
+    const { q, limit = 20 } = req.query;
+    const search = q && q.trim().length > 0 ? `%${q.trim()}%` : '%';
 
-    const search = `%${q}%`;
-    const [rows] = await pool.query(`
-      SELECT u.id, u.name, u.mobile, u.email,
-        (SELECT COUNT(*) FROM vehicles WHERE customer_id = u.id) AS vehicle_count,
-        (SELECT COUNT(*) FROM job_carts jc JOIN vehicles v ON jc.vehicle_id = v.id WHERE v.customer_id = u.id) AS job_count
+    // 1. Fetch registered customers with primary vehicle details
+    const [userRows] = await pool.query(`
+      SELECT 
+        u.id, 
+        u.name, 
+        u.mobile, 
+        u.email,
+        v.brand AS vehicle_brand,
+        v.model AS vehicle_model,
+        v.registration_no AS vehicle_reg_no,
+        v.category AS vehicle_category
       FROM users u
+      LEFT JOIN vehicles v ON (v.customer_id = u.id AND (v.is_primary = 1 OR v.id = (SELECT MIN(id) FROM vehicles WHERE customer_id = u.id)))
       WHERE u.role = 'customer' AND u.is_active = 1
-        AND (u.name LIKE ? OR u.mobile LIKE ? OR u.email LIKE ?)
-      ORDER BY
-        CASE WHEN u.name LIKE ? THEN 0
-             WHEN u.mobile LIKE ? THEN 1
-             ELSE 2 END,
-        u.name ASC
+        AND (u.name LIKE ? OR u.mobile LIKE ? OR u.email LIKE ? OR v.registration_no LIKE ?)
+      ORDER BY u.name ASC
       LIMIT ?
-    `, [search, search, search, `${q}%`, `${q}%`, parseInt(limit)]);
+    `, [search, search, search, search, parseInt(limit)]);
 
-    res.json({ success: true, data: rows });
+    // 2. Fetch customers from manual_bills
+    const [billRows] = await pool.query(`
+      SELECT DISTINCT 
+        customer_name AS name, 
+        customer_mobile AS mobile,
+        vehicle_brand,
+        vehicle_model,
+        vehicle_reg_no,
+        vehicle_category
+      FROM manual_bills
+      WHERE customer_name IS NOT NULL AND customer_name != ''
+        AND (customer_name LIKE ? OR customer_mobile LIKE ? OR vehicle_reg_no LIKE ?)
+      ORDER BY id DESC
+      LIMIT ?
+    `, [search, search, search, parseInt(limit)]);
+
+    // 3. Deduplicate by mobile & name
+    const resultMap = new Map();
+    (userRows || []).forEach(r => {
+      const key = (r.mobile || r.name || '').trim().toLowerCase();
+      if (key) resultMap.set(key, r);
+    });
+
+    (billRows || []).forEach(r => {
+      const key = (r.mobile || r.name || '').trim().toLowerCase();
+      if (key && !resultMap.has(key)) {
+        resultMap.set(key, {
+          id: null,
+          name: r.name,
+          mobile: r.mobile,
+          vehicle_brand: r.vehicle_brand || '',
+          vehicle_model: r.vehicle_model || '',
+          vehicle_reg_no: r.vehicle_reg_no || '',
+          vehicle_category: r.vehicle_category || ''
+        });
+      }
+    });
+
+    const data = Array.from(resultMap.values()).slice(0, parseInt(limit));
+    res.json({ success: true, data });
   } catch (err) {
     console.error('Search customers error:', err);
     res.status(500).json({ success: false, error: 'Search failed' });

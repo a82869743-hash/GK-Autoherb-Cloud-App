@@ -182,8 +182,32 @@ export default function QuickBillingPage() {
     }
   };
 
+  const [existingCustomers, setExistingCustomers] = useState<any[]>([]);
+  const [selectedCustKey, setSelectedCustKey] = useState('');
+
+  useEffect(() => {
+    api.get('/search/customers?limit=100').then(res => {
+      setExistingCustomers(res.data?.data || []);
+    }).catch(err => console.error(err));
+  }, []);
+
+  const handleSelectExistingCustomer = (key: string) => {
+    setSelectedCustKey(key);
+    if (!key) return;
+    const found = existingCustomers.find(c => (c.mobile || c.name || '') === key);
+    if (found) {
+      setValue('customer_name', found.name || '');
+      setValue('customer_mobile', found.mobile || '');
+      if (found.vehicle_brand) setValue('vehicle_brand', found.vehicle_brand);
+      if (found.vehicle_model) setValue('vehicle_model', found.vehicle_model);
+      if (found.vehicle_reg_no) setValue('vehicle_reg_no', found.vehicle_reg_no);
+      if (found.vehicle_category) setValue('vehicle_category', found.vehicle_category);
+      toast.success(`Auto-filled details for ${found.name}`);
+    }
+  };
+
   return (
-    <>
+    <div className="min-h-screen bg-gray-50/50 pb-20">
       <AdminTopBar
         title="Quick Billing (POS)"
         subtitle="Generate instant invoices without job cards"
@@ -194,16 +218,38 @@ export default function QuickBillingPage() {
           
           {/* Customer Details */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-            <h2 className="text-lg font-bold text-[#1c1b1b] mb-4 flex items-center gap-2">
+            <h2 className="text-lg font-bold text-[#1c1b1b] mb-3 flex items-center gap-2">
               <User size={18} className="text-[#D32F2F]" /> Customer Details
             </h2>
+
+            {/* Auto-fill Customer Selector */}
+            {existingCustomers.length > 0 && (
+              <div className="mb-4 bg-gradient-to-r from-red-50/60 to-orange-50/60 p-3.5 rounded-xl border border-red-100">
+                <label className="block text-[11px] font-bold text-red-700 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                  <span>⚡ Auto-fill Existing Customer / Manual Bill</span>
+                </label>
+                <select
+                  value={selectedCustKey}
+                  onChange={(e) => handleSelectExistingCustomer(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-red-200 text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-red-500 bg-white shadow-sm"
+                >
+                  <option value="">-- Select Existing Customer to Auto-fill --</option>
+                  {existingCustomers.map((c: any, idx: number) => (
+                    <option key={idx} value={c.mobile || c.name}>
+                      {c.name} {c.mobile ? `(${c.mobile})` : ''} {c.vehicle_reg_no ? `— [${c.vehicle_reg_no}]` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-[#5f5e5e] mb-1">Customer Name</label>
                 <input
                   type="text"
                   {...register("customer_name")}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-[#D32F2F] focus:ring-1 focus:ring-[#D32F2F] outline-none transition-all"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-[#D32F2F] focus:ring-1 focus:ring-[#D32F2F] outline-none transition-all text-sm font-semibold"
                   placeholder="e.g. Rahul Sharma"
                 />
                 {errors.customer_name && <p className="text-red-500 text-xs mt-1">{errors.customer_name.message}</p>}
@@ -213,7 +259,7 @@ export default function QuickBillingPage() {
                 <input
                   type="text"
                   {...register("customer_mobile")}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-[#D32F2F] focus:ring-1 focus:ring-[#D32F2F] outline-none transition-all"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-[#D32F2F] focus:ring-1 focus:ring-[#D32F2F] outline-none transition-all text-sm font-semibold"
                   placeholder="e.g. 9876543210"
                 />
                 {errors.customer_mobile && <p className="text-red-500 text-xs mt-1">{errors.customer_mobile.message}</p>}
@@ -479,6 +525,6 @@ export default function QuickBillingPage() {
           </div>
         </form>
       </div>
-    </>
+    </div>
   );
 }

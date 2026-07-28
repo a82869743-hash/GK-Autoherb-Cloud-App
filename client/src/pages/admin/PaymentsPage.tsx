@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CreditCard, IndianRupee, Clock, CheckCircle, XCircle, RefreshCw, Plus, Search, Filter, Download, MessageCircle, QrCode } from 'lucide-react';
 import { usePayments, usePaymentStats, useCreatePayment, useCreateRefund, useAdvancePayments, useSendPaymentReminder, useCreateRazorpayOrder, useVerifyRazorpayPayment, useWalletBalance } from '../../api/hooks/usePayments';
@@ -7,6 +7,7 @@ import PremiumStatCard from '../../components/shared/PremiumStatCard';
 import { PageTransition, AnimatedCard, RippleButton, AnimatedModal } from '../../components/ui/Animations';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../../store/authStore';
+import api from '../../api/axiosInstance';
 
 const STATUS_BADGES: Record<string, string> = {
   completed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -23,6 +24,15 @@ export default function PaymentsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [showPayModal, setShowPayModal] = useState(false);
   const [payForm, setPayForm] = useState({ customer_id: '', job_cart_id: '', amount: '', wallet_spend: '', payment_method: 'cash', notes: '' });
+  const [customersList, setCustomersList] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (showPayModal) {
+      api.get('/search/customers?limit=100').then(res => {
+        setCustomersList(res.data?.data || []);
+      }).catch(err => console.error(err));
+    }
+  }, [showPayModal]);
   
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [selectedPaymentForRefund, setSelectedPaymentForRefund] = useState<any>(null);
@@ -354,27 +364,47 @@ export default function PaymentsPage() {
 
       {/* Record Payment Modal */}
       <AnimatedModal isOpen={showPayModal} onClose={() => setShowPayModal(false)}>
-        <div className="p-6">
-          <h3 className="text-xl font-bold text-[#1c1b1b] mb-6">Record Payment</h3>
+        <div className="p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
+          <h3 className="text-xl font-bold text-[#1c1b1b] mb-4">Record Payment</h3>
           <div className="space-y-4">
-            <div><label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Customer ID</label>
-              <input value={payForm.customer_id} onChange={e => setPayForm(p => ({ ...p, customer_id: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm" placeholder="Enter customer ID" />
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Customer *</label>
+              <select
+                value={payForm.customer_id}
+                onChange={e => setPayForm(p => ({ ...p, customer_id: e.target.value }))}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 bg-white font-medium"
+              >
+                <option value="">-- Select Customer --</option>
+                {customersList.map((c: any) => (
+                  <option key={c.id || c.mobile || c.name} value={c.id || ''}>
+                    {c.name} {c.mobile ? `(${c.mobile})` : ''} {c.vehicle_reg_no ? `— [${c.vehicle_reg_no}]` : ''}
+                  </option>
+                ))}
+              </select>
             </div>
-            <div><label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Job Cart ID (optional)</label>
-              <input value={payForm.job_cart_id} onChange={e => setPayForm(p => ({ ...p, job_cart_id: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm" placeholder="Job cart ID" />
+
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Job Cart ID (optional)</label>
+              <input value={payForm.job_cart_id} onChange={e => setPayForm(p => ({ ...p, job_cart_id: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm" placeholder="e.g. 101" />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div><label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Amount to Pay (₹)</label>
-                <input type="number" value={payForm.amount} onChange={e => setPayForm(p => ({ ...p, amount: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm" placeholder="0.00" />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Amount to Pay (₹)</label>
+                <input type="number" value={payForm.amount} onChange={e => setPayForm(p => ({ ...p, amount: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 bg-white" placeholder="0.00" />
               </div>
-              <div><label className="text-xs font-semibold text-gray-500 uppercase mb-1 flex justify-between">
-                <span>Wallet Spend (₹)</span>
-                {walletBalance !== undefined && <span className="text-blue-600">Bal: ₹{walletBalance}</span>}
-                </label>
-                <input type="number" value={payForm.wallet_spend} onChange={e => setPayForm(p => ({ ...p, wallet_spend: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm" placeholder="0.00" max={walletBalance || 0} />
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Wallet Spend (₹)</label>
+                  {walletBalance !== undefined && <span className="text-xs font-bold text-blue-600">Bal: ₹{walletBalance}</span>}
+                </div>
+                <input type="number" value={payForm.wallet_spend} onChange={e => setPayForm(p => ({ ...p, wallet_spend: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" placeholder="0.00" max={walletBalance || 0} />
               </div>
-              <div className="col-span-2"><label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Method (For 'Amount to Pay')</label>
-                <select value={payForm.payment_method} onChange={e => setPayForm(p => ({ ...p, payment_method: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm">
+
+              <div className="sm:col-span-2">
+                <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Payment Method</label>
+                <select value={payForm.payment_method} onChange={e => setPayForm(p => ({ ...p, payment_method: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-medium bg-white">
                   <option value="cash">Cash</option><option value="upi">UPI / QR Code</option><option value="card">Card</option><option value="net_banking">Net Banking</option>
                 </select>
               </div>
@@ -400,13 +430,15 @@ export default function PaymentsPage() {
               )}
             </AnimatePresence>
 
-            <div><label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Notes</label>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Notes</label>
               <input value={payForm.notes} onChange={e => setPayForm(p => ({ ...p, notes: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm" placeholder="Optional notes..." />
             </div>
-            <div className="flex justify-end gap-3 pt-4">
-              <RippleButton variant="ghost" onClick={() => setShowPayModal(false)}>Cancel</RippleButton>
-              <RippleButton variant="ghost" onClick={handleRazorpayPayment} className="border border-blue-500 text-blue-600 hover:bg-blue-50">Pay via Razorpay</RippleButton>
-              <RippleButton variant="primary" onClick={handleCreatePayment}>Record Manual Payment</RippleButton>
+
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2.5 pt-4 border-t border-gray-100">
+              <RippleButton variant="ghost" onClick={() => setShowPayModal(false)} className="w-full sm:w-auto">Cancel</RippleButton>
+              <RippleButton variant="ghost" onClick={handleRazorpayPayment} className="w-full sm:w-auto border border-blue-500 text-blue-600 hover:bg-blue-50">Pay via Razorpay</RippleButton>
+              <RippleButton variant="primary" onClick={handleCreatePayment} className="w-full sm:w-auto">Record Manual Payment</RippleButton>
             </div>
           </div>
         </div>
