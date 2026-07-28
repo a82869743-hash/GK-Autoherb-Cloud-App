@@ -269,11 +269,15 @@ exports.createReturn = async (req, res) => {
       ? `Sales Return credit note for Bill #${original_bill_id}` 
       : `Purchase Return debit note for Purchase Bill #${original_bill_id}`;
 
-    await connection.query(
-      `INSERT INTO transactions (type, reference_id, amount, direction, note, transaction_date, created_by)
-       VALUES (?, ?, ?, ?, ?, CURDATE(), ?)`,
-      [txnType, original_bill_id, amount, direction, note, req.user.id]
-    );
+    try {
+      await connection.query(
+        `INSERT INTO transactions (type, reference_id, amount, direction, note, transaction_date, created_by)
+         VALUES (?, ?, ?, ?, ?, CURDATE(), ?)`,
+        [txnType, original_bill_id, amount, direction, note, req.user ? req.user.id : null]
+      );
+    } catch (txnErr) {
+      console.warn('Notice: logging transaction failed, proceeding with return bill:', txnErr.message);
+    }
 
     await connection.commit();
     res.status(201).json({ success: true, data: { id: result.insertId }, message: 'Return note created successfully' });
