@@ -183,8 +183,19 @@ export default function AccountsPage() {
   const handlePurchaseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!purchaseForm.vendor_id || !purchaseForm.purchase_date) {
-      alert('Please fill out all required fields.');
+      toast('error', 'Please select a vendor and purchase date.');
       return;
+    }
+    for (let idx = 0; idx < purchaseForm.items.length; idx++) {
+      const item = purchaseForm.items[idx];
+      if (!item.item_id || Number(item.item_id) <= 0) {
+        toast('error', `Please select a product for line item #${idx + 1}`);
+        return;
+      }
+      if (!item.quantity || parseFloat(item.quantity) <= 0) {
+        toast('error', `Please enter a valid quantity for line item #${idx + 1}`);
+        return;
+      }
     }
     try {
       await createPurchaseMutation.mutateAsync({
@@ -193,8 +204,10 @@ export default function AccountsPage() {
         tax_amount: parseFloat(purchaseForm.tax_amount) || 0,
         items: purchaseForm.items.map(i => ({
           item_id: Number(i.item_id),
-          quantity: parseFloat(i.quantity) || 0,
-          unit_price: parseFloat(i.unit_price) || 0
+          hsn_sac: i.hsn_sac || null,
+          quantity: parseFloat(i.quantity) || 1,
+          unit_price: parseFloat(i.unit_price) || 0,
+          gst_rate: parseFloat(i.gst_rate) || 0
         }))
       });
       toast('success', 'Purchase bill recorded successfully');
@@ -205,7 +218,7 @@ export default function AccountsPage() {
         invoice_number: '',
         tax_amount: '0',
         notes: '',
-        items: [{ item_id: '', quantity: '1', unit_price: '0' }]
+        items: [{ item_id: '', quantity: '1', unit_price: '0', hsn_sac: '', gst_rate: '18' }]
       });
       refetchPurchases();
       refetchSummary();
@@ -1145,20 +1158,33 @@ export default function AccountsPage() {
 
             <div className="space-y-3">
               {purchaseForm.items.map((item, idx) => (
-                <div key={idx} className="grid grid-cols-12 gap-2 items-end border border-gray-100 p-2 rounded-lg bg-gray-50/50">
-                  <div className="col-span-4">
+                <div key={idx} className="p-3 border border-gray-200 rounded-xl bg-gray-50/60 space-y-2.5 relative">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Item #{idx + 1}</span>
+                    {purchaseForm.items.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePurchaseItem(idx)}
+                        className="text-red-600 hover:text-red-700 p-1 hover:bg-red-50 rounded-lg transition"
+                        title="Remove Item"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                  <div>
                     <Select
                       label="Product *"
                       value={item.item_id}
                       onChange={e => handlePurchaseItemChange(idx, 'item_id', e.target.value)}
                       options={[
-                        { value: '', label: 'Select Product' },
-                        ...(inventory?.data || []).map((p: any) => ({ value: String(p.id), label: p.product_name }))
+                        { value: '', label: '-- Select Inventory Product --' },
+                        ...(inventory?.data || []).map((p: any) => ({ value: String(p.id), label: `${p.product_name} (${p.category || 'Item'})` }))
                       ]}
                       required
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <Input
                       type="text"
                       label="HSN/SAC"
@@ -1166,8 +1192,6 @@ export default function AccountsPage() {
                       value={item.hsn_sac || ''}
                       onChange={e => handlePurchaseItemChange(idx, 'hsn_sac', e.target.value)}
                     />
-                  </div>
-                  <div className="col-span-2">
                     <Input
                       type="number"
                       label="Qty *"
@@ -1176,41 +1200,26 @@ export default function AccountsPage() {
                       onChange={e => handlePurchaseItemChange(idx, 'quantity', e.target.value)}
                       required
                     />
-                  </div>
-                  <div className="col-span-2">
                     <Input
                       type="number"
-                      label="Unit Cost *"
+                      label="Unit Cost (₹) *"
                       placeholder="0.00"
                       value={item.unit_price}
                       onChange={e => handlePurchaseItemChange(idx, 'unit_price', e.target.value)}
                       required
                     />
-                  </div>
-                  <div className="col-span-2 flex items-center gap-1">
-                    <div className="flex-1">
-                      <Select
-                        label="GST %"
-                        value={item.gst_rate || '18'}
-                        onChange={e => handlePurchaseItemChange(idx, 'gst_rate', e.target.value)}
-                        options={[
-                          { value: '0', label: '0%' },
-                          { value: '5', label: '5%' },
-                          { value: '12', label: '12%' },
-                          { value: '18', label: '18%' },
-                          { value: '28', label: '28%' }
-                        ]}
-                      />
-                    </div>
-                    {purchaseForm.items.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemovePurchaseItem(idx)}
-                        className="p-2 border border-red-100 text-red-600 hover:bg-red-50 rounded-lg transition mt-5 shrink-0"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    )}
+                    <Select
+                      label="GST %"
+                      value={item.gst_rate || '18'}
+                      onChange={e => handlePurchaseItemChange(idx, 'gst_rate', e.target.value)}
+                      options={[
+                        { value: '0', label: '0%' },
+                        { value: '5', label: '5%' },
+                        { value: '12', label: '12%' },
+                        { value: '18', label: '18%' },
+                        { value: '28', label: '28%' }
+                      ]}
+                    />
                   </div>
                 </div>
               ))}

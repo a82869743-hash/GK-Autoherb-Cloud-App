@@ -936,36 +936,42 @@ export default function InventoryPage() {
       <Modal open={catManagerOpen} onClose={() => setCatManagerOpen(false)} title="Manage Categories" size="md">
         <div className="space-y-4 text-left">
           {/* Add New Category */}
-          <div className="flex gap-2 items-center bg-gray-50 p-3 rounded-lg border border-gray-200">
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const nameToAdd = newCatInput.trim();
+              if (!nameToAdd) return;
+              try {
+                const res = await createCatMut.mutateAsync(nameToAdd);
+                toast('success', res.message || 'Category added');
+                setNewCatInput('');
+                await refetchCategories();
+                await refetch();
+                setCategoryFilter(nameToAdd);
+              } catch (err: any) {
+                toast('error', err.response?.data?.error || 'Failed to add category');
+              }
+            }}
+            className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center bg-gray-50 p-3 rounded-xl border border-gray-200"
+          >
             <input
               type="text"
               placeholder="Enter new category name..."
               value={newCatInput}
               onChange={(e) => setNewCatInput(e.target.value)}
-              className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             />
             <Button
+              type="submit"
               size="sm"
               loading={createCatMut.isPending}
               disabled={!newCatInput.trim()}
-              onClick={async () => {
-                const nameToAdd = newCatInput.trim();
-                try {
-                  const res = await createCatMut.mutateAsync(nameToAdd);
-                  toast('success', res.message || 'Category added');
-                  setNewCatInput('');
-                  await refetchCategories();
-                  await refetch();
-                  setCategoryFilter(nameToAdd);
-                } catch (err: any) {
-                  toast('error', err.response?.data?.error || 'Failed to add category');
-                }
-              }}
+              className="w-full sm:w-auto shrink-0 py-2"
               icon={<Plus size={14} />}
             >
               Add Category
             </Button>
-          </div>
+          </form>
 
           {/* List of Existing Categories */}
           <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
