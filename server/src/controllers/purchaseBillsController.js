@@ -92,13 +92,12 @@ exports.create = async (req, res) => {
           ]
         );
       } catch (itemErr) {
-        console.warn('Notice: inserting line item without hsn_sac:', itemErr.message);
+        console.warn('Notice: inserting line item with basic columns fallback:', itemErr.message);
         await connection.query(
-          `INSERT INTO v2_purchase_items (purchase_id, item_id, quantity, unit_price, gst_rate, cgst_amount, sgst_amount, igst_amount, total_price, received_quantity)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO v2_purchase_items (purchase_id, item_id, quantity, unit_price, total_price, received_quantity)
+           VALUES (?, ?, ?, ?, ?, ?)`,
           [
             purchaseId, item.item_id, item.quantity, item.unit_price,
-            item.gst_rate, item.cgst_amount, item.sgst_amount, item.igst_amount,
             item.total_price, item.quantity
           ]
         );
