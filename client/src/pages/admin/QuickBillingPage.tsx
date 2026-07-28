@@ -91,11 +91,28 @@ export default function QuickBillingPage() {
   
   const watchedCustomerMobile = watch("customer_mobile");
   const watchedCustomerName = watch("customer_name");
-  
-  // Lookup loyalty by mobile if length >= 10
-  const { data: loyaltyCustomers } = useLoyaltySearch(watchedCustomerMobile?.length >= 10 ? watchedCustomerMobile : '');
-  const matchedCustomer = loyaltyCustomers?.find((c: any) => c.mobile === watchedCustomerMobile);
-  const availableCredits = matchedCustomer?.credits || 0;
+  const watchedRegNo = watch("vehicle_reg_no");
+  const currentBrand = watch("vehicle_brand") || '';
+  const currentModel = watch("vehicle_model") || '';
+  const currentCategory = watch("vehicle_category") || '';
+
+  const effectiveBrands = currentBrand && !brandsList.includes(currentBrand)
+    ? [currentBrand, ...brandsList]
+    : brandsList;
+
+  const effectiveModels = currentModel && !modelsList.some((m: any) => (typeof m === 'string' ? m : m.model) === currentModel)
+    ? [{ model: currentModel }, ...modelsList]
+    : modelsList;
+
+  const applyCustomerMatch = (match: any) => {
+    if (!match) return;
+    if (match.name) setValue('customer_name', match.name);
+    if (match.mobile) setValue('customer_mobile', match.mobile);
+    if (match.vehicle_brand) setValue('vehicle_brand', match.vehicle_brand);
+    if (match.vehicle_model) setValue('vehicle_model', match.vehicle_model);
+    if (match.vehicle_reg_no) setValue('vehicle_reg_no', match.vehicle_reg_no);
+    if (match.vehicle_category) setValue('vehicle_category', match.vehicle_category);
+  };
 
   // Auto-fill details when mobile number is typed (length >= 10)
   useEffect(() => {
@@ -103,13 +120,7 @@ export default function QuickBillingPage() {
       api.get(`/search/customers?q=${watchedCustomerMobile}`).then(res => {
         const list = res.data?.data || [];
         const match = list.find((c: any) => c.mobile === watchedCustomerMobile || (c.mobile && c.mobile.includes(watchedCustomerMobile)));
-        if (match) {
-          if (match.name) setValue('customer_name', match.name);
-          if (match.vehicle_brand) setValue('vehicle_brand', match.vehicle_brand);
-          if (match.vehicle_model) setValue('vehicle_model', match.vehicle_model);
-          if (match.vehicle_reg_no) setValue('vehicle_reg_no', match.vehicle_reg_no);
-          if (match.vehicle_category) setValue('vehicle_category', match.vehicle_category);
-        }
+        if (match) applyCustomerMatch(match);
       }).catch(err => console.error(err));
     }
   }, [watchedCustomerMobile]);
@@ -119,17 +130,22 @@ export default function QuickBillingPage() {
     if (watchedCustomerName && watchedCustomerName.trim().length >= 3) {
       api.get(`/search/customers?q=${encodeURIComponent(watchedCustomerName.trim())}`).then(res => {
         const list = res.data?.data || [];
-        const match = list.find((c: any) => c.name && c.name.toLowerCase() === watchedCustomerName.trim().toLowerCase());
-        if (match) {
-          if (match.mobile) setValue('customer_mobile', match.mobile);
-          if (match.vehicle_brand) setValue('vehicle_brand', match.vehicle_brand);
-          if (match.vehicle_model) setValue('vehicle_model', match.vehicle_model);
-          if (match.vehicle_reg_no) setValue('vehicle_reg_no', match.vehicle_reg_no);
-          if (match.vehicle_category) setValue('vehicle_category', match.vehicle_category);
-        }
+        const match = list.find((c: any) => c.name && c.name.toLowerCase().includes(watchedCustomerName.trim().toLowerCase()));
+        if (match) applyCustomerMatch(match);
       }).catch(err => console.error(err));
     }
   }, [watchedCustomerName]);
+
+  // Auto-fill details when registration number is typed (length >= 4)
+  useEffect(() => {
+    if (watchedRegNo && watchedRegNo.trim().length >= 4) {
+      api.get(`/search/customers?q=${encodeURIComponent(watchedRegNo.trim())}`).then(res => {
+        const list = res.data?.data || [];
+        const match = list.find((c: any) => c.vehicle_reg_no && c.vehicle_reg_no.toLowerCase().includes(watchedRegNo.trim().toLowerCase()));
+        if (match) applyCustomerMatch(match);
+      }).catch(err => console.error(err));
+    }
+  }, [watchedRegNo]);
 
   let discountAmount = 0;
   if (discountType === 'percentage') {
@@ -327,15 +343,15 @@ export default function QuickBillingPage() {
               <div>
                 <label className="block text-xs font-bold text-[#5f5e5e] mb-1">Vehicle Brand</label>
                 <select
-                  {...register("vehicle_brand")}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-[#D32F2F] outline-none bg-white"
+                  value={currentBrand}
                   onChange={(e) => {
                     setValue("vehicle_brand", e.target.value);
                     setValue("vehicle_model", "");
                   }}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-[#D32F2F] outline-none bg-white font-medium"
                 >
                   <option value="">-- Select Brand --</option>
-                  {brandsList.map((b: string) => (
+                  {effectiveBrands.map((b: string) => (
                     <option key={b} value={b}>{b}</option>
                   ))}
                 </select>
@@ -343,22 +359,23 @@ export default function QuickBillingPage() {
               <div>
                 <label className="block text-xs font-bold text-[#5f5e5e] mb-1">Vehicle Model</label>
                 <select
-                  {...register("vehicle_model")}
-                  disabled={!selectedBrand}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-[#D32F2F] outline-none bg-white disabled:bg-gray-100 disabled:text-gray-400"
+                  value={currentModel}
+                  disabled={!currentBrand}
                   onChange={(e) => {
                     const modelName = e.target.value;
                     setValue("vehicle_model", modelName);
-                    const selectedModelObj = modelsList.find((m: any) => m.model === modelName);
+                    const selectedModelObj = modelsList.find((m: any) => (m.model || m) === modelName);
                     if (selectedModelObj && selectedModelObj.category) {
                       setValue("vehicle_category", selectedModelObj.category);
                     }
                   }}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-[#D32F2F] outline-none bg-white disabled:bg-gray-100 disabled:text-gray-400 font-medium"
                 >
-                  <option value="">{selectedBrand ? '-- Select Model --' : 'Select Brand First'}</option>
-                  {modelsList.map((m: any) => (
-                    <option key={m.model} value={m.model}>{m.model}</option>
-                  ))}
+                  <option value="">{currentBrand ? '-- Select Model --' : 'Select Brand First'}</option>
+                  {effectiveModels.map((m: any) => {
+                    const mName = typeof m === 'string' ? m : m.model;
+                    return <option key={mName} value={mName}>{mName}</option>;
+                  })}
                 </select>
               </div>
               <div>
@@ -366,15 +383,16 @@ export default function QuickBillingPage() {
                 <input
                   type="text"
                   {...register("vehicle_reg_no")}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-[#D32F2F] focus:ring-1 focus:ring-[#D32F2F] outline-none transition-all uppercase"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-[#D32F2F] focus:ring-1 focus:ring-[#D32F2F] outline-none transition-all uppercase text-sm font-semibold"
                   placeholder="e.g. MH12AB1234"
                 />
               </div>
               <div>
                 <label className="block text-xs font-bold text-[#5f5e5e] mb-1">Category</label>
                 <select
-                  {...register("vehicle_category")}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-[#D32F2F] outline-none bg-white"
+                  value={currentCategory}
+                  onChange={(e) => setValue("vehicle_category", e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-[#D32F2F] outline-none bg-white font-medium"
                 >
                   <option value="">Select Category...</option>
                   <option value="hatchback">Hatchback</option>
@@ -382,6 +400,7 @@ export default function QuickBillingPage() {
                   <option value="sedan">Sedan</option>
                   <option value="premium_sedan">Premium Sedan</option>
                   <option value="suv">SUV</option>
+                  <option value="luxury">Luxury / Multi-Utility</option>
                 </select>
               </div>
             </div>
