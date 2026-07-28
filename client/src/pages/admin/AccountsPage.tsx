@@ -207,7 +207,7 @@ export default function AccountsPage() {
           hsn_sac: i.hsn_sac || null,
           quantity: parseFloat(i.quantity) || 1,
           unit_price: parseFloat(i.unit_price) || 0,
-          gst_rate: parseFloat(i.gst_rate) || 0
+          gst_rate: parseFloat(i.gst_rate || '0') || 0
         }))
       });
       toast('success', 'Purchase bill recorded successfully');
