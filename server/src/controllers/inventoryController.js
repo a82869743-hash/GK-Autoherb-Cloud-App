@@ -360,23 +360,40 @@ exports.getCategories = async (req, res) => {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS inventory_categories (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(100) UNIQUE NOT NULL,
+        name VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL UNIQUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
-    const [rows] = await pool.query(`
-      SELECT cat.name AS category, COUNT(i.id) AS count
-      FROM (
-        SELECT name FROM inventory_categories
-        UNION
-        SELECT DISTINCT category AS name FROM inventory WHERE category IS NOT NULL AND category != '' AND is_deleted = 0
-      ) cat
-      LEFT JOIN inventory i ON (cat.name = i.category AND i.is_deleted = 0)
-      GROUP BY cat.name
-      ORDER BY cat.name ASC
-    `);
-    res.json({ success: true, data: rows });
+    // Fetch master categories list and distinct inventory categories safely
+    const [dbCats] = await pool.query('SELECT name FROM inventory_categories ORDER BY name ASC');
+    const [invCats] = await pool.query("SELECT DISTINCT category AS name FROM inventory WHERE category IS NOT NULL AND category != '' AND is_deleted = 0");
+    const [countsRows] = await pool.query("SELECT category, COUNT(id) AS cnt FROM inventory WHERE category IS NOT NULL AND category != '' AND is_deleted = 0 GROUP BY category");
+
+    const countsMap = {};
+    (countsRows || []).forEach(r => {
+      if (r.category) countsMap[r.category.trim().toLowerCase()] = Number(r.cnt || 0);
+    });
+
+    const categoryMap = new Map();
+    (dbCats || []).forEach(c => {
+      if (c.name && c.name.trim()) {
+        const key = c.name.trim().toLowerCase();
+        categoryMap.set(key, { category: c.name.trim(), count: countsMap[key] || 0 });
+      }
+    });
+
+    (invCats || []).forEach(c => {
+      if (c.name && c.name.trim()) {
+        const key = c.name.trim().toLowerCase();
+        if (!categoryMap.has(key)) {
+          categoryMap.set(key, { category: c.name.trim(), count: countsMap[key] || 0 });
+        }
+      }
+    });
+
+    const result = Array.from(categoryMap.values()).sort((a, b) => a.category.localeCompare(b.category));
+    res.json({ success: true, data: result });
   } catch (err) {
     console.error('Get categories error:', err);
     res.status(500).json({ success: false, error: 'Failed to fetch categories' });

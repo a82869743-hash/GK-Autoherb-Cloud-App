@@ -56,14 +56,19 @@ exports.create = async (req, res) => {
     const finalTaxAmount = totalGstAmount > 0 ? totalGstAmount : parseFloat(tax_amount || 0);
     const finalTotal = totalTaxable + finalTaxAmount;
 
-    // 2. Fetch vendor's previous running balance
-    const [prevBalRow] = await connection.query(
-      `SELECT running_balance FROM v2_purchases 
-       WHERE vendor_id = ? 
-       ORDER BY purchase_date DESC, id DESC LIMIT 1`,
-      [vendor_id]
-    );
-    const previousBalance = prevBalRow.length ? parseFloat(prevBalRow[0].running_balance || 0) : 0;
+    // 2. Fetch vendor's previous running balance safely
+    let previousBalance = 0;
+    try {
+      const [prevBalRow] = await connection.query(
+        `SELECT running_balance FROM v2_purchases 
+         WHERE vendor_id = ? 
+         ORDER BY purchase_date DESC, id DESC LIMIT 1`,
+        [vendor_id]
+      );
+      previousBalance = prevBalRow.length ? parseFloat(prevBalRow[0].running_balance || 0) : 0;
+    } catch (balErr) {
+      console.warn('Notice: running_balance column query warning:', balErr.message);
+    }
     const runningBalance = previousBalance + finalTotal;
 
     // 3. Insert header
