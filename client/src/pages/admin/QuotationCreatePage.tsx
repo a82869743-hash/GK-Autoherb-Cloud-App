@@ -431,7 +431,7 @@ export default function QuotationCreatePage() {
                 <button
                   type="button"
                   onClick={() => refreshCustomerList(customerSearchQuery)}
-                  style={{ padding: '8px 14px', background: '#D32F2F', color: 'white', fontSize: '12px', fontWeight: 700, borderRadius: '8px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', shrink: 0 }}
+                  style={{ padding: '8px 14px', background: '#D32F2F', color: 'white', fontSize: '12px', fontWeight: 700, borderRadius: '8px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}
                 >
                   <Search size={12} />
                   Search
