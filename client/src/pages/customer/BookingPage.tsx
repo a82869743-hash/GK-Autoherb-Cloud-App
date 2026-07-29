@@ -111,7 +111,7 @@ export default function BookingPage() {
       try {
         const initialVehicleId = new URLSearchParams(window.location.search).get('vehicle_id');
         const activePkgUrl = initialVehicleId ? `/user-packages/active?vehicle_id=${initialVehicleId}` : '/user-packages/active';
-        const [svcRes, pkgRes, myVehiclesRes, activePkgRes, settingsRes, dashboardRes, lastAddressRes, addressesRes] = await Promise.all([
+        const [svcRes, pkgRes, myVehiclesRes, activePkgRes, settingsRes, dashboardRes, lastAddressRes, addressesRes, fwRes] = await Promise.all([
           api.get('/services').catch(() => ({ data: { data: [] } })),
           api.get('/packages').catch(() => ({ data: { data: [] } })),
           api.get('/vehicles/my-vehicles').catch(() => ({ data: { data: [] } })),
@@ -120,24 +120,18 @@ export default function BookingPage() {
           api.get('/dashboard').catch(() => ({ data: {} })),
           api.get('/pickup-requests/last-address').catch(() => ({ data: { address: '' } })),
           api.get('/pickup-requests/addresses').catch(() => ({ data: { success: false, data: [] } })),
+          api.get('/bookings/first-wash-eligibility').catch(() => ({ data: { is_eligible: false } })),
         ]);
-        setServices(svcRes.data.data || []);
+        setServices(sortServicesByPriority(svcRes.data.data || []));
         setPackages(pkgRes.data.data || []);
         
         const fetchedVehicles = myVehiclesRes.data.data || [];
-        setUserVehicles(fetchedVehicles);
-
-        if (servicesRes.data.success) setServices(sortServicesByPriority(servicesRes.data.data || []));
-        if (packagesRes.data.success) setPackages(packagesRes.data.data || []);
+        setSavedVehicles(fetchedVehicles);
         
-        const vehs = vehiclesRes.data.data || [];
-        setUserVehicles(vehs);
-        
-        if (vehs.length > 0) {
-          const initialVehicleId = searchParams.get('vehicle_id');
+        if (fetchedVehicles.length > 0) {
           const primary = initialVehicleId
-            ? (vehs.find((v: any) => v.id.toString() === initialVehicleId) || vehs.find((v: any) => v.is_primary) || vehs[0])
-            : (vehs.find((v: any) => v.is_primary) || vehs[0]);
+            ? (fetchedVehicles.find((v: any) => v.id.toString() === initialVehicleId) || fetchedVehicles.find((v: any) => v.is_primary) || fetchedVehicles[0])
+            : (fetchedVehicles.find((v: any) => v.is_primary) || fetchedVehicles[0]);
           setSelectedVehicleId(primary.id);
           setBrand(primary.brand);
           setModel(primary.model);
