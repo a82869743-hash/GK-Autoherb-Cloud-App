@@ -278,12 +278,12 @@ export default function JobCartCreatePage() {
         });
       }
 
-      // 3. Upload photos
-      for (const file of beforePhotos) {
-        await uploadPhotoMut.mutateAsync({ cartId, file, type: 'before' });
+      // 3. Upload photos (batch)
+      if (beforePhotos.length > 0) {
+        await uploadPhotoMut.mutateAsync({ cartId, files: beforePhotos, type: 'before' });
       }
-      for (const file of afterPhotos) {
-        await uploadPhotoMut.mutateAsync({ cartId, file, type: 'after' });
+      if (afterPhotos.length > 0) {
+        await uploadPhotoMut.mutateAsync({ cartId, files: afterPhotos, type: 'after' });
       }
 
       // 4. Submit if requested
