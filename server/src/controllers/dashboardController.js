@@ -122,6 +122,7 @@ exports.getCustomerDashboard = async (req, res) => {
   try {
     const customerId = req.user.id;
 
+    const userPkgCtrl = require('./userPackagesController');
     const { checkFirstWashEligibility } = require('../utils/firstWashHelper');
 
     const [
