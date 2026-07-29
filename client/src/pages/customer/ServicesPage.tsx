@@ -35,7 +35,7 @@ export default function CustomerServicesPage() {
 
   const services = sortServicesByPriority(svcData?.data || []);
   const isLoading = svcLoading;
-  const renderPrice = (val: any) => Number(val || 0) === 0 ? 'Free' : formatINR(val);
+  const renderPrice = (val: any) => { const n = Number(val || 0); return n > 0 ? formatINR(n) : 'Ask Studio'; };
 
   if (isError) {
     return (

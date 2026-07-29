@@ -861,9 +861,10 @@ export default function BookingPage() {
                             {svc.description && <p className="text-xs text-[#5f5e5e] mt-1 line-clamp-2">{svc.description}</p>}
                             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-[#5f5e5e]">
                               <span className="font-bold text-[#D32F2F]">
-                                {parseFloat(String(svc[`price_${filter}`] || svc.price_sedan || 0)) === 0 
-                                  ? 'Free' 
-                                  : `₹${svc[`price_${filter}`] || svc.price_sedan}`}
+                                {(() => {
+                                  const p = parseFloat(String(svc[`price_${filter}`] || svc.price_sedan || 0));
+                                  return p > 0 ? `₹${p}` : 'Ask Studio';
+                                })()}
                               </span>
                             </div>
                           </button>
