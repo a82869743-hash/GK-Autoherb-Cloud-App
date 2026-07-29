@@ -44,6 +44,7 @@ export default function BookingPage() {
   const [filter, setFilter] = useState('sedan');
   const [loyalty, setLoyalty] = useState<{ credits: number; free_washes: number; wax_count: number }>({ credits: 0, free_washes: 0, wax_count: 0 });
   const [useFreeWash, setUseFreeWash] = useState(false);
+  const [isFirstWashEligible, setIsFirstWashEligible] = useState(false);
 
   // QR Payment states
   const [showQrModal, setShowQrModal] = useState(false);
@@ -156,6 +157,7 @@ export default function BookingPage() {
 
         const loyaltyData = dashboardRes?.data?.data?.loyalty || { credits: 0, free_washes: 0, wax_count: 0 };
         setLoyalty(loyaltyData);
+        setIsFirstWashEligible(dashboardRes?.data?.data?.first_wash_eligible ?? false);
         if (searchParams.get('free_wash') === 'true' && loyaltyData.free_washes > 0) {
           setUseFreeWash(true);
         }
@@ -289,19 +291,28 @@ export default function BookingPage() {
     return 0;
   }, [pickupOption, activePackageHasFreePickup, settings]);
 
+  const firstWashDiscountAmount = useMemo(() => {
+    if (isPackageBooking || useFreeWash || !isFirstWashEligible) return 0;
+    return Math.round(estimatedTotal * 0.50);
+  }, [isPackageBooking, useFreeWash, isFirstWashEligible, estimatedTotal]);
+
+  const totalAfterFirstWashDiscount = useMemo(() => {
+    return Math.max(0, estimatedTotal - firstWashDiscountAmount);
+  }, [estimatedTotal, firstWashDiscountAmount]);
+
   const discountAmount = useMemo(() => {
     if (isPackageBooking || useFreeWash || payAdvance !== 'full') return 0;
-    return Math.round(estimatedTotal * 0.10);
-  }, [isPackageBooking, useFreeWash, payAdvance, estimatedTotal]);
+    return Math.round(totalAfterFirstWashDiscount * 0.10);
+  }, [isPackageBooking, useFreeWash, payAdvance, totalAfterFirstWashDiscount]);
 
   const finalTotal = useMemo(() => {
-    return estimatedTotal - discountAmount + pickupCharge;
-  }, [estimatedTotal, discountAmount, pickupCharge]);
+    return totalAfterFirstWashDiscount - discountAmount + pickupCharge;
+  }, [totalAfterFirstWashDiscount, discountAmount, pickupCharge]);
 
   const requiredAdvancePossible = useMemo(() => {
     if (isPackageBooking || useFreeWash) return 0;
-    return estimatedTotal + pickupCharge;
-  }, [isPackageBooking, estimatedTotal, useFreeWash, pickupCharge]);
+    return totalAfterFirstWashDiscount + pickupCharge;
+  }, [isPackageBooking, totalAfterFirstWashDiscount, useFreeWash, pickupCharge]);
 
   const requiredAdvance = useMemo(() => {
     if (payAdvance === 'full') return finalTotal;
@@ -863,12 +874,43 @@ export default function BookingPage() {
                               <span className="font-bold text-[#D32F2F]">
                                 {(() => {
                                   const p = parseFloat(String(svc[`price_${filter}`] || svc.price_sedan || 0));
-                                  return p > 0 ? `₹${p}` : 'Ask Studio';
+                                  if (p <= 0) return 'Ask Studio';
+                                  if (isFirstWashEligible && !useFreeWash && !isPackageBooking) {
+                                    const discounted = Math.round(p * 0.50);
+                                    return (
+                                      <span className="inline-flex items-center gap-1.5">
+                                        <span className="line-through text-gray-400 text-[11px]">₹{p}</span>
+                                        <span className="font-extrabold text-[#D32F2F]">₹{discounted}</span>
+                                        <span className="text-[9px] font-black bg-red-100 text-red-700 px-1.5 py-0.5 rounded">50% OFF</span>
+                                      </span>
+                                    );
+                                  }
+                                  return `₹${p}`;
                                 })()}
                               </span>
                             </div>
                           </button>
                         );})}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 50% OFF First Wash Promo Banner */}
+                  {isFirstWashEligible && !useFreeWash && !isPackageBooking && (
+                    <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white rounded-xl p-4 flex items-center justify-between gap-3 mb-4 shadow-md border border-red-300">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0">
+                          <Sparkles size={18} className="text-amber-200 animate-bounce" />
+                        </div>
+                        <div className="text-left">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className="px-2 py-0.5 bg-amber-300 text-red-950 text-[9px] font-black uppercase tracking-wider rounded-full">
+                              First Wash Special
+                            </span>
+                            <span className="text-[10px] font-bold text-amber-100">50% OFF ACTIVE</span>
+                          </div>
+                          <p className="text-xs font-black text-white">Flat 50% Discount will be automatically applied at checkout!</p>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1147,6 +1189,15 @@ export default function BookingPage() {
                     <span className="text-[#5f5e5e] font-normal">Original Total Price</span>
                     <span className="ml-auto">₹{estimatedTotal}</span>
                   </div>
+                  {firstWashDiscountAmount > 0 && (
+                    <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-red-600 bg-red-50/70 px-2.5 rounded-lg">
+                      <span className="text-red-700 font-bold flex items-center gap-1.5">
+                        <Sparkles size={14} className="text-amber-500" />
+                        First Wash Special (50% OFF)
+                      </span>
+                      <span className="ml-auto text-red-700 font-extrabold">-₹{firstWashDiscountAmount}</span>
+                    </div>
+                  )}
                   {discountAmount > 0 && (
                     <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-green-600">
                       <span className="text-green-600 font-normal">Advance Discount (10% Off)</span>
