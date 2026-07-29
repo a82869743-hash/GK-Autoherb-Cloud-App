@@ -111,9 +111,10 @@ export const useDeleteService = () => {
 export const useUploadPhoto = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ cartId, file, type }: { cartId: number; file: File; type: 'before' | 'after' }) => {
+    mutationFn: async ({ cartId, files, type }: { cartId: number; files: File[] | File; type: 'before' | 'after' }) => {
       const formData = new FormData();
-      formData.append('photo', file);
+      const fileArray = Array.isArray(files) ? files : [files];
+      fileArray.forEach(f => formData.append('photos', f));
       formData.append('type', type);
       const res = await api.post(`/job-carts/${cartId}/photos`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },

@@ -53,9 +53,14 @@ export default function JobTrackingPage() {
     }
   };
 
+  const [jobPhotos, setJobPhotos] = useState<any[]>([]);
+
   useEffect(() => {
     if (id) {
       fetchPhase();
+      api.get(`/job-carts/${id}/photos`).then(res => {
+        if (res.data?.success) setJobPhotos(res.data.data);
+      }).catch(() => {});
     }
   }, [id]);
 
@@ -218,6 +223,46 @@ export default function JobTrackingPage() {
 
           </div>
         </div>
+
+        {/* Before & After Photo Gallery */}
+        {jobPhotos.length > 0 && (
+          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 space-y-4">
+            <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
+              <Sparkles size={16} className="text-[#D32F2F]" />
+              <span>Vehicle Before & After Inspection Photos</span>
+            </h3>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Before Service</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  {jobPhotos.filter(p => p.type === 'before').map(p => (
+                    <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-gray-200 hover:opacity-90 transition shadow-xs">
+                      <img src={p.url} alt="Before Service" className="w-full h-32 object-cover" />
+                    </a>
+                  ))}
+                  {jobPhotos.filter(p => p.type === 'before').length === 0 && (
+                    <p className="text-xs text-gray-400 italic col-span-2">No before photos uploaded yet</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">After Service</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  {jobPhotos.filter(p => p.type === 'after').map(p => (
+                    <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-gray-200 hover:opacity-90 transition shadow-xs">
+                      <img src={p.url} alt="After Service" className="w-full h-32 object-cover" />
+                    </a>
+                  ))}
+                  {jobPhotos.filter(p => p.type === 'after').length === 0 && (
+                    <p className="text-xs text-gray-400 italic col-span-2">No after photos uploaded yet</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer info */}
         <div className="text-center text-xs text-gray-400">

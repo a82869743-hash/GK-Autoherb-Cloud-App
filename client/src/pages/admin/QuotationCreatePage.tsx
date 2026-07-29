@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Plus, Trash2, ArrowLeft, Loader2, Save, ShoppingBag } from 'lucide-react';
 import toast from 'react-hot-toast';
+import io from 'socket.io-client';
 
+import api from '../../api/axiosInstance';
 import { useServices } from '../../api/hooks/useServices';
 import { usePackages } from '../../api/hooks/usePackages';
 import { useCreateQuotation, useUpdateQuotation, useQuotation } from '../../api/hooks/useQuotations';
@@ -58,6 +60,74 @@ export default function QuotationCreatePage() {
   const { data: servicesRes, isLoading: loadingServices } = useServices({ active_only: true });
   const { data: packagesRes, isLoading: loadingPackages } = usePackages({ published_only: true });
   const { data: existingQuotation, isLoading: loadingQuotation } = useQuotation(isEdit ? Number(id) : undefined);
+
+  const [existingCustomers, setExistingCustomers] = useState<any[]>([]);
+  const [selectedCustKey, setSelectedCustKey] = useState('');
+
+  const refreshCustomerList = (searchQuery?: string) => {
+    const q = searchQuery || '';
+    api.get(`/search/customers?q=${encodeURIComponent(q)}&limit=100`).then(res => {
+      setExistingCustomers(res.data?.data || []);
+    }).catch(err => console.error(err));
+  };
+
+  useEffect(() => {
+    refreshCustomerList();
+
+    const socketUrl = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || window.location.origin;
+    const socket = io(socketUrl, { transports: ['websocket', 'polling'] });
+
+    socket.on('customer_updated', () => refreshCustomerList());
+    socket.on('customer_created', () => refreshCustomerList());
+    socket.on('manual_bill_created', () => refreshCustomerList());
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  const applyCustomerMatch = (cust: any) => {
+    if (!cust) return;
+    if (cust.name) setCustomerName(cust.name);
+    if (cust.mobile) setCustomerMobile(cust.mobile);
+    if (cust.email) setCustomerEmail(cust.email);
+    if (cust.vehicle_reg_no) setVehicleNo(cust.vehicle_reg_no);
+    if (cust.vehicle_brand) setCarBrand(cust.vehicle_brand);
+    if (cust.vehicle_model) setCarModel(cust.vehicle_model);
+    if (cust.vehicle_category) handleSegmentChange(cust.vehicle_category);
+    toast.success(`Auto-filled details for ${cust.name}`);
+  };
+
+  const handleSelectExistingCustomer = (key: string) => {
+    setSelectedCustKey(key);
+    if (!key) return;
+    const found = existingCustomers.find((c: any, idx: number) => {
+      const uniqueVal = c.id ? `user_${c.id}` : `bill_${c.mobile}_${c.name}_${idx}`;
+      return uniqueVal === key;
+    });
+    if (found) {
+      applyCustomerMatch(found);
+    }
+  };
+
+  // Real-time keystroke auto-fill search
+  useEffect(() => {
+    const q = customerMobile || customerName || vehicleNo || '';
+    if (q.trim().length >= 2) {
+      api.get(`/search/customers?q=${encodeURIComponent(q.trim())}`).then(res => {
+        const list = res.data?.data || [];
+        setExistingCustomers(list);
+        const match = list.find((c: any) => 
+          (c.mobile && c.mobile === customerMobile) ||
+          (c.name && c.name.toLowerCase() === customerName.trim().toLowerCase()) ||
+          (c.vehicle_reg_no && c.vehicle_reg_no.toLowerCase() === vehicleNo.trim().toLowerCase())
+        );
+        if (match && !isEdit) {
+          applyCustomerMatch(match);
+        }
+      }).catch(err => console.error(err));
+    }
+  }, [customerMobile, customerName, vehicleNo]);
 
   const { data: brandsRes } = useBrands();
   const { data: modelsRes } = useModels(carBrand);
@@ -334,6 +404,30 @@ export default function QuotationCreatePage() {
             <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1c1b1b', marginBottom: '18px', borderBottom: '1px solid #f5f0ef', paddingBottom: '10px' }}>
               Customer & Vehicle Details
             </h2>
+
+            {/* Auto-fill Customer Selector */}
+            {existingCustomers.length > 0 && (
+              <div style={{ marginBottom: '16px', background: 'linear-gradient(to right, rgba(254,242,242,0.8), rgba(255,237,213,0.8))', padding: '14px', borderRadius: '12px', border: '1px solid #fca5a5' }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#b91c1c', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                  ⚡ Select Existing Customer to Auto-fill ({existingCustomers.length} available)
+                </label>
+                <select
+                  value={selectedCustKey}
+                  onChange={(e) => handleSelectExistingCustomer(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #f87171', fontSize: '13px', fontWeight: 700, color: '#111827', background: 'white', outline: 'none' }}
+                >
+                  <option value="">-- Click to Select Existing Customer to Auto-fill --</option>
+                  {existingCustomers.map((c: any, idx: number) => {
+                    const uniqueVal = c.id ? `user_${c.id}` : `bill_${c.mobile}_${c.name}_${idx}`;
+                    return (
+                      <option key={uniqueVal} value={uniqueVal}>
+                        {c.name} {c.mobile ? `(${c.mobile})` : ''} {c.vehicle_reg_no ? `— [${c.vehicle_reg_no}]` : ''} {c.vehicle_brand ? `(${c.vehicle_brand} ${c.vehicle_model || ''})` : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
 
             <div className="quotation-fields-grid" style={{ display: 'grid', gap: '16px 20px' }}>
               <div>

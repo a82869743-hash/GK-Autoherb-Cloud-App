@@ -244,10 +244,9 @@ export default function JobCartDetailPage() {
   const handleUploadBefore = async (files: File[]) => {
     setBeforeFiles(files);
     if (files.length > 0) {
-      const file = files[files.length - 1];
       try {
-        await uploadPhotoMut.mutateAsync({ cartId: Number(id), file, type: 'before' });
-        toast('success', 'Before photo uploaded');
+        await uploadPhotoMut.mutateAsync({ cartId: Number(id), files, type: 'before' });
+        toast('success', `Uploaded ${files.length} before photo(s)`);
         refetch();
         setBeforeFiles([]);
       } catch (err: any) {
@@ -259,10 +258,9 @@ export default function JobCartDetailPage() {
   const handleUploadAfter = async (files: File[]) => {
     setAfterFiles(files);
     if (files.length > 0) {
-      const file = files[files.length - 1];
       try {
-        await uploadPhotoMut.mutateAsync({ cartId: Number(id), file, type: 'after' });
-        toast('success', 'After photo uploaded');
+        await uploadPhotoMut.mutateAsync({ cartId: Number(id), files, type: 'after' });
+        toast('success', `Uploaded ${files.length} after photo(s)`);
         refetch();
         setAfterFiles([]);
       } catch (err: any) {

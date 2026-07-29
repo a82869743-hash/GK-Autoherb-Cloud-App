@@ -220,7 +220,19 @@ exports.awardPointsInternal = async (conn, customerId, amount, referenceType, re
     const config = await getLoyaltySettings(conn);
     if (!config.enabled) return 0;
 
-    const pointsEarned = Math.floor(amount / config.points_ratio);
+    // Idempotency safeguard: check if points were already awarded for this reference
+    const [existing] = await conn.query(
+      "SELECT id FROM loyalty_transactions WHERE customer_id = ? AND reference_type = ? AND reference_id = ? AND type = 'earn'",
+      [customerId, referenceType, referenceId]
+    );
+    if (existing.length > 0) {
+      console.log(`[LOYALTY] Points already awarded for ${referenceType} #${referenceId}`);
+      return 0;
+    }
+
+    // 10% point earning ratio (₹10 spent = 1 point)
+    const ratio = config.points_ratio <= 10 ? config.points_ratio : 10;
+    const pointsEarned = Math.floor(amount / ratio);
     if (pointsEarned <= 0) return 0;
 
     await ensureLoyaltyRow(conn, customerId);
@@ -240,9 +252,10 @@ exports.awardPointsInternal = async (conn, customerId, amount, referenceType, re
        (customer_id, type, points, balance_after, reference_type, reference_id, description, created_by)
        VALUES (?, 'earn', ?, ?, ?, ?, ?, ?)`,
       [customerId, pointsEarned, newBalance, referenceType, referenceId,
-       `Earned ${pointsEarned} points`, createdBy]
+       `Earned ${pointsEarned} loyalty points (10% back)`, createdBy || null]
     );
 
+    console.log(`[LOYALTY] Awarded ${pointsEarned} points to customer #${customerId} for ${referenceType} #${referenceId}`);
     return pointsEarned;
   } catch (err) {
     console.error('Award points internal error:', err);

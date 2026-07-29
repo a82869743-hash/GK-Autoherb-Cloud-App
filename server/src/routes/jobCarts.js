@@ -25,7 +25,8 @@ router.put('/:id/services/:sid',   auth, role(['admin', 'staff']), ctrl.updateSe
 router.delete('/:id/services/:sid', auth, role(['admin', 'staff']), ctrl.deleteService);
 
 // Photos
-router.post('/:id/photos',        auth, role(['admin', 'staff']), upload.single('photo'), ctrl.uploadPhoto);
+router.get('/:id/photos',         auth, role(['admin', 'staff', 'customer']), ctrl.listPhotos);
+router.post('/:id/photos',        auth, role(['admin', 'staff']), upload.array('photos', 10), ctrl.uploadPhoto);
 router.delete('/:id/photos/:pid', auth, role(['admin', 'staff']), ctrl.deletePhoto);
 router.get('/:id/photos/download', auth, role(['admin', 'staff', 'customer']), ctrl.downloadAllPhotos);
 

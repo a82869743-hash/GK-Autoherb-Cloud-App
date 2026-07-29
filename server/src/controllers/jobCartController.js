@@ -757,70 +757,116 @@ exports.deleteService = async (req, res) => {
   }
 };
 
-// ─── UPLOAD PHOTO ───────────────────────────
+// ─── LIST PHOTOS (With Customer Ownership Check) ───
+exports.listPhotos = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check ownership for customer role
+    if (req.user.role === 'customer') {
+      const [check] = await pool.query(
+        `SELECT jc.id FROM job_carts jc 
+         JOIN vehicles v ON jc.vehicle_id = v.id 
+         WHERE jc.id = ? AND v.customer_id = ?`,
+        [id, req.user.id]
+      );
+      if (!check.length) {
+        return res.status(403).json({ success: false, error: 'Not authorized to view photos for this job cart' });
+      }
+    }
+
+    const [photos] = await pool.query(
+      'SELECT id, job_cart_id, type, url, public_id, uploaded_at FROM job_photos WHERE job_cart_id = ? ORDER BY uploaded_at DESC',
+      [id]
+    );
+
+    res.json({
+      success: true,
+      data: photos
+    });
+  } catch (err) {
+    console.error('List photos error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ─── UPLOAD PHOTOS (Batch Support) ───────────────────
 exports.uploadPhoto = async (req, res) => {
   try {
     const { id } = req.params;
     const photoType = req.body.type || 'before';
 
-    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+    const files = req.files || (req.file ? [req.file] : []);
+    if (!files.length) return res.status(400).json({ success: false, error: 'No files uploaded' });
 
     const [cart] = await pool.query('SELECT visit_date FROM job_carts WHERE id = ?', [id]);
     if (!cart.length) return res.status(404).json({ success: false, error: 'Not found' });
     if (!checkStaffModifyPermission(req.user, cart[0])) {
-      return res.status(403).json({ success: false, error: 'Staff can only modify today\'s job carts' });
+      return res.status(403).json({ success: false, error: "Staff can only modify today's job carts" });
     }
 
-    let photoUrl = '';
-    let publicId = null;
+    const fs = require('fs');
+    const pathModule = require('path');
+    const uploadedPhotos = [];
 
-    // Try Cloudinary if configured
-    if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
-      try {
-        const cloudinary = require('../config/cloudinary');
-        const result = await new Promise((resolve, reject) => {
-          const stream = cloudinary.uploader.upload_stream(
-            { folder: `gk-autoherb/job-photos/${id}`, resource_type: 'image' },
-            (err, res) => { if (err) reject(err); else resolve(res); }
-          );
-          stream.end(req.file.buffer);
-        });
-        photoUrl = result.secure_url;
-        publicId = result.public_id;
-      } catch (cloudErr) {
-        console.warn('Cloudinary upload failed, falling back to local disk:', cloudErr.message);
-      }
-    }
+    for (const file of files) {
+      let photoUrl = '';
+      let publicId = null;
 
-    // Local disk fallback
-    if (!photoUrl) {
-      const fs = require('fs');
-      const pathModule = require('path');
-      const uploadsDir = pathModule.join(__dirname, '..', '..', 'uploads', 'job-photos', String(id));
-      if (!fs.existsSync(uploadsDir)) {
-        fs.mkdirSync(uploadsDir, { recursive: true });
+      // Try Cloudinary if configured
+      if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
+        try {
+          const cloudinary = require('../config/cloudinary');
+          const result = await new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+              { folder: `gk-autoherb/job-photos/${id}`, resource_type: 'image' },
+              (err, res) => { if (err) reject(err); else resolve(res); }
+            );
+            stream.end(file.buffer);
+          });
+          photoUrl = result.secure_url;
+          publicId = result.public_id;
+        } catch (cloudErr) {
+          console.warn('Cloudinary upload failed, falling back to local disk:', cloudErr.message);
+        }
       }
 
-      const ext = pathModule.extname(req.file.originalname) || '.jpg';
-      const safeName = req.file.originalname
-        .replace(ext, '')
-        .replace(/[^a-zA-Z0-9_-]/g, '_')
-        .substring(0, 50);
-      const fileName = `${Date.now()}_${safeName}${ext}`;
-      const filePath = pathModule.join(uploadsDir, fileName);
+      // Local disk fallback
+      if (!photoUrl) {
+        const uploadsDir = pathModule.join(__dirname, '..', '..', 'uploads', 'job-photos', String(id));
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
+        }
 
-      fs.writeFileSync(filePath, req.file.buffer);
-      photoUrl = `/uploads/job-photos/${id}/${fileName}`;
+        const ext = pathModule.extname(file.originalname) || '.jpg';
+        const safeName = file.originalname
+          .replace(ext, '')
+          .replace(/[^a-zA-Z0-9_-]/g, '_')
+          .substring(0, 50);
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 6)}_${safeName}${ext}`;
+        const filePath = pathModule.join(uploadsDir, fileName);
+
+        fs.writeFileSync(filePath, file.buffer);
+        photoUrl = `/uploads/job-photos/${id}/${fileName}`;
+      }
+
+      const [insertResult] = await pool.query(
+        'INSERT INTO job_photos (job_cart_id, type, url, public_id) VALUES (?, ?, ?, ?)',
+        [id, photoType, photoUrl, publicId]
+      );
+
+      uploadedPhotos.push({
+        id: insertResult.insertId,
+        url: photoUrl,
+        type: photoType,
+        public_id: publicId
+      });
     }
-
-    const [insertResult] = await pool.query(
-      'INSERT INTO job_photos (job_cart_id, type, url, public_id) VALUES (?, ?, ?, ?)',
-      [id, photoType, photoUrl, publicId]
-    );
 
     res.status(201).json({
       success: true,
-      data: { id: insertResult.insertId, url: photoUrl, type: photoType, public_id: publicId },
+      data: uploadedPhotos,
+      message: `Successfully uploaded ${uploadedPhotos.length} photo(s)`
     });
   } catch (err) {
     console.error('Upload photo error:', err);
@@ -835,14 +881,33 @@ exports.deletePhoto = async (req, res) => {
     const [photos] = await pool.query('SELECT * FROM job_photos WHERE id = ?', [pid]);
     if (!photos.length) return res.status(404).json({ success: false, error: 'Photo not found' });
 
-    const [cart] = await pool.query('SELECT visit_date FROM job_carts WHERE id = ?', [photos[0].job_cart_id]);
+    const photo = photos[0];
+    const [cart] = await pool.query('SELECT visit_date FROM job_carts WHERE id = ?', [photo.job_cart_id]);
     if (cart.length && !checkStaffModifyPermission(req.user, cart[0])) {
-      return res.status(403).json({ success: false, error: 'Staff can only modify today\'s job carts' });
+      return res.status(403).json({ success: false, error: "Staff can only modify today's job carts" });
     }
 
-    if (photos[0].public_id) {
-      await cloudinary.uploader.destroy(photos[0].public_id).catch(() => {});
+    if (photo.public_id) {
+      try {
+        const cloudinary = require('../config/cloudinary');
+        await cloudinary.uploader.destroy(photo.public_id);
+      } catch (cErr) {
+        console.warn('Cloudinary delete warning:', cErr.message);
+      }
+    } else if (photo.url && photo.url.startsWith('/uploads/')) {
+      const fs = require('fs');
+      const pathModule = require('path');
+      const localPath = pathModule.join(__dirname, '..', '..', photo.url);
+      if (fs.existsSync(localPath)) {
+        try {
+          fs.unlinkSync(localPath);
+          console.log(`[JOB_PHOTO] Deleted local file: ${localPath}`);
+        } catch (fsErr) {
+          console.error('[JOB_PHOTO] Failed to delete local file:', fsErr.message);
+        }
+      }
     }
+
     await pool.query('DELETE FROM job_photos WHERE id = ?', [pid]);
     res.json({ success: true, message: 'Photo deleted' });
   } catch (err) {

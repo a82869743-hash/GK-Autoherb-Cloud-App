@@ -99,17 +99,27 @@ exports.create = async (req, res) => {
       }
     }
 
+    // First wash 50% discount check
+    const { checkFirstWashEligibility } = require('../utils/firstWashHelper');
+    let discountPercent = 0.00;
+    if (resolvedCustomerId && !packageUsed) {
+      const fwCheck = await checkFirstWashEligibility(conn, resolvedCustomerId);
+      if (fwCheck.isEligible) {
+        discountPercent = 50.00;
+      }
+    }
+
     // Insert quick wash booking
     const [result] = await conn.query(`
       INSERT INTO bookings
         (customer_id, vehicle_id, slot_id, service_id, package_id,
          vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category,
-         job_type, status, wash_status, queue_position, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'quick_wash', 'confirmed', 'pending', ?, ?)
+         job_type, status, wash_status, queue_position, notes, discount_percent)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'quick_wash', 'confirmed', 'pending', ?, ?, ?)
     `, [
       resolvedCustomerId, resolvedVehicleId, slotId, service_id || null, actualPackageId,
       resolvedBrand, resolvedModel, resolvedRegNo, safeCategory,
-      queuePosition, notes || null
+      queuePosition, notes || null, discountPercent
     ]);
 
     // Increment slot count
@@ -268,6 +278,24 @@ exports.updateStatus = async (req, res) => {
       `UPDATE bookings SET ${setClauses} WHERE id = ?`,
       [...values, id]
     );
+
+    // If wash completed, check first wash discount or award 10% loyalty points from 2nd wash onward
+    if (wash_status === 'completed' || status === 'completed') {
+      const [bRows] = await conn.query('SELECT customer_id, total_amount, discount_percent FROM bookings WHERE id = ?', [id]);
+      if (bRows.length && bRows[0].customer_id) {
+        const { markFirstWashDiscountUsed } = require('../utils/firstWashHelper');
+        const { awardPointsInternal } = require('./loyaltyController');
+        const bk = bRows[0];
+
+        if (bk.discount_percent > 0) {
+          await markFirstWashDiscountUsed(conn, bk.customer_id);
+          console.log(`[FIRST_WASH] Marked 50% first wash discount used for customer #${bk.customer_id}`);
+        } else {
+          // Award 10% loyalty points starting from 2nd wash
+          await awardPointsInternal(conn, bk.customer_id, Number(bk.total_amount || 0), 'quick_wash', parseInt(id), req.user ? req.user.id : null);
+        }
+      }
+    }
 
     await conn.commit();
 
