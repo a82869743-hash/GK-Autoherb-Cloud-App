@@ -126,28 +126,28 @@ export default function BookingPage() {
         
         const fetchedVehicles = myVehiclesRes.data.data || [];
         setUserVehicles(fetchedVehicles);
+
+        if (servicesRes.data.success) setServices(sortServicesByPriority(servicesRes.data.data || []));
+        if (packagesRes.data.success) setPackages(packagesRes.data.data || []);
         
-        // Auto-select primary car (or only car) if available
-        if (fetchedVehicles.length > 0) {
+        const vehs = vehiclesRes.data.data || [];
+        setUserVehicles(vehs);
+        
+        if (vehs.length > 0) {
           const initialVehicleId = searchParams.get('vehicle_id');
           const primary = initialVehicleId
-            ? (fetchedVehicles.find((v: any) => v.id.toString() === initialVehicleId) || fetchedVehicles.find((v: any) => v.is_primary) || fetchedVehicles[0])
-            : (fetchedVehicles.find((v: any) => v.is_primary) || fetchedVehicles[0]);
+            ? (vehs.find((v: any) => v.id.toString() === initialVehicleId) || vehs.find((v: any) => v.is_primary) || vehs[0])
+            : (vehs.find((v: any) => v.is_primary) || vehs[0]);
           setSelectedVehicleId(primary.id);
           setBrand(primary.brand);
           setModel(primary.model);
           setRegNo(primary.registration_no || '');
-          if (primary.category) {
-            setFilter(primary.category);
-          } else {
-            setFilter(getCategoryForModel(primary.brand, primary.model));
-          }
+          setFilter(primary.category || getCategoryForModel(primary.brand, primary.model));
         } else {
           setManualEntry(true);
           setFilter('sedan');
         }
 
-        // activePkgRes.data.data is a single object or null
         const actPkg = activePkgRes.data.data;
         setActivePackages(actPkg ? [actPkg] : []);
 
@@ -157,7 +157,12 @@ export default function BookingPage() {
 
         const loyaltyData = dashboardRes?.data?.data?.loyalty || { credits: 0, free_washes: 0, wax_count: 0 };
         setLoyalty(loyaltyData);
-        setIsFirstWashEligible(dashboardRes?.data?.data?.first_wash_eligible ?? false);
+        
+        const isEligibleFromDash = dashboardRes?.data?.data?.first_wash_eligible;
+        const isEligibleFromDirect = fwRes?.data?.is_eligible;
+        const finalEligibility = isEligibleFromDirect !== undefined ? isEligibleFromDirect : (isEligibleFromDash ?? false);
+        setIsFirstWashEligible(finalEligibility);
+
         if (searchParams.get('free_wash') === 'true' && loyaltyData.free_washes > 0) {
           setUseFreeWash(true);
         }

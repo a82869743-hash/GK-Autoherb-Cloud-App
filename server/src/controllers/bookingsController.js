@@ -1585,3 +1585,15 @@ exports.downloadInvoice = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to generate invoice PDF' });
   }
 };
+
+exports.firstWashEligibility = async (req, res) => {
+  try {
+    const customerId = req.query.customer_id || req.user.id;
+    const { checkFirstWashEligibility } = require('../utils/firstWashHelper');
+    const result = await checkFirstWashEligibility(pool, customerId);
+    res.json({ success: true, is_eligible: result.isEligible, reason: result.reason });
+  } catch (err) {
+    console.error('firstWashEligibility error:', err);
+    res.status(500).json({ success: false, is_eligible: false });
+  }
+};
