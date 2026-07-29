@@ -7,7 +7,7 @@ const role = require('../middleware/role');
 const ctrl = require('../controllers/inventoryController');
 
 router.post('/bulk-upload', auth, role(['admin']), upload.single('file'), ctrl.bulkUpload);
-router.post('/upload-image', auth, role(['admin']), upload.single('image'), ctrl.uploadImage);
+router.post('/upload-image', auth, role(['admin']), upload.any(), ctrl.uploadImage);
 router.post('/bulk-delete', auth, role(['admin']), ctrl.bulkDelete);
 router.post('/bulk-update-category', auth, role(['admin']), ctrl.bulkUpdateCategory);
 router.post('/bulk-update-status', auth, role(['admin']), ctrl.bulkUpdateStatus);

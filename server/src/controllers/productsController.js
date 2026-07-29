@@ -398,7 +398,7 @@ exports.listCustomerProducts = async (req, res) => {
                 cost_price, selling_price, discount_pct, gst_pct,
                 supplier, purchase_date, purchase_invoice_no, warehouse_location,
                 warranty, serial_number, expiry_date, status, description,
-                CAST(images_json AS CHAR(2000)) as images_json
+                images_json
          FROM inventory 
          WHERE is_deleted = 0 AND status = 'active'
          ORDER BY product_name ASC, id DESC`
@@ -412,7 +412,7 @@ exports.listCustomerProducts = async (req, res) => {
                 cost_price, selling_price, discount_pct, gst_pct,
                 supplier, purchase_date, purchase_invoice_no, warehouse_location,
                 warranty, serial_number, expiry_date, description,
-                CAST(images_json AS CHAR(2000)) as images_json
+                images_json
          FROM inventory 
          WHERE is_deleted = 0
          ORDER BY product_name ASC, id DESC`

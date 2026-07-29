@@ -3,6 +3,15 @@ import { ShoppingBag, CreditCard, CheckCircle, Clock, AlertTriangle, ArrowRight,
 import api from '../../api/axiosInstance';
 import { useUIStore } from '../../store/uiStore';
 
+function resolveImageUrl(url: string | undefined): string {
+  if (!url) return '';
+  if (url.includes('localhost:5000') || url.includes('127.0.0.1')) {
+    const idx = url.indexOf('/uploads/');
+    if (idx !== -1) return url.substring(idx);
+  }
+  return url;
+}
+
 // Static product configuration with details matching ChatGPT screenshots
 const PRODUCT_TEMPLATES = [
   {
@@ -371,15 +380,17 @@ export default function ProductsPage() {
         const dbSellingPrice = match ? parseFloat(match.selling_price) : 0;
         const dbCostPrice = match ? parseFloat(match.cost_price) : 0;
 
-        // Extract image from DB images_json if available
-        let dbImage = '';
+        // Extract image(s) from DB images_json if available
+        let dbImages: string[] = [];
         if (match?.images_json) {
           try {
             const imgArr = typeof match.images_json === 'string' ? JSON.parse(match.images_json) : match.images_json;
-            if (Array.isArray(imgArr) && imgArr.length > 0) dbImage = imgArr[0];
-            else if (typeof imgArr === 'string' && imgArr) dbImage = imgArr;
+            if (Array.isArray(imgArr)) dbImages = imgArr.map(resolveImageUrl).filter(Boolean);
+            else if (typeof imgArr === 'string' && imgArr) dbImages = [resolveImageUrl(imgArr)];
           } catch { /* ignore parse errors */ }
         }
+
+        const effectiveImages = dbImages.length > 0 ? dbImages : [tmpl.image];
 
         // Calculate MRP and discount from DB data
         const effectivePrice = dbSellingPrice > 0 ? dbSellingPrice : tmpl.price;
@@ -395,7 +406,8 @@ export default function ProductsPage() {
           // DB data overrides template when available
           displayName: match?.product_name || tmpl.displayName,
           description: match?.description || tmpl.description,
-          image: dbImage || tmpl.image,
+          image: effectiveImages[0],
+          images: effectiveImages,
           price: effectivePrice,
           mrp: effectiveMrp,
           discount: effectiveDiscount,
@@ -433,20 +445,23 @@ export default function ProductsPage() {
         const estimatedMrp = Math.ceil(sellingPrice * 1.6 / 10) * 10; // Round up to nearest 10
         const discountPct = Math.round(((estimatedMrp - sellingPrice) / estimatedMrp) * 100);
 
-        // Extract image from DB images_json
-        let dbImage = '';
+        // Extract image(s) from DB images_json
+        let dbImages: string[] = [];
         if (db.images_json) {
           try {
             const imgArr = typeof db.images_json === 'string' ? JSON.parse(db.images_json) : db.images_json;
-            if (Array.isArray(imgArr) && imgArr.length > 0) dbImage = imgArr[0];
-            else if (typeof imgArr === 'string' && imgArr) dbImage = imgArr;
+            if (Array.isArray(imgArr)) dbImages = imgArr.map(resolveImageUrl).filter(Boolean);
+            else if (typeof imgArr === 'string' && imgArr) dbImages = [resolveImageUrl(imgArr)];
           } catch { /* ignore parse errors */ }
         }
+
+        const effectiveImages = dbImages.length > 0 ? dbImages : ['https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=500&q=80'];
 
         mapped.push({
           dbName: db.product_name,
           displayName: db.product_name,
-          image: dbImage, // Use admin-uploaded image from DB
+          image: effectiveImages[0],
+          images: effectiveImages,
           rating: 4.5,
           reviewsCount: 0,
           price: sellingPrice,
@@ -989,15 +1004,33 @@ export default function ProductsPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl overflow-hidden w-full max-w-4xl shadow-2xl flex flex-col md:flex-row max-h-[90vh]">
             {/* Product Picture Section */}
-            <div className="relative md:w-1/2 bg-gray-900 flex flex-col justify-center min-h-[300px]">
-              <img
-                src={selectedProduct.image || 'https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=500&q=80'}
-                alt={selectedProduct.displayName}
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=500&q=80';
-                }}
-              />
+            <div className="relative md:w-1/2 bg-gray-900 flex flex-col justify-between min-h-[300px]">
+              <div className="flex-1 flex items-center justify-center p-2">
+                <img
+                  src={selectedProduct.image || 'https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=500&q=80'}
+                  alt={selectedProduct.displayName}
+                  className="w-full h-[280px] object-contain rounded-xl"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=500&q=80';
+                  }}
+                />
+              </div>
+              {selectedProduct.images && selectedProduct.images.length > 1 && (
+                <div className="p-3 bg-black/40 flex items-center gap-2 overflow-x-auto justify-center">
+                  {selectedProduct.images.map((img: string, idx: number) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setSelectedProduct((prev: any) => ({ ...prev, image: img }))}
+                      className={`w-12 h-12 rounded-lg border-2 overflow-hidden shrink-0 transition-all ${
+                        selectedProduct.image === img ? 'border-red-500 scale-105' : 'border-transparent opacity-70 hover:opacity-100'
+                      }`}
+                    >
+                      <img src={img} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              )}
               <button
                 onClick={() => setSelectedProduct(null)}
                 className="absolute top-4 left-4 p-2 rounded-full bg-black/50 hover:bg-black text-white transition-colors md:hidden"

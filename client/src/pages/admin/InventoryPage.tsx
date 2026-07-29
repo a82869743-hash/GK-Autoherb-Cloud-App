@@ -89,6 +89,7 @@ export default function InventoryPage() {
   const [formQty, setFormQty] = useState(0);
   const [formThreshold, setFormThreshold] = useState(5);
   const [formImage, setFormImage] = useState('');
+  const [formImages, setFormImages] = useState<string[]>([]);
   const [formDescription, setFormDescription] = useState('');
 
   // 19 Professional accessories fields
@@ -159,20 +160,22 @@ export default function InventoryPage() {
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     const uploadFormData = new FormData();
-    uploadFormData.append('image', file);
+    Array.from(files).forEach(f => uploadFormData.append('images', f));
 
     try {
       setUploadingImage(true);
       const res = await api.post('/inventory/upload-image', uploadFormData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      if (res.data?.url) {
-        setFormImage(res.data.url);
-        toast('success', 'Image uploaded successfully');
+      const newUrls = res.data?.urls || (res.data?.url ? [res.data.url] : []);
+      if (newUrls.length > 0) {
+        setFormImages(prev => [...prev, ...newUrls]);
+        setFormImage(newUrls[0]);
+        toast('success', `Uploaded ${newUrls.length} image(s) successfully`);
       }
     } catch (err: any) {
       toast('error', err.response?.data?.error || 'Failed to upload image');
@@ -189,6 +192,7 @@ export default function InventoryPage() {
     setFormQty(0);
     setFormThreshold(5);
     setFormImage('');
+    setFormImages([]);
     setFormDescription('');
     setFormSku('');
     setFormBarcode('');
@@ -240,18 +244,18 @@ export default function InventoryPage() {
     setFormExpiryDate(item.expiry_date ? item.expiry_date.split('T')[0] : '');
     setFormStatus(item.status || 'active');
     setActiveTab('basic');
-    let imgUrl = '';
+    let imgArr: string[] = [];
     if (item.images_json) {
       try {
         const arr = typeof item.images_json === 'string' ? JSON.parse(item.images_json) : item.images_json;
-        if (Array.isArray(arr) && arr.length > 0) {
-          imgUrl = arr[0];
-        }
+        if (Array.isArray(arr)) imgArr = arr;
+        else if (typeof arr === 'string' && arr) imgArr = [arr];
       } catch (e) {
         console.error(e);
       }
     }
-    setFormImage(imgUrl);
+    setFormImages(imgArr);
+    setFormImage(imgArr[0] || '');
     setModalOpen(true);
   };
 
@@ -268,7 +272,7 @@ export default function InventoryPage() {
           product_name: formName,
           unit: formUnit,
           low_stock_threshold: formThreshold,
-          images_json: formImage ? [formImage] : [],
+          images_json: formImages.length > 0 ? formImages : (formImage ? [formImage] : []),
           description: formDescription,
           sku: formSku || null,
           barcode: formBarcode || null,
@@ -297,7 +301,7 @@ export default function InventoryPage() {
           unit: formUnit,
           quantity: formQty,
           low_stock_threshold: formThreshold,
-          images_json: formImage ? [formImage] : [],
+          images_json: formImages.length > 0 ? formImages : (formImage ? [formImage] : []),
           description: formDescription,
           sku: formSku || null,
           barcode: formBarcode || null,
@@ -1229,63 +1233,44 @@ export default function InventoryPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1">Product Image</label>
-                  <div className="flex items-center gap-3">
-                    {formImage ? (
-                      <div className="relative w-16 h-16 rounded-xl border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center shrink-0">
-                        <img src={formImage} alt="Product" className="w-full h-full object-contain" />
+                  <label className="block text-xs font-bold text-gray-500 mb-1">Product Images (Multi-Image Support)</label>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {formImages.map((imgUrl, idx) => (
+                      <div key={idx} className="relative w-16 h-16 rounded-xl border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center shrink-0 group">
+                        <img src={imgUrl} alt={`Product ${idx + 1}`} className="w-full h-full object-contain" />
                         <button
                           type="button"
-                          onClick={() => setFormImage('')}
-                          className="absolute inset-0 bg-black/50 text-white flex items-center justify-center text-[10px] font-bold opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
+                          onClick={() => {
+                            const filtered = formImages.filter((_, i) => i !== idx);
+                            setFormImages(filtered);
+                            if (formImage === imgUrl) setFormImage(filtered[0] || '');
+                          }}
+                          className="absolute inset-0 bg-black/60 text-white flex items-center justify-center text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                         >
                           Remove
                         </button>
                       </div>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={uploadingImage}
-                        onClick={() => imageInputRef.current?.click()}
-                        className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-300 hover:border-[#D32F2F] flex flex-col items-center justify-center text-gray-400 hover:text-[#D32F2F] transition-colors shrink-0 cursor-pointer"
-                      >
-                        <Upload size={16} />
-                        <span className="text-[9px] font-bold mt-1">{uploadingImage ? '...' : 'Upload'}</span>
-                      </button>
-                    )}
+                    ))}
+
+                    <button
+                      type="button"
+                      disabled={uploadingImage}
+                      onClick={() => imageInputRef.current?.click()}
+                      className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-300 hover:border-[#D32F2F] flex flex-col items-center justify-center text-gray-400 hover:text-[#D32F2F] transition-colors shrink-0 cursor-pointer"
+                    >
+                      <Upload size={16} />
+                      <span className="text-[9px] font-bold mt-1">{uploadingImage ? '...' : 'Upload'}</span>
+                    </button>
                     <input
                       type="file"
                       ref={imageInputRef}
                       className="hidden"
                       accept="image/*"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        const formData = new FormData();
-                        formData.append('image', file);
-                        setUploadingImage(true);
-                        try {
-                          const res = await api.post('/inventory/upload-image', formData, {
-                            headers: { 'Content-Type': 'multipart/form-data' }
-                          });
-                          if (res.data.success) {
-                            setFormImage(res.data.url);
-                            toast('success', 'Image uploaded successfully');
-                          }
-                        } catch (err: any) {
-                          console.error(err);
-                          toast('error', err.response?.data?.error || 'Failed to upload image');
-                        } finally {
-                          setUploadingImage(false);
-                          if (imageInputRef.current) imageInputRef.current.value = '';
-                        }
-                      }}
+                      multiple
+                      onChange={handleImageUpload}
                     />
-                    <div className="text-xs text-gray-400">
-                      <p className="font-semibold text-gray-600">Accessory Thumbnail</p>
-                      <p>Support JPG, PNG, WEBP. Max 10MB.</p>
-                    </div>
                   </div>
+                  <p className="text-[10px] text-gray-400 mt-1">Support JPG, PNG, WEBP. Max 10MB per image.</p>
                 </div>
               </div>
             )}

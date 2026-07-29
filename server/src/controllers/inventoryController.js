@@ -241,67 +241,77 @@ const pathModule = require('path');
 
 exports.uploadImage = async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+    const files = req.files || (req.file ? [req.file] : []);
+    if (!files.length) return res.status(400).json({ success: false, error: 'No file uploaded' });
 
-    // Validate file type
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (!allowedTypes.includes(req.file.mimetype)) {
-      return res.status(400).json({ success: false, error: 'Invalid file type. Only JPG, PNG, WEBP allowed.' });
+    const uploadedUrls = [];
+
+    // Derive robust baseUrl fallback from request if SERVER_URL is missing or contains localhost in production
+    let baseUrl = process.env.SERVER_URL || '';
+    if (!baseUrl || (baseUrl.includes('localhost') && process.env.NODE_ENV === 'production')) {
+      baseUrl = `${req.protocol}://${req.get('host')}`;
     }
 
-    // Validate file size (10MB max)
-    if (req.file.size > 10 * 1024 * 1024) {
-      return res.status(400).json({ success: false, error: 'File too large. Max 10MB.' });
-    }
-
-    // Try Cloudinary first if configured
-    if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
-      try {
-        const cloudinary = require('../config/cloudinary');
-        const result = await new Promise((resolve, reject) => {
-          const stream = cloudinary.uploader.upload_stream(
-            { folder: 'gk-autoherb/inventory-photos', resource_type: 'image' },
-            (err, result) => { if (err) reject(err); else resolve(result); }
-          );
-          stream.end(req.file.buffer);
-        });
-        return res.status(201).json({
-          success: true,
-          url: result.secure_url,
-          public_id: result.public_id,
-          message: 'Photo uploaded to cloud successfully'
-        });
-      } catch (cloudErr) {
-        console.warn('Cloudinary upload failed, falling back to local disk:', cloudErr.message);
+    for (const file of files) {
+      if (!allowedTypes.includes(file.mimetype)) {
+        return res.status(400).json({ success: false, error: `Invalid file type for ${file.originalname}. Only JPG, PNG, WEBP allowed.` });
       }
+      if (file.size > 10 * 1024 * 1024) {
+        return res.status(400).json({ success: false, error: `File ${file.originalname} is too large. Max 10MB.` });
+      }
+
+      let photoUrl = '';
+      let publicId = null;
+
+      // Try Cloudinary first if configured
+      if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
+        try {
+          const cloudinary = require('../config/cloudinary');
+          const result = await new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+              { folder: 'gk-autoherb/inventory-photos', resource_type: 'image' },
+              (err, res) => { if (err) reject(err); else resolve(res); }
+            );
+            stream.end(file.buffer);
+          });
+          photoUrl = result.secure_url;
+          publicId = result.public_id;
+          console.log('[STORAGE] Uploaded inventory image to Cloudinary:', photoUrl);
+        } catch (cloudErr) {
+          console.warn('[STORAGE] Cloudinary upload failed, falling back to local disk:', cloudErr.message);
+        }
+      } else {
+        console.log('[STORAGE] Cloudinary credentials not set. Using local disk storage fallback.');
+      }
+
+      // Fallback: Save to local disk
+      if (!photoUrl) {
+        const uploadsDir = pathModule.join(__dirname, '..', '..', 'uploads', 'products');
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+
+        const ext = pathModule.extname(file.originalname) || '.jpg';
+        const safeName = file.originalname
+          .replace(ext, '')
+          .replace(/[^a-zA-Z0-9_-]/g, '_')
+          .substring(0, 50);
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 6)}_${safeName}${ext}`;
+        const filePath = pathModule.join(uploadsDir, fileName);
+
+        fs.writeFileSync(filePath, file.buffer);
+        photoUrl = `${baseUrl}/uploads/products/${fileName}`;
+      }
+
+      uploadedUrls.push(photoUrl);
     }
-
-    // Fallback: Save to local disk
-    const uploadsDir = pathModule.join(__dirname, '..', '..', 'uploads', 'products');
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
-
-    // Generate unique filename
-    const ext = pathModule.extname(req.file.originalname) || '.jpg';
-    const safeName = req.file.originalname
-      .replace(ext, '')
-      .replace(/[^a-zA-Z0-9_-]/g, '_')
-      .substring(0, 50);
-    const fileName = `${Date.now()}_${safeName}${ext}`;
-    const filePath = pathModule.join(uploadsDir, fileName);
-
-    fs.writeFileSync(filePath, req.file.buffer);
-
-    // Build URL that express.static will serve
-    const serverPort = process.env.PORT || 5000;
-    const baseUrl = process.env.SERVER_URL || `http://localhost:${serverPort}`;
-    const url = `${baseUrl}/uploads/products/${fileName}`;
 
     res.status(201).json({
       success: true,
-      url,
-      message: 'Photo uploaded successfully'
+      url: uploadedUrls[0],
+      urls: uploadedUrls,
+      message: `Uploaded ${uploadedUrls.length} image(s) successfully`
     });
   } catch (err) {
     console.error('Inventory photo upload error:', err);
