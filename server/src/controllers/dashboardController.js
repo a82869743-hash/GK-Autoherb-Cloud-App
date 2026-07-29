@@ -122,12 +122,11 @@ exports.getCustomerDashboard = async (req, res) => {
   try {
     const customerId = req.user.id;
 
-    // Import the package helper for Task 7 dashboard data
-    const userPkgCtrl = require('./userPackagesController');
+    const { checkFirstWashEligibility } = require('../utils/firstWashHelper');
 
     const [
       [vehicles], [bookings], [loyalty], [recentJobs], [totalVisits],
-      packageData
+      packageData, fwCheck
     ] = await Promise.all([
       // My vehicles (ordered by primary first)
       pool.query(`SELECT id, registration_no, brand, model, is_primary FROM vehicles WHERE customer_id = ? ORDER BY is_primary DESC, created_at DESC`, [customerId]),
@@ -166,6 +165,8 @@ exports.getCustomerDashboard = async (req, res) => {
       `, [customerId]),
       // ─── TASK 7: Primary car + active package + remaining services
       userPkgCtrl.getDashboardPackageData(customerId),
+      // Check 50% first wash eligibility
+      checkFirstWashEligibility(pool, customerId),
     ]);
 
     res.json({
@@ -179,6 +180,7 @@ exports.getCustomerDashboard = async (req, res) => {
         // ─── Task 7 data ────────────────────────────────────
         primary_car: packageData.primary_car,
         active_package: packageData.active_package,
+        first_wash_eligible: fwCheck.isEligible,
       }
     });
   } catch (err) {

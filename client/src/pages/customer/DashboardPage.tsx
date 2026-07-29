@@ -56,6 +56,42 @@ export default function CustomerDashboardPage() {
 
   return (
     <div className="pt-4 space-y-6">
+      {/* ── 50% OFF First Wash Welcome Promo Banner ─────────── */}
+      {data?.first_wash_eligible && (
+        <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 rounded-2xl p-4 sm:p-5 text-white shadow-lg border border-red-400 relative overflow-hidden group">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 relative z-10">
+            <div className="flex items-center gap-3.5">
+              <div className="p-3 bg-white/20 backdrop-blur-md rounded-xl shrink-0 shadow-inner">
+                <Sparkles size={24} className="text-amber-300 animate-bounce" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="px-2 py-0.5 bg-amber-400 text-red-950 text-[10px] font-black uppercase tracking-widest rounded-full shadow-sm">
+                    Special Welcome Offer
+                  </span>
+                  <span className="text-[11px] font-bold text-amber-200 uppercase tracking-wider">Limited Period</span>
+                </div>
+                <h3 className="text-lg sm:text-xl font-black tracking-tight text-white leading-tight">
+                  Get 50% OFF Your First Wash! 🎉
+                </h3>
+                <p className="text-xs sm:text-sm text-red-100 font-semibold mt-0.5">
+                  50% flat discount will be automatically applied at checkout when you book your 1st detailing wash.
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/customer/bookings/new"
+              className="px-5 py-2.5 bg-white text-red-700 hover:bg-amber-100 font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition-all hover:scale-105 shrink-0 flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>Book 1st Wash @ 50% OFF</span>
+              <ArrowRight size={16} />
+            </Link>
+          </div>
+          {/* Subtle background glow */}
+          <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700" />
+        </div>
+      )}
+
       {/* ── Package Expiry Notification ─────────── */}
       {activePackage?.end_date && (() => {
         const daysLeft = Math.ceil((new Date(activePackage.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
@@ -128,6 +164,13 @@ export default function CustomerDashboardPage() {
               <p className="text-xl sm:text-2xl font-black text-white tracking-tight">{totalVisits}</p>
               <div className="w-10 h-[3px] bg-emerald-500 rounded-full mt-1.5" />
             </div>
+            {data?.first_wash_eligible && (
+              <div className="opacity-0 animate-fade-in-up" style={{ animationDelay: '0.5s', animationFillMode: 'forwards' }}>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-amber-400 mb-1">First Wash Promo</p>
+                <p className="text-xl sm:text-2xl font-black text-amber-300 tracking-tight">50% OFF</p>
+                <div className="w-10 h-[3px] bg-amber-400 rounded-full mt-1.5" />
+              </div>
+            )}
           </div>
         </div>
         {/* Decorative */}
