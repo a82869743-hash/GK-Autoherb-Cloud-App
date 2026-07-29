@@ -699,13 +699,13 @@ exports.approve = async (req, res) => {
 
         // ─── Trigger New Customer Welcome Reward (Update 24) ───
         let welcomeType = 'points';
-        let welcomeValue = 500;
+        let welcomeValue = 0;
 
         const [typeRow] = await conn.query('SELECT value FROM settings WHERE key_name = "welcome_reward_type"');
         if (typeRow.length) welcomeType = typeRow[0].value;
 
         const [valRow] = await conn.query('SELECT value FROM settings WHERE key_name = "welcome_reward_value"');
-        if (valRow.length) welcomeValue = parseFloat(valRow[0].value) || 500;
+        if (valRow.length) welcomeValue = parseFloat(valRow[0].value) || 0;
 
         if (welcomeType === 'points') {
           // Credit points to v2_wallets
@@ -1424,13 +1424,13 @@ exports.createManual = async (req, res) => {
 
         // Trigger New Customer Welcome Reward (Update 24)
         let welcomeType = 'points';
-        let welcomeValue = 500;
+        let welcomeValue = 0;
 
         const [typeRow] = await conn.query('SELECT value FROM settings WHERE key_name = "welcome_reward_type"');
         if (typeRow.length) welcomeType = typeRow[0].value;
 
         const [valRow] = await conn.query('SELECT value FROM settings WHERE key_name = "welcome_reward_value"');
-        if (valRow.length) welcomeValue = parseFloat(valRow[0].value) || 500;
+        if (valRow.length) welcomeValue = parseFloat(valRow[0].value) || 0;
 
         if (welcomeType === 'points') {
           const [customerWallets] = await conn.query('SELECT id FROM v2_wallets WHERE customer_id = ?', [customer_id]);

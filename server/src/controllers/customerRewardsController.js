@@ -39,31 +39,13 @@ const awardWelcomeRewardInternal = async (customerId, conn = pool) => {
   const [existing] = await conn.query('SELECT id FROM customer_rewards WHERE customer_id = ? AND reward_type = "welcome"', [customerId]);
   if (existing.length) return null;
 
-  // Give 500 points and 10% discount expiring in 30 days
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 30);
-
-  const [result] = await conn.query(
-    `INSERT INTO customer_rewards (customer_id, reward_type, points_awarded, discount_pct, description, expires_at)
-     VALUES (?, 'welcome', 500, 10.00, 'Welcome to GK AutoHerb! Enjoy 1 Free Wash, 500 points and 10% off your first service.', ?)`,
-    [customerId, expiresAt]
-  );
-
-  // Check if loyalty record exists
+  // Ensure loyalty record exists with 0 bonus credits and 0 free washes
   const [existingLoyalty] = await conn.query('SELECT id FROM loyalty WHERE customer_id = ?', [customerId]);
-  if (existingLoyalty.length > 0) {
-    await conn.query('UPDATE loyalty SET credits = credits + 500, free_washes = free_washes + 1 WHERE customer_id = ?', [customerId]);
-  } else {
-    await conn.query('INSERT INTO loyalty (customer_id, credits, free_washes) VALUES (?, 500, 1)', [customerId]);
+  if (existingLoyalty.length === 0) {
+    await conn.query('INSERT INTO loyalty (customer_id, credits, free_washes) VALUES (?, 0, 0)', [customerId]);
   }
 
-  // Also log in loyalty points transactions (loyalty_transactions)
-  await conn.query(
-    `INSERT INTO loyalty_transactions (customer_id, type, points, description) VALUES (?, 'earn', 500, 'Welcome Reward points and 1 Free Wash awarded.')`,
-    [customerId]
-  );
-
-  return result.insertId;
+  return null;
 };
 exports.awardWelcomeRewardInternal = awardWelcomeRewardInternal;
 

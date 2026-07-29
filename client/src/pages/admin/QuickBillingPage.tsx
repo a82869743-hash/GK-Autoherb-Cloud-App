@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
 import {
@@ -120,39 +120,6 @@ export default function QuickBillingPage() {
     if (match.vehicle_category) setValue('vehicle_category', match.vehicle_category);
   };
 
-  // Auto-fill details when mobile number is typed (length >= 10)
-  useEffect(() => {
-    if (watchedCustomerMobile && watchedCustomerMobile.length >= 10) {
-      api.get(`/search/customers?q=${watchedCustomerMobile}`).then(res => {
-        const list = res.data?.data || [];
-        const match = list.find((c: any) => c.mobile === watchedCustomerMobile || (c.mobile && c.mobile.includes(watchedCustomerMobile)));
-        if (match) applyCustomerMatch(match);
-      }).catch(err => console.error(err));
-    }
-  }, [watchedCustomerMobile]);
-
-  // Auto-fill details when customer name is typed (length >= 3)
-  useEffect(() => {
-    if (watchedCustomerName && watchedCustomerName.trim().length >= 3) {
-      api.get(`/search/customers?q=${encodeURIComponent(watchedCustomerName.trim())}`).then(res => {
-        const list = res.data?.data || [];
-        const match = list.find((c: any) => c.name && c.name.toLowerCase().includes(watchedCustomerName.trim().toLowerCase()));
-        if (match) applyCustomerMatch(match);
-      }).catch(err => console.error(err));
-    }
-  }, [watchedCustomerName]);
-
-  // Auto-fill details when registration number is typed (length >= 4)
-  useEffect(() => {
-    if (watchedRegNo && watchedRegNo.trim().length >= 4) {
-      api.get(`/search/customers?q=${encodeURIComponent(watchedRegNo.trim())}`).then(res => {
-        const list = res.data?.data || [];
-        const match = list.find((c: any) => c.vehicle_reg_no && c.vehicle_reg_no.toLowerCase().includes(watchedRegNo.trim().toLowerCase()));
-        if (match) applyCustomerMatch(match);
-      }).catch(err => console.error(err));
-    }
-  }, [watchedRegNo]);
-
   let discountAmount = 0;
   if (discountType === 'percentage') {
     discountAmount = subtotal * (discountValue / 100);
@@ -241,6 +208,7 @@ export default function QuickBillingPage() {
 
   const [existingCustomers, setExistingCustomers] = useState<any[]>([]);
   const [selectedCustKey, setSelectedCustKey] = useState('');
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
 
   const refreshCustomerList = (searchQuery?: string) => {
     const q = searchQuery || '';
@@ -267,15 +235,16 @@ export default function QuickBillingPage() {
     };
   }, []);
 
-  // Real-time auto-search filtering as the user types
-  useEffect(() => {
-    const q = watchedCustomerMobile || watchedCustomerName || watchedRegNo || '';
-    if (q.trim().length >= 2) {
-      refreshCustomerList(q.trim());
-    } else if (q.trim().length === 0) {
-      refreshCustomerList();
-    }
-  }, [watchedCustomerMobile, watchedCustomerName, watchedRegNo]);
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearchQuery.trim()) return existingCustomers;
+    const q = customerSearchQuery.trim().toLowerCase();
+    return existingCustomers.filter((c: any) =>
+      (c.name && c.name.toLowerCase().includes(q)) ||
+      (c.mobile && c.mobile.includes(q)) ||
+      (c.vehicle_reg_no && c.vehicle_reg_no.toLowerCase().includes(q)) ||
+      (c.vehicle_brand && c.vehicle_brand.toLowerCase().includes(q))
+    );
+  }, [existingCustomers, customerSearchQuery]);
 
   const handleSelectExistingCustomer = (key: string) => {
     setSelectedCustKey(key);
@@ -306,29 +275,61 @@ export default function QuickBillingPage() {
               <User size={18} className="text-[#D32F2F]" /> Customer Details
             </h2>
 
-            {/* Auto-fill Customer Selector */}
-            {existingCustomers.length > 0 && (
-              <div className="mb-4 bg-gradient-to-r from-red-50/80 to-orange-50/80 p-3.5 rounded-xl border border-red-200 shadow-sm">
-                <label className="block text-xs font-bold text-red-700 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                  <span>⚡ Select Existing Customer to Auto-fill ({existingCustomers.length} available)</span>
+            {/* Auto-fill Customer Selector with Search */}
+            <div className="mb-4 bg-gradient-to-r from-red-50/80 to-orange-50/80 p-3.5 rounded-xl border border-red-200 shadow-sm space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-red-700 uppercase tracking-wider flex items-center gap-1">
+                  <span>⚡ Search & Select Saved Customer ({filteredCustomers.length} available)</span>
                 </label>
-                <select
-                  value={selectedCustKey}
-                  onChange={(e) => handleSelectExistingCustomer(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-lg border border-red-300 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 bg-white shadow-sm"
-                >
-                  <option value="">-- Click to Select Existing Customer to Auto-fill --</option>
-                  {existingCustomers.map((c: any, idx: number) => {
-                    const uniqueVal = c.id ? `user_${c.id}` : `bill_${c.mobile}_${c.name}_${idx}`;
-                    return (
-                      <option key={uniqueVal} value={uniqueVal}>
-                        {c.name} {c.mobile ? `(${c.mobile})` : ''} {c.vehicle_reg_no ? `— [${c.vehicle_reg_no}]` : ''} {c.vehicle_brand ? `(${c.vehicle_brand} ${c.vehicle_model || ''})` : ''}
-                      </option>
-                    );
-                  })}
-                </select>
+                {selectedCustKey && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCustKey('');
+                      setCustomerSearchQuery('');
+                    }}
+                    className="text-[11px] text-red-600 hover:text-red-800 font-bold underline cursor-pointer"
+                  >
+                    Clear Selection
+                  </button>
+                )}
               </div>
-            )}
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={customerSearchQuery}
+                    onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                    placeholder="Type name, mobile or vehicle reg no to search..."
+                    className="w-full pl-8 pr-3 py-2 rounded-lg border border-red-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                  />
+                  <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => refreshCustomerList(customerSearchQuery)}
+                  className="px-3.5 py-2 bg-[#D32F2F] text-white text-xs font-bold rounded-lg hover:bg-red-700 transition-colors flex items-center gap-1 shrink-0 cursor-pointer shadow-sm"
+                >
+                  <Search size={12} />
+                  <span>Search</span>
+                </button>
+              </div>
+              <select
+                value={selectedCustKey}
+                onChange={(e) => handleSelectExistingCustomer(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg border border-red-300 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 bg-white shadow-sm"
+              >
+                <option value="">-- Select Saved Customer from Filtered List --</option>
+                {filteredCustomers.map((c: any, idx: number) => {
+                  const uniqueVal = c.id ? `user_${c.id}` : `bill_${c.mobile}_${c.name}_${idx}`;
+                  return (
+                    <option key={uniqueVal} value={uniqueVal}>
+                      {c.name} {c.mobile ? `(${c.mobile})` : ''} {c.vehicle_reg_no ? `— [${c.vehicle_reg_no}]` : ''} {c.vehicle_brand ? `(${c.vehicle_brand} ${c.vehicle_model || ''})` : ''}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>

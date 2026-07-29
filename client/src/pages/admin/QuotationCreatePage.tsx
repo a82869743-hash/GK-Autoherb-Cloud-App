@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Plus, Trash2, ArrowLeft, Loader2, Save, ShoppingBag } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, Loader2, Save, ShoppingBag, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import io from 'socket.io-client';
 
@@ -63,6 +63,7 @@ export default function QuotationCreatePage() {
 
   const [existingCustomers, setExistingCustomers] = useState<any[]>([]);
   const [selectedCustKey, setSelectedCustKey] = useState('');
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
 
   const refreshCustomerList = (searchQuery?: string) => {
     const q = searchQuery || '';
@@ -85,6 +86,17 @@ export default function QuotationCreatePage() {
       socket.disconnect();
     };
   }, []);
+
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearchQuery.trim()) return existingCustomers;
+    const q = customerSearchQuery.trim().toLowerCase();
+    return existingCustomers.filter((c: any) =>
+      (c.name && c.name.toLowerCase().includes(q)) ||
+      (c.mobile && c.mobile.includes(q)) ||
+      (c.vehicle_reg_no && c.vehicle_reg_no.toLowerCase().includes(q)) ||
+      (c.vehicle_brand && c.vehicle_brand.toLowerCase().includes(q))
+    );
+  }, [existingCustomers, customerSearchQuery]);
 
   const applyCustomerMatch = (cust: any) => {
     if (!cust) return;
@@ -109,25 +121,6 @@ export default function QuotationCreatePage() {
       applyCustomerMatch(found);
     }
   };
-
-  // Real-time keystroke auto-fill search
-  useEffect(() => {
-    const q = customerMobile || customerName || vehicleNo || '';
-    if (q.trim().length >= 2) {
-      api.get(`/search/customers?q=${encodeURIComponent(q.trim())}`).then(res => {
-        const list = res.data?.data || [];
-        setExistingCustomers(list);
-        const match = list.find((c: any) => 
-          (c.mobile && c.mobile === customerMobile) ||
-          (c.name && c.name.toLowerCase() === customerName.trim().toLowerCase()) ||
-          (c.vehicle_reg_no && c.vehicle_reg_no.toLowerCase() === vehicleNo.trim().toLowerCase())
-        );
-        if (match && !isEdit) {
-          applyCustomerMatch(match);
-        }
-      }).catch(err => console.error(err));
-    }
-  }, [customerMobile, customerName, vehicleNo]);
 
   const { data: brandsRes } = useBrands();
   const { data: modelsRes } = useModels(carBrand);
@@ -405,29 +398,61 @@ export default function QuotationCreatePage() {
               Customer & Vehicle Details
             </h2>
 
-            {/* Auto-fill Customer Selector */}
-            {existingCustomers.length > 0 && (
-              <div style={{ marginBottom: '16px', background: 'linear-gradient(to right, rgba(254,242,242,0.8), rgba(255,237,213,0.8))', padding: '14px', borderRadius: '12px', border: '1px solid #fca5a5' }}>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#b91c1c', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
-                  ⚡ Select Existing Customer to Auto-fill ({existingCustomers.length} available)
+            {/* Auto-fill Customer Selector with Search */}
+            <div style={{ marginBottom: '16px', background: 'linear-gradient(to right, rgba(254,242,242,0.8), rgba(255,237,213,0.8))', padding: '14px', borderRadius: '12px', border: '1px solid #fca5a5', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <label style={{ fontSize: '11px', fontWeight: 800, color: '#b91c1c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  ⚡ Search & Select Saved Customer ({filteredCustomers.length} available)
                 </label>
-                <select
-                  value={selectedCustKey}
-                  onChange={(e) => handleSelectExistingCustomer(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #f87171', fontSize: '13px', fontWeight: 700, color: '#111827', background: 'white', outline: 'none' }}
-                >
-                  <option value="">-- Click to Select Existing Customer to Auto-fill --</option>
-                  {existingCustomers.map((c: any, idx: number) => {
-                    const uniqueVal = c.id ? `user_${c.id}` : `bill_${c.mobile}_${c.name}_${idx}`;
-                    return (
-                      <option key={uniqueVal} value={uniqueVal}>
-                        {c.name} {c.mobile ? `(${c.mobile})` : ''} {c.vehicle_reg_no ? `— [${c.vehicle_reg_no}]` : ''} {c.vehicle_brand ? `(${c.vehicle_brand} ${c.vehicle_model || ''})` : ''}
-                      </option>
-                    );
-                  })}
-                </select>
+                {selectedCustKey && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCustKey('');
+                      setCustomerSearchQuery('');
+                    }}
+                    style={{ fontSize: '11px', color: '#dc2626', fontWeight: 700, textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}
+                  >
+                    Clear Selection
+                  </button>
+                )}
               </div>
-            )}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <input
+                    type="text"
+                    value={customerSearchQuery}
+                    onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                    placeholder="Type name, mobile or vehicle reg no to search..."
+                    style={{ width: '100%', padding: '8px 12px 8px 30px', borderRadius: '8px', border: '1px solid #f87171', fontSize: '12px', fontWeight: 600, outline: 'none', background: 'white' }}
+                  />
+                  <Search size={14} style={{ position: 'absolute', left: '10px', top: '10px', color: '#9ca3af' }} />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => refreshCustomerList(customerSearchQuery)}
+                  style={{ padding: '8px 14px', background: '#D32F2F', color: 'white', fontSize: '12px', fontWeight: 700, borderRadius: '8px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', shrink: 0 }}
+                >
+                  <Search size={12} />
+                  Search
+                </button>
+              </div>
+              <select
+                value={selectedCustKey}
+                onChange={(e) => handleSelectExistingCustomer(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #f87171', fontSize: '13px', fontWeight: 700, color: '#111827', background: 'white', outline: 'none' }}
+              >
+                <option value="">-- Select Saved Customer from Filtered List --</option>
+                {filteredCustomers.map((c: any, idx: number) => {
+                  const uniqueVal = c.id ? `user_${c.id}` : `bill_${c.mobile}_${c.name}_${idx}`;
+                  return (
+                    <option key={uniqueVal} value={uniqueVal}>
+                      {c.name} {c.mobile ? `(${c.mobile})` : ''} {c.vehicle_reg_no ? `— [${c.vehicle_reg_no}]` : ''} {c.vehicle_brand ? `(${c.vehicle_brand} ${c.vehicle_model || ''})` : ''}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
 
             <div className="quotation-fields-grid" style={{ display: 'grid', gap: '16px 20px' }}>
               <div>
