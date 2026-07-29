@@ -503,6 +503,28 @@ exports.complete = async (req, res) => {
     const advancePaid = parseFloat(cart[0].advance_paid || 0);
     const amountCollectedNow = Math.max(0, grandTotal - advancePaid);
 
+    // 5b. First Wash Discount Check & 10% Loyalty Points from 2nd wash onward
+    if (customerId) {
+      const { markFirstWashDiscountUsed } = require('../utils/firstWashHelper');
+      const { awardPointsInternal } = require('./loyaltyController');
+
+      let hasFirstWashDiscount = false;
+      if (cart[0].booking_id) {
+        const [linkedBk] = await conn.query('SELECT discount_percent FROM bookings WHERE id = ?', [cart[0].booking_id]);
+        if (linkedBk.length && Number(linkedBk[0].discount_percent || 0) > 0) {
+          hasFirstWashDiscount = true;
+        }
+      }
+
+      if (hasFirstWashDiscount) {
+        await markFirstWashDiscountUsed(conn, customerId);
+        console.log(`[FIRST_WASH] Marked 50% first wash discount used for customer #${customerId} via Job Cart #${id}. Points skipped.`);
+      } else {
+        // Award 10% loyalty points starting from 2nd wash onward (with idempotency safeguard)
+        await awardPointsInternal(conn, customerId, grandTotal, 'job_cart', parseInt(id), req.user ? req.user.id : null);
+      }
+    }
+
     // 6. Create transaction
     await conn.query(
       'INSERT INTO transactions (type, reference_id, amount, direction, note, transaction_date, created_by) VALUES (?, ?, ?, ?, ?, CURDATE(), ?)',

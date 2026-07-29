@@ -99,13 +99,32 @@ exports.create = async (req, res) => {
       }
     }
 
+    // Fetch service price for category
+    let originalPrice = 0;
+    if (service_id) {
+      const cat = safeCategory || 'sedan';
+      const priceCol = `price_${cat}`;
+      const [svcRows] = await conn.query(
+        `SELECT price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv FROM services WHERE id = ?`,
+        [service_id]
+      );
+      if (svcRows.length) {
+        originalPrice = Number(svcRows[0][priceCol]) || Number(svcRows[0].price_sedan) || 0;
+      }
+    }
+
     // First wash 50% discount check
     const { checkFirstWashEligibility } = require('../utils/firstWashHelper');
     let discountPercent = 0.00;
+    let discountAmount = 0.00;
+    let totalAmount = originalPrice;
+
     if (resolvedCustomerId && !packageUsed) {
       const fwCheck = await checkFirstWashEligibility(conn, resolvedCustomerId);
       if (fwCheck.isEligible) {
         discountPercent = 50.00;
+        discountAmount = Math.round(originalPrice * 0.50 * 100) / 100;
+        totalAmount = Math.max(0, originalPrice - discountAmount);
       }
     }
 
@@ -114,12 +133,12 @@ exports.create = async (req, res) => {
       INSERT INTO bookings
         (customer_id, vehicle_id, slot_id, service_id, package_id,
          vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category,
-         job_type, status, wash_status, queue_position, notes, discount_percent)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'quick_wash', 'confirmed', 'pending', ?, ?, ?)
+         job_type, status, wash_status, queue_position, notes, discount_percent, discount_amount, total_amount)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'quick_wash', 'confirmed', 'pending', ?, ?, ?, ?, ?)
     `, [
       resolvedCustomerId, resolvedVehicleId, slotId, service_id || null, actualPackageId,
       resolvedBrand, resolvedModel, resolvedRegNo, safeCategory,
-      queuePosition, notes || null, discountPercent
+      queuePosition, notes || null, discountPercent, discountAmount, totalAmount
     ]);
 
     // Increment slot count

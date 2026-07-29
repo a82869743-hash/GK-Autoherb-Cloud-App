@@ -424,6 +424,24 @@ exports.create = async (req, res) => {
     // Determine booking type
     const bookingType = (use_package && packageUsed) ? 'package' : 'direct';
 
+    // 50% First Wash Discount calculation
+    const { checkFirstWashEligibility } = require('../utils/firstWashHelper');
+    let discountPercent = 0.00;
+    let discountAmount = 0.00;
+
+    if (customerId && !use_package && !is_free_wash) {
+      const fwCheck = await checkFirstWashEligibility(conn, customerId);
+      if (fwCheck.isEligible) {
+        discountPercent = 50.00;
+        discountAmount = Math.round(calculatedTotal * 0.50 * 100) / 100;
+        calculatedTotal = Math.max(0, calculatedTotal - discountAmount);
+        if (advanceAmount > calculatedTotal) {
+          advanceAmount = calculatedTotal;
+        }
+        console.log(`[FIRST_WASH] Customer #${customerId} eligible for 50% first wash discount — Discount: ₹${discountAmount}, Final total: ₹${calculatedTotal}`);
+      }
+    }
+
     // 6. Increment booked_count
     await conn.query('UPDATE slots SET booked_count = booked_count + 1 WHERE id = ?', [slot_id]);
 
@@ -475,15 +493,16 @@ exports.create = async (req, res) => {
       `INSERT INTO bookings 
        (customer_id, vehicle_id, slot_id, service_id, package_id, 
         vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category, total_duration,
-        status, is_free_wash, notes, booking_type, user_package_id, package_service_name, expires_at, advance_amount, total_amount, pickup_type, pickup_charge)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        status, is_free_wash, notes, booking_type, user_package_id, package_service_name, expires_at, advance_amount, total_amount, pickup_type, pickup_charge, discount_percent, discount_amount)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         customerId, resolvedVehicleId, slot_id,
         primaryServiceId || null, package_id || null,
         resolvedBrand, resolvedModel, resolvedRegNo, vehicle_category || null, totalDuration,
         targetStatus, is_free_wash ? 1 : 0, notes || null,
         bookingType, resolvedUserPackageId, package_service_name || null,
-        expiresAt, advanceAmount, calculatedTotal, pickup_type, calculatedPickupCharge
+        expiresAt, advanceAmount, calculatedTotal, pickup_type, calculatedPickupCharge,
+        discountPercent, discountAmount
       ]
     );
 
