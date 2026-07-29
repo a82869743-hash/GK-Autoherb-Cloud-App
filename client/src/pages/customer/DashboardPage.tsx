@@ -484,30 +484,6 @@ export default function CustomerDashboardPage() {
         )}
       </div>
 
-      {/* ── Free Wash CTA ────────────────────────── */}
-      {loyalty.free_washes > 0 && (
-        <div className="bg-gradient-to-r from-[#af101a] to-[#D32F2F] rounded-2xl p-6 sm:p-8 text-white relative overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_50%,rgba(255,255,255,0.08),transparent)] pointer-events-none" />
-          <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-white/15 flex items-center justify-center">
-                <Gift size={28} />
-              </div>
-              <div>
-                <h3 className="font-black text-lg tracking-tight">You have {loyalty.free_washes} free wash{loyalty.free_washes > 1 ? 'es' : ''}!</h3>
-                <p className="text-white/70 text-sm font-medium">Redeem your reward by booking a service</p>
-              </div>
-            </div>
-            <button
-              onClick={() => navigate('/customer/bookings/new?free_wash=true')}
-              className="px-6 py-3 bg-white text-[#D32F2F] font-bold rounded-xl hover:bg-white/90 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] text-sm uppercase tracking-wider flex items-center gap-2"
-            >
-              <Gift size={16} /> Redeem Now
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* ── Add Car Modal ────────────────────────────── */}
       <AddCarModal isOpen={showAddCar} onClose={() => setShowAddCar(false)} />
     </div>

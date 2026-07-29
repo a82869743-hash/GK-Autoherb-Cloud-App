@@ -320,12 +320,21 @@ exports.create = async (req, res) => {
       const cat = vehicle_category || 'sedan';
       const priceKey = `price_${cat}`;
       const [servicesList] = await conn.query(
-        `SELECT price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv FROM services WHERE id IN (?)`,
+        `SELECT id, name, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv FROM services WHERE id IN (?)`,
         [allServiceIds]
       );
-      let servicesTotal = servicesList.reduce((sum, s) => {
-        return sum + (Number(s[priceKey]) || Number(s.price_sedan) || 0);
-      }, 0);
+      let washServicesTotal = 0;
+      let nonWashServicesTotal = 0;
+
+      for (const s of servicesList) {
+        const price = Number(s[priceKey]) || Number(s.price_sedan) || 0;
+        if (s.name && s.name.toLowerCase().includes('wash')) {
+          washServicesTotal += price;
+        } else {
+          nonWashServicesTotal += price;
+        }
+      }
+      let servicesTotal = washServicesTotal + nonWashServicesTotal;
 
       // Calculate totals based on payment selection (full advance with 10% discount, part advance of ₹200, or none)
       if (pay_advance === 'full' || pay_advance === true) {
@@ -344,26 +353,13 @@ exports.create = async (req, res) => {
       calculatedTotal = calculatedPickupCharge;
     }
 
-    // 4. Free wash validation
-    if (is_free_wash) {
-      const [loyalty] = await conn.query('SELECT free_washes FROM loyalty WHERE customer_id = ?', [customerId]);
-      if (!loyalty.length || loyalty[0].free_washes <= 0) {
-        await conn.rollback();
-        return res.status(422).json({ success: false, error: 'No free washes available' });
-      }
-      await conn.query(
-        'UPDATE loyalty SET free_washes = GREATEST(0, free_washes - 1) WHERE customer_id = ?',
-        [customerId]
-      );
-    }
-
     // 5. Package Usage — DEFERRED DEDUCTION (only check eligibility, don't deduct yet)
     let packageUsed = false;
     let packageInfo = null;
     let resolvedUserPackageId = null;
     const primaryServiceId = service_id || (allServiceIds.length > 0 ? allServiceIds[0] : null);
 
-    if (use_package && !is_free_wash) {
+    if (use_package) {
       let serviceNames = [];
       if (Array.isArray(package_service_name)) {
         serviceNames = package_service_name;
@@ -424,21 +420,21 @@ exports.create = async (req, res) => {
     // Determine booking type
     const bookingType = (use_package && packageUsed) ? 'package' : 'direct';
 
-    // 50% First Wash Discount calculation
+    // 50% First Wash Discount calculation (applies ONLY to wash services)
     const { checkFirstWashEligibility } = require('../utils/firstWashHelper');
     let discountPercent = 0.00;
     let discountAmount = 0.00;
 
     if (customerId && !use_package && !is_free_wash) {
       const fwCheck = await checkFirstWashEligibility(conn, customerId);
-      if (fwCheck.isEligible) {
+      if (fwCheck.isEligible && washServicesTotal > 0) {
         discountPercent = 50.00;
-        discountAmount = Math.round(calculatedTotal * 0.50 * 100) / 100;
+        discountAmount = Math.round(washServicesTotal * 0.50 * 100) / 100;
         calculatedTotal = Math.max(0, calculatedTotal - discountAmount);
         if (advanceAmount > calculatedTotal) {
           advanceAmount = calculatedTotal;
         }
-        console.log(`[FIRST_WASH] Customer #${customerId} eligible for 50% first wash discount — Discount: ₹${discountAmount}, Final total: ₹${calculatedTotal}`);
+        console.log(`[FIRST_WASH] Customer #${customerId} eligible for 50% wash discount — Wash total: ₹${washServicesTotal}, Discount: ₹${discountAmount}, Final total: ₹${calculatedTotal}`);
       }
     }
 

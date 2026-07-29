@@ -268,14 +268,24 @@ export default function BookingPage() {
     }
   }, [isPackageBooking, selectedPackageServiceNames, selectedServicesObjs, services]);
 
+  const washServicesTotal = useMemo(() => {
+    if (isPackageBooking) return 0;
+    const cat = filter !== 'all' ? filter : 'sedan';
+    return selectedServicesObjs.reduce((sum, s) => {
+      if (!s.name || !s.name.toLowerCase().includes('wash')) return sum;
+      const priceKey = `price_${cat}`;
+      return sum + (Number(s[priceKey]) || Number(s.price_sedan) || 0);
+    }, 0);
+  }, [isPackageBooking, filter, selectedServicesObjs]);
+
   const estimatedTotal = useMemo(() => {
-    if (isPackageBooking || useFreeWash) return 0;
+    if (isPackageBooking) return 0;
     const cat = filter !== 'all' ? filter : 'sedan';
     return selectedServicesObjs.reduce((sum, s) => {
       const priceKey = `price_${cat}`;
       return sum + (Number(s[priceKey]) || Number(s.price_sedan) || 0);
     }, 0);
-  }, [isPackageBooking, filter, selectedServicesObjs, useFreeWash]);
+  }, [isPackageBooking, filter, selectedServicesObjs]);
 
   const activePackageHasFreePickup = useMemo(() => {
     return activePackages.length > 0 && activePackages[0].pickup_enabled === 1;
@@ -291,9 +301,9 @@ export default function BookingPage() {
   }, [pickupOption, activePackageHasFreePickup, settings]);
 
   const firstWashDiscountAmount = useMemo(() => {
-    if (isPackageBooking || useFreeWash || !isFirstWashEligible) return 0;
-    return Math.round(estimatedTotal * 0.50);
-  }, [isPackageBooking, useFreeWash, isFirstWashEligible, estimatedTotal]);
+    if (isPackageBooking || !isFirstWashEligible || washServicesTotal <= 0) return 0;
+    return Math.round(washServicesTotal * 0.50);
+  }, [isPackageBooking, isFirstWashEligible, washServicesTotal]);
 
   const totalAfterFirstWashDiscount = useMemo(() => {
     return Math.max(0, estimatedTotal - firstWashDiscountAmount);
@@ -874,7 +884,8 @@ export default function BookingPage() {
                                 {(() => {
                                   const p = parseFloat(String(svc[`price_${filter}`] || svc.price_sedan || 0));
                                   if (p <= 0) return 'Ask Studio';
-                                  if (isFirstWashEligible && !useFreeWash && !isPackageBooking) {
+                                  const isWash = svc.name && svc.name.toLowerCase().includes('wash');
+                                  if (isFirstWashEligible && isWash && !isPackageBooking) {
                                     const discounted = Math.round(p * 0.50);
                                     return (
                                       <span className="inline-flex items-center gap-1.5">
@@ -895,7 +906,7 @@ export default function BookingPage() {
                   )}
 
                   {/* 50% OFF First Wash Promo Banner */}
-                  {isFirstWashEligible && !useFreeWash && !isPackageBooking && (
+                  {isFirstWashEligible && !isPackageBooking && (
                     <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white rounded-xl p-4 flex items-center justify-between gap-3 mb-4 shadow-md border border-red-300">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-lg bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0">
@@ -906,42 +917,11 @@ export default function BookingPage() {
                             <span className="px-2 py-0.5 bg-amber-300 text-red-950 text-[9px] font-black uppercase tracking-wider rounded-full">
                               First Wash Special
                             </span>
-                            <span className="text-[10px] font-bold text-amber-100">50% OFF ACTIVE</span>
+                            <span className="text-[10px] font-bold text-amber-100">50% OFF WASHES</span>
                           </div>
-                          <p className="text-xs font-black text-white">Flat 50% Discount will be automatically applied at checkout!</p>
+                          <p className="text-xs font-black text-white">Flat 50% Discount on car washes will be automatically applied at checkout!</p>
                         </div>
                       </div>
-                    </div>
-                  )}
-
-                  {/* Apply Free Wash Section */}
-                  {loyalty && loyalty.free_washes > 0 && (
-                    <div className="bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-xl p-4 flex items-center justify-between gap-3 mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-blue-200 flex items-center justify-center">
-                          <Gift size={16} className="text-blue-700" />
-                        </div>
-                        <div className="text-left">
-                          <p className="text-xs font-bold text-blue-800">You have {loyalty.free_washes} free wash{loyalty.free_washes > 1 ? 'es' : ''} available!</p>
-                          <p className="text-[10px] text-blue-600 mt-0.5">Use it to get this booking completely free of charge.</p>
-                        </div>
-                      </div>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={useFreeWash}
-                          onChange={(e) => {
-                            setUseFreeWash(e.target.checked);
-                            if (e.target.checked) {
-                              setSelectedPackage(null);
-                              setSelectedPackageServiceNames([]);
-                              setSelectedServices([]);
-                            }
-                          }}
-                          className="accent-blue-600 h-4.5 w-4.5 rounded border-gray-300 text-blue-600 focus:ring-blue-600 cursor-pointer"
-                        />
-                        <span className="text-xs font-bold text-blue-800">Apply</span>
-                      </label>
                     </div>
                   )}
 

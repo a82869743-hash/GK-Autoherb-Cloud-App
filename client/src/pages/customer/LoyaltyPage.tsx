@@ -234,47 +234,6 @@ export default function LoyaltyPage() {
             </div>
           )}
 
-          {/* Redeem 1000 points for Free Wash Banner */}
-          {pointsEnabled && points >= 1000 && (
-            <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 card-premium">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white shadow-md shadow-amber-500/25 shrink-0">
-                  <Coins size={20} />
-                </div>
-                <div>
-                  <p className="text-sm font-extrabold text-gray-900">Convert Points to Free Wash!</p>
-                  <p className="text-xs text-gray-600 mt-0.5">You have {points} points. Convert 1,000 points into 1 Free Wash voucher instantly.</p>
-                </div>
-              </div>
-              <Button 
-                onClick={handleRedeemWash} 
-                loading={redeemingWash}
-                className="bg-gradient-to-r from-amber-500 to-orange-600 border-none hover:from-amber-600 hover:to-orange-700 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-md shadow-amber-500/20 shrink-0"
-                icon={<Gift size={14} />}
-              >
-                Redeem Free Wash
-              </Button>
-            </div>
-          )}
-
-          {/* Actions */}
-          {loyalty?.free_washes > 0 && (
-            <div className="bg-white rounded-xl p-4 border border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
-                  <Gift size={16} />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-gray-900">Claim your free wash voucher</p>
-                  <p className="text-xs text-gray-500">You have earned this wash through our membership frequency.</p>
-                </div>
-              </div>
-              <Button onClick={() => navigate('/customer/bookings/new?free_wash=true')} icon={<Gift size={14} />}>
-                Use a Free Wash
-              </Button>
-            </div>
-          )}
-
           {/* Transaction History */}
           <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
