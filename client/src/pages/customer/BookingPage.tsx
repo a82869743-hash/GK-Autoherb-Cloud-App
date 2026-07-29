@@ -126,7 +126,7 @@ export default function BookingPage() {
         setPackages(pkgRes.data.data || []);
         
         const fetchedVehicles = myVehiclesRes.data.data || [];
-        setSavedVehicles(fetchedVehicles);
+        setUserVehicles(fetchedVehicles);
         
         if (fetchedVehicles.length > 0) {
           const primary = initialVehicleId
