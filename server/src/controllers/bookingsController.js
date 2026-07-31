@@ -205,7 +205,7 @@ exports.create = async (req, res) => {
     console.log('[BOOKING] Request body:', JSON.stringify(req.body));
 
     const {
-      slot_id, service_id, service_ids, package_id,
+      slot_id, service_id, service_ids, cart_items, package_id,
       vehicle_id, vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category,
       is_free_wash = false, use_package = false, notes, pay_advance,
       pickup_type = 'none', pickup_address_details = null
@@ -315,18 +315,23 @@ exports.create = async (req, res) => {
     let calculatedTotal = 0;
     let advanceAmount = 0;
     const isAdvanceEligible = !is_free_wash && !use_package;
+    let fetchedServicesList = [];
+    const cat = vehicle_category || 'sedan';
+    const priceKey = `price_${cat}`;
 
-    if (isAdvanceEligible && allServiceIds.length > 0) {
-      const cat = vehicle_category || 'sedan';
-      const priceKey = `price_${cat}`;
-      const [servicesList] = await conn.query(
+    if (allServiceIds.length > 0) {
+      const [sRows] = await conn.query(
         `SELECT id, name, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv FROM services WHERE id IN (?)`,
         [allServiceIds]
       );
+      fetchedServicesList = sRows;
+    }
+
+    if (isAdvanceEligible && fetchedServicesList.length > 0) {
       let washServicesTotal = 0;
       let nonWashServicesTotal = 0;
 
-      for (const s of servicesList) {
+      for (const s of fetchedServicesList) {
         const price = Number(s[priceKey]) || Number(s.price_sedan) || 0;
         if (s.name && s.name.toLowerCase().includes('wash')) {
           washServicesTotal += price;
@@ -486,13 +491,15 @@ exports.create = async (req, res) => {
     // 7. Insert booking
     const cartSummary = (cart_items && Array.isArray(cart_items) && cart_items.length > 0)
       ? cart_items
-      : servicesList.map(s => ({
-          id: s.id,
-          name: s.name,
-          price: Number(s[priceKey]) || Number(s.price_sedan) || 0,
-          is_wash: s.name && s.name.toLowerCase().includes('wash')
-        }));
-    const cartItemsJsonStr = JSON.stringify(cartSummary);
+      : (fetchedServicesList && fetchedServicesList.length > 0
+          ? fetchedServicesList.map(s => ({
+              id: s.id,
+              name: s.name,
+              price: Number(s[priceKey]) || Number(s.price_sedan) || 0,
+              is_wash: s.name && s.name.toLowerCase().includes('wash')
+            }))
+          : null);
+    const cartItemsJsonStr = cartSummary ? JSON.stringify(cartSummary) : null;
 
     console.log('[BOOKING] Inserting booking — type:', bookingType, 'status:', targetStatus, 'advance_amount:', advanceAmount);
     const [result] = await conn.query(
