@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, CreditCard, Droplets, ArrowRight, Shield, ShoppingBag, Check } from 'lucide-react';
+import { Sparkles, CreditCard, Droplets, ArrowRight, Shield } from 'lucide-react';
 import { useServices } from '../../api/hooks/useServices';
 import { useLoyalty } from '../../api/hooks/useLoyalty';
 import Button from '../../components/ui/Button';
@@ -8,8 +8,6 @@ import { SkeletonCard } from '../../components/ui/SkeletonLoader';
 import ErrorState from '../../components/shared/ErrorState';
 import { formatINR } from '../../utils/formatters';
 import ServiceDetailsModal from '../../components/shared/ServiceDetailsModal';
-import ServicesCartDrawer from '../../components/shared/ServicesCartDrawer';
-import { useCartStore } from '../../store/useCartStore';
 
 const FILTERS = ['all', 'hatchback', 'medium_hatchback', 'sedan', 'premium_sedan', 'suv'] as const;
 type Filter = typeof FILTERS[number];
@@ -35,7 +33,6 @@ export default function CustomerServicesPage() {
   const { data: svcData, isLoading: svcLoading, isError, refetch } = useServices({ active_only: true });
   const { data: loyalty } = useLoyalty('mine');
   
-  const { servicesCart, toggleServiceInCart, servicesDrawerOpen, setServicesDrawerOpen } = useCartStore();
   const [selectedDetailsSvc, setSelectedDetailsSvc] = useState<any>(null);
 
   const services = sortServicesByPriority(svcData?.data || []);
@@ -57,22 +54,6 @@ export default function CustomerServicesPage() {
 
   return (
     <div className="pt-4 pb-20 relative">
-      {/* Floating Services Cart Button */}
-      {servicesCart.length > 0 && (
-        <div className="fixed bottom-6 right-6 z-40 animate-bounce">
-          <button
-            onClick={() => setServicesDrawerOpen(true)}
-            className="flex items-center gap-2.5 px-5 py-3.5 bg-gradient-to-r from-red-600 to-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-full shadow-2xl hover:scale-105 transition-all"
-          >
-            <ShoppingBag size={18} />
-            <span>Services Cart</span>
-            <span className="w-5 h-5 rounded-full bg-white text-red-700 text-[11px] font-black flex items-center justify-center">
-              {servicesCart.length}
-            </span>
-          </button>
-        </div>
-      )}
-
       {/* ── Hero Banner ──────────────────────────────────── */}
       <div className="relative hero-bg rounded-2xl overflow-hidden mb-8 pattern-overlay">
         <div className="relative z-10 px-6 sm:px-10 py-10 sm:py-14">
@@ -84,17 +65,12 @@ export default function CustomerServicesPage() {
             Our Services
           </h1>
           <p className="text-gray-400 text-sm sm:text-base max-w-lg font-medium leading-relaxed">
-            Elevate your vehicle with our premium detailing services. Tap any service card to view English details or add multiple items to your Services Cart!
+            Elevate your vehicle with our premium detailing services. Tap any service card to view English details and features.
           </p>
           <div className="flex gap-3 mt-6">
             <Button onClick={() => navigate('/customer/bookings/new')} icon={<ArrowRight size={16} />}>
               Book Now
             </Button>
-            {servicesCart.length > 0 && (
-              <Button onClick={() => setServicesDrawerOpen(true)} className="bg-white text-gray-950 hover:bg-gray-100" icon={<ShoppingBag size={16} />}>
-                View Cart ({servicesCart.length})
-              </Button>
-            )}
           </div>
         </div>
       </div>
@@ -129,7 +105,6 @@ export default function CustomerServicesPage() {
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 {sortServicesByPriority(services).map((svc: any, idx: number) => {
-                  const isInCart = servicesCart.some((item) => item.id === svc.id);
                   return (
                     <div
                       key={svc.id}
@@ -182,11 +157,11 @@ export default function CustomerServicesPage() {
                         </Button>
                         <Button
                           size="sm"
-                          className={isInCart ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-[#D32F2F] hover:bg-[#b52626] text-white'}
-                          onClick={() => toggleServiceInCart(svc)}
-                          icon={isInCart ? <Check size={14} /> : <ShoppingBag size={14} />}
+                          className="bg-[#D32F2F] hover:bg-[#b52626] text-white font-bold"
+                          onClick={() => navigate(`/customer/bookings/new?service_id=${svc.id}`)}
+                          icon={<ArrowRight size={14} />}
                         >
-                          {isInCart ? 'In Cart ✓' : 'Add to Cart'}
+                          Book Now
                         </Button>
                       </div>
                     </div>
@@ -203,12 +178,6 @@ export default function CustomerServicesPage() {
         isOpen={!!selectedDetailsSvc}
         onClose={() => setSelectedDetailsSvc(null)}
         service={selectedDetailsSvc}
-      />
-
-      {/* Services Cart Drawer */}
-      <ServicesCartDrawer
-        isOpen={servicesDrawerOpen}
-        onClose={() => setServicesDrawerOpen(false)}
       />
     </div>
   );

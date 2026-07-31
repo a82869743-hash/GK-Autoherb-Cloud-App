@@ -16,6 +16,7 @@ export default function ProductsCartDrawer({ isOpen, onClose, onOrderSuccess }: 
   const toast = useUIStore((s) => s.toast);
   const { productsCart, updateProductQty, removeProductFromCart, clearProductsCart } = useCartStore();
 
+  const [fulfillmentMethod, setFulfillmentMethod] = useState<'pickup' | 'delivery'>('pickup');
   const [shippingAddress, setShippingAddress] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'qr' | 'razorpay'>('qr');
   const [qrTransactionId, setQrTransactionId] = useState('');
@@ -32,8 +33,13 @@ export default function ProductsCartDrawer({ isOpen, onClose, onOrderSuccess }: 
       toast('error', 'Your products cart is empty');
       return;
     }
-    if (!shippingAddress.trim()) {
-      toast('error', 'Please enter your shipping/delivery address');
+    
+    const finalAddress = fulfillmentMethod === 'pickup'
+      ? 'Collect from Store (GK AutoHerb Studio)'
+      : shippingAddress.trim();
+
+    if (fulfillmentMethod === 'delivery' && !finalAddress) {
+      toast('error', 'Please enter your home delivery address');
       return;
     }
     if (paymentMethod === 'qr' && !qrTransactionId.trim()) {
@@ -49,12 +55,12 @@ export default function ProductsCartDrawer({ isOpen, onClose, onOrderSuccess }: 
           quantity: item.quantity,
           unit_price: item.selling_price,
         })),
-        shipping_address: shippingAddress,
+        shipping_address: finalAddress,
         payment_method: paymentMethod,
         qr_transaction_id: paymentMethod === 'qr' ? qrTransactionId : undefined,
       };
 
-      const res = await api.post('/products/orders', payload);
+      const res = await api.post('/products/order', payload);
       if (res.data.success) {
         toast('success', 'Multi-product order placed! Admin has been notified for approval.');
         clearProductsCart();
@@ -136,18 +142,45 @@ export default function ProductsCartDrawer({ isOpen, onClose, onOrderSuccess }: 
                 ))}
               </div>
 
-              {/* Shipping Address */}
+              {/* Order Fulfillment Option */}
               <div>
                 <h4 className="text-xs font-black uppercase text-gray-400 mb-2 flex items-center gap-1.5">
-                  <MapPin size={14} className="text-blue-500" /> Delivery Address
+                  <MapPin size={14} className="text-blue-500" /> Fulfillment Option
                 </h4>
-                <textarea
-                  value={shippingAddress}
-                  onChange={(e) => setShippingAddress(e.target.value)}
-                  placeholder="Enter full street address, landmark, city & pincode"
-                  rows={2}
-                  className="w-full text-xs font-medium p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
-                />
+                <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setFulfillmentMethod('pickup')}
+                    className={`p-3 rounded-xl border text-left font-bold transition-all flex items-center gap-2 ${
+                      fulfillmentMethod === 'pickup' ? 'border-blue-600 bg-blue-50 text-blue-900' : 'border-gray-200 bg-gray-50'
+                    }`}
+                  >
+                    <span>🏬</span> Collect from Store
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFulfillmentMethod('delivery')}
+                    className={`p-3 rounded-xl border text-left font-bold transition-all flex items-center gap-2 ${
+                      fulfillmentMethod === 'delivery' ? 'border-blue-600 bg-blue-50 text-blue-900' : 'border-gray-200 bg-gray-50'
+                    }`}
+                  >
+                    <span>🚚</span> Home Delivery
+                  </button>
+                </div>
+
+                {fulfillmentMethod === 'delivery' ? (
+                  <textarea
+                    value={shippingAddress}
+                    onChange={(e) => setShippingAddress(e.target.value)}
+                    placeholder="Enter full street address, landmark, city & pincode"
+                    rows={2}
+                    className="w-full text-xs font-medium p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
+                  />
+                ) : (
+                  <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-100 text-xs text-blue-900 font-medium flex items-center gap-2">
+                    <span>📍</span> Pick up your ordered products directly at <strong>GK AutoHerb Studio</strong>.
+                  </div>
+                )}
               </div>
 
               {/* Payment Method */}

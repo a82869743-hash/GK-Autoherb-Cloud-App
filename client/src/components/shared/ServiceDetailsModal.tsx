@@ -1,9 +1,8 @@
 import React from 'react';
-import { Sparkles, Clock, CheckCircle2, ListChecks, ShieldCheck, ArrowRight, ShoppingBag, Check } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Sparkles, Clock, CheckCircle2, ListChecks, ShieldCheck, ArrowRight } from 'lucide-react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
-import { useCartStore } from '../../store/useCartStore';
-import { formatINR } from '../../utils/formatters';
 
 interface ServiceDetailsModalProps {
   isOpen: boolean;
@@ -12,12 +11,11 @@ interface ServiceDetailsModalProps {
   isFirstWashEligible?: boolean;
 }
 
-export default function ServiceDetailsModal({ isOpen, onClose, service, isFirstWashEligible }: ServiceDetailsModalProps) {
-  const { servicesCart, toggleServiceInCart } = useCartStore();
+export default function ServiceDetailsModal({ isOpen, onClose, service }: ServiceDetailsModalProps) {
+  const navigate = useNavigate();
 
   if (!service) return null;
 
-  const isInCart = servicesCart.some((item) => item.id === service.id);
   const isWash = service.name && service.name.toLowerCase().includes('wash');
 
   // Parse JSON helper
@@ -35,11 +33,26 @@ export default function ServiceDetailsModal({ isOpen, onClose, service, isFirstW
     return [];
   };
 
-  const features = parseJson(service.features_json);
-  const whatsIncluded = parseJson(service.whats_included_json);
-  const processSteps = parseJson(service.process_json);
+  let features = parseJson(service.features_json);
+  let whatsIncluded = parseJson(service.whats_included_json);
+  let processSteps = parseJson(service.process_json);
 
-  const priceSedan = parseFloat(service.price_sedan) || 0;
+  // Provide rich default English content if none saved by Admin yet
+  if (features.length === 0) {
+    features = isWash
+      ? ['Deep snow foam hand wash', 'pH-neutral shampoo formula', 'Microfiber scratch-free dry', 'High gloss paint protection']
+      : ['Aerospace grade protection', 'Multi-stage paint correction', 'High UV & swirl mark resistance', 'Artisan hand application'];
+  }
+  if (whatsIncluded.length === 0) {
+    whatsIncluded = isWash
+      ? ['Underbody pressure wash', 'Interior vacuuming & dashboard wipe', 'Tyre dressing & rim clean', 'Glass streak-free polish']
+      : ['Surface clay bar decontamination', 'Paint defect & scratch removal', 'Full exterior sealant coating', 'Final studio QC inspection'];
+  }
+  if (processSteps.length === 0) {
+    processSteps = isWash
+      ? ['1. High pressure pre-rinse', '2. Snow foam soak & microfiber wash', '3. Underbody & wheel deep clean', '4. Blow dry & streak-free wipe']
+      : ['1. Vehicle prep & surface decontamination', '2. Precision machine compounding & polishing', '3. Protective layer application', '4. Curing & final studio sign-off'];
+  }
 
   return (
     <Modal open={isOpen} onClose={onClose} title="" size="lg">
@@ -50,136 +63,113 @@ export default function ServiceDetailsModal({ isOpen, onClose, service, isFirstW
             <img
               src={service.image_url}
               alt={service.name}
-              className="absolute inset-0 w-full h-full object-cover opacity-25 mix-blend-overlay"
+              className="absolute inset-0 w-full h-full object-cover opacity-20"
             />
           )}
-          <div className="relative z-10 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="px-3 py-1 bg-[#D32F2F] text-white text-[10px] font-black uppercase tracking-wider rounded-full shadow-sm">
-                {service.category_name || 'Studio Service'}
+          <div className="relative z-10 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 bg-red-600/90 text-white text-[10px] font-black uppercase tracking-wider rounded-md">
+                {service.category_name || 'GK AutoHerb Service'}
               </span>
-              {service.duration_minutes && (
-                <span className="flex items-center gap-1.5 text-xs text-gray-300 bg-white/10 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 font-bold">
-                  <Clock size={14} className="text-amber-400" />
-                  ~{service.duration_minutes} Mins
+              {service.is_premium && (
+                <span className="px-2.5 py-0.5 bg-amber-500/90 text-black text-[10px] font-black uppercase tracking-wider rounded-md flex items-center gap-1">
+                  <Sparkles size={10} /> Premium
                 </span>
               )}
             </div>
+            <h2 className="text-2xl font-black text-white">{service.name}</h2>
+            <p className="text-xs text-gray-300 max-w-xl leading-relaxed">
+              {service.description || 'Comprehensive professional car care service engineered for maximum protection and showroom finish.'}
+            </p>
 
-            <h2 className="text-2xl sm:text-3xl font-black tracking-tight leading-snug text-white">
-              {service.name}
-            </h2>
-
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              <div className="text-xl font-extrabold text-white">
-                {priceSedan > 0 ? (
-                  isFirstWashEligible && isWash ? (
-                    <div className="flex items-center gap-2">
-                      <span className="line-through text-gray-400 text-sm">₹{priceSedan}</span>
-                      <span className="text-amber-400 font-black text-2xl">₹{Math.round(priceSedan * 0.50)}</span>
-                      <span className="text-[10px] font-black bg-amber-400 text-gray-950 px-2 py-0.5 rounded-md">50% OFF WASH</span>
-                    </div>
-                  ) : (
-                    <span>Starting from ₹{priceSedan} <span className="text-xs font-normal text-gray-400">(Sedan)</span></span>
-                  )
-                ) : (
-                  <span className="text-amber-400 font-bold">Ask Studio</span>
-                )}
+            <div className="flex items-center gap-4 pt-2 text-xs font-bold text-gray-300">
+              <div className="flex items-center gap-1.5">
+                <Clock size={14} className="text-red-500" />
+                <span>{service.duration_minutes || 60} Minutes</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <ShieldCheck size={14} className="text-emerald-500" />
+                <span>Studio Certified</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* English Description */}
-        <div>
-          <h4 className="text-xs font-black uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1.5">
-            <ShieldCheck size={16} className="text-[#D32F2F]" /> Service Overview
-          </h4>
-          <p className="text-sm text-gray-700 leading-relaxed font-medium bg-gray-50 p-4 rounded-xl border border-gray-100">
-            {service.description || 'Professional automotive detail and care engineered for maximum protection, clarity, and shine.'}
-          </p>
-        </div>
-
-        {/* Key Features */}
-        {features.length > 0 && (
-          <div>
-            <h4 className="text-xs font-black uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
-              <Sparkles size={16} className="text-amber-500" /> Key Features & Highlights
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {features.map((feat: string, idx: number) => (
-                <div key={idx} className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-50/50 border border-amber-100/60 text-xs font-bold text-gray-800">
-                  <CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-0.5" />
-                  <span>{feat}</span>
-                </div>
-              ))}
+        {/* 2-Column Grid: Key Features & What's Included */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Key Features */}
+          {features.length > 0 && (
+            <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2.5">
+              <h4 className="text-xs font-black uppercase tracking-wider text-gray-700 flex items-center gap-2">
+                <Sparkles size={15} className="text-amber-500" />
+                Key Highlights
+              </h4>
+              <ul className="space-y-2 text-xs font-medium text-gray-700">
+                {features.map((item: string, idx: number) => (
+                  <li key={idx} className="flex items-start gap-2">
+                    <CheckCircle2 size={14} className="text-emerald-500 shrink-0 mt-0.5" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* What's Included */}
-        {whatsIncluded.length > 0 && (
-          <div>
-            <h4 className="text-xs font-black uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
-              <ListChecks size={16} className="text-blue-500" /> What's Included
-            </h4>
-            <ul className="space-y-2 bg-blue-50/40 p-4 rounded-xl border border-blue-100/60">
-              {whatsIncluded.map((inc: string, idx: number) => (
-                <li key={idx} className="flex items-center gap-2 text-xs font-semibold text-gray-800">
-                  <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
-                  <span>{inc}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+          {/* What's Included */}
+          {whatsIncluded.length > 0 && (
+            <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2.5">
+              <h4 className="text-xs font-black uppercase tracking-wider text-gray-700 flex items-center gap-2">
+                <ListChecks size={15} className="text-blue-500" />
+                What's Included
+              </h4>
+              <ul className="space-y-2 text-xs font-medium text-gray-700">
+                {whatsIncluded.map((item: string, idx: number) => (
+                  <li key={idx} className="flex items-start gap-2">
+                    <CheckCircle2 size={14} className="text-blue-500 shrink-0 mt-0.5" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
 
         {/* Process Steps */}
         {processSteps.length > 0 && (
-          <div>
-            <h4 className="text-xs font-black uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
-              <ArrowRight size={16} className="text-purple-500" /> Process Steps
+          <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2.5">
+            <h4 className="text-xs font-black uppercase tracking-wider text-gray-700 flex items-center gap-2">
+              <ShieldCheck size={15} className="text-purple-500" />
+              Service Process & Workflow
             </h4>
-            <div className="space-y-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-medium text-gray-700">
               {processSteps.map((step: string, idx: number) => (
-                <div key={idx} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
-                  <span className="w-6 h-6 rounded-full bg-purple-600 text-white font-black text-xs flex items-center justify-center shrink-0">
-                    {idx + 1}
-                  </span>
-                  <p className="text-xs font-bold text-gray-800 mt-0.5">{step}</p>
+                <div key={idx} className="p-2.5 bg-white rounded-xl border border-gray-200/60 shadow-2xs">
+                  {step}
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Segment Pricing Breakdown Table */}
+        {/* Segment Pricing Table */}
         <div>
-          <h4 className="text-xs font-black uppercase tracking-wider text-gray-400 mb-3">
-            Pricing Breakdown by Vehicle Segment
+          <h4 className="text-xs font-black uppercase tracking-wider text-gray-500 mb-2">
+            Pricing by Vehicle Segment
           </h4>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
             {[
-              { label: 'Hatchback', price: service.price_hatchback },
-              { label: 'Med Hatch', price: service.price_medium_hatchback },
-              { label: 'Sedan', price: service.price_sedan },
-              { label: 'Prem Sedan', price: service.price_premium_sedan },
-              { label: 'SUV', price: service.price_suv },
-            ].map((seg, i) => {
-              const val = parseFloat(seg.price) || 0;
+              { label: 'Hatchback', key: 'price_hatchback' },
+              { label: 'Med Hatch', key: 'price_medium_hatchback' },
+              { label: 'Sedan', key: 'price_sedan' },
+              { label: 'Prem Sedan', key: 'price_premium_sedan' },
+              { label: 'SUV', key: 'price_suv' },
+            ].map((seg) => {
+              const val = parseFloat(service[seg.key]) || 0;
               return (
-                <div key={i} className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                  <p className="text-[10px] text-gray-400 font-bold uppercase">{seg.label}</p>
-                  <p className="text-sm font-black text-gray-900 mt-1">
-                    {val > 0 ? (
-                      isFirstWashEligible && isWash ? (
-                        <span className="text-[#D32F2F]">₹{Math.round(val * 0.50)}</span>
-                      ) : (
-                        `₹${val}`
-                      )
-                    ) : (
-                      'Ask Studio'
-                    )}
+                <div key={seg.key} className="p-3 bg-gray-50 rounded-xl border border-gray-200/60">
+                  <p className="text-[9px] font-bold text-gray-400 uppercase">{seg.label}</p>
+                  <p className="text-xs font-black text-gray-900 mt-0.5">
+                    {val > 0 ? `₹${val}` : 'Ask Studio'}
                   </p>
                 </div>
               );
@@ -198,13 +188,13 @@ export default function ServiceDetailsModal({ isOpen, onClose, service, isFirstW
 
           <Button
             onClick={() => {
-              toggleServiceInCart(service);
               onClose();
+              navigate(`/customer/bookings/new?service_id=${service.id}`);
             }}
-            className={isInCart ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-[#D32F2F] hover:bg-[#b52626] text-white'}
-            icon={isInCart ? <Check size={16} /> : <ShoppingBag size={16} />}
+            className="bg-[#D32F2F] hover:bg-[#b52626] text-white py-2.5 px-6 font-bold text-xs rounded-xl shadow-md"
+            icon={<ArrowRight size={16} />}
           >
-            {isInCart ? 'Added to Cart ✓' : 'Add to Services Cart'}
+            Book This Service Now
           </Button>
         </div>
       </div>
