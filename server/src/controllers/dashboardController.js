@@ -13,7 +13,8 @@ exports.getStats = async (req, res) => {
       [jobCarts], [activeDeliveries], [inquiries],
       [purchases], [pendingPay], [lowStock],
       [todayBookings], [totalCustomers], [recentCompletions],
-      [staffPresent], [expiringPkgs]
+      [staffPresent], [expiringPkgs],
+      [pendingBookings], [pendingPackageReqs], [pendingProductOrders]
     ] = await Promise.all([
       // Revenue
       pool.query(
@@ -79,6 +80,10 @@ exports.getStats = async (req, res) => {
            AND up.end_date <= DATE_ADD(NOW(), INTERVAL 30 DAY)
          ORDER BY up.end_date ASC`
       ),
+      // Pending Approvals Queries
+      pool.query(`SELECT COUNT(*) AS total FROM bookings WHERE status = 'pending_approval'`),
+      pool.query(`SELECT COUNT(*) AS total FROM package_requests WHERE status = 'pending'`),
+      pool.query(`SELECT COUNT(*) AS total FROM product_orders WHERE payment_status = 'pending'`),
     ]);
 
     const todayRevVal = parseFloat(todayRev[0].total);
@@ -108,6 +113,10 @@ exports.getStats = async (req, res) => {
         staffPresent: staffPresent[0].total || 0,
         expiring_packages: expiringPkgs.length,
         expiring_package_details: expiringPkgs,
+        pending_service_bookings: pendingBookings[0]?.total || 0,
+        pending_package_requests: pendingPackageReqs[0]?.total || 0,
+        pending_product_orders: pendingProductOrders[0]?.total || 0,
+        total_pending_approvals: (pendingBookings[0]?.total || 0) + (pendingPackageReqs[0]?.total || 0) + (pendingProductOrders[0]?.total || 0),
       }
     });
   } catch (err) {
