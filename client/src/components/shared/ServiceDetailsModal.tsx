@@ -42,7 +42,7 @@ export default function ServiceDetailsModal({ isOpen, onClose, service, isFirstW
   const priceSedan = parseFloat(service.price_sedan) || 0;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="" size="lg">
+    <Modal open={isOpen} onClose={onClose} title="" size="lg">
       <div className="space-y-6">
         {/* Banner Header */}
         <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-gray-900 via-zinc-900 to-[#1c1b1b] p-6 text-white shadow-xl">

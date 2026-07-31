@@ -15,6 +15,7 @@ export interface ServiceCartItem {
   price_premium_sedan?: number | string;
   price_suv?: number | string;
   duration_minutes?: number;
+  [key: string]: any;
 }
 
 export interface ProductCartItem {
