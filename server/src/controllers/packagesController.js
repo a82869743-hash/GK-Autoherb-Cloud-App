@@ -433,12 +433,14 @@ exports.listRequests = async (req, res) => {
              p.name as package_name,
              pay.status AS payment_status, pay.payment_method
       FROM package_requests pr
-      JOIN users u ON pr.customer_id = u.id
-      JOIN vehicles v ON pr.vehicle_id = v.id
-      JOIN packages p ON pr.package_id = p.id
+      LEFT JOIN users u ON pr.customer_id = u.id
+      LEFT JOIN vehicles v ON pr.vehicle_id = v.id
+      LEFT JOIN packages p ON pr.package_id = p.id
       LEFT JOIN v2_payments pay ON (
         pay.booking_id IS NULL AND
-        JSON_UNQUOTE(JSON_EXTRACT(pay.notes, '$.package_request_id')) = pr.id
+        pay.notes IS NOT NULL AND
+        JSON_VALID(pay.notes) AND
+        JSON_UNQUOTE(JSON_EXTRACT(pay.notes, '$.package_request_id')) = CAST(pr.id AS CHAR)
       )
       ORDER BY pr.created_at DESC
     `);
