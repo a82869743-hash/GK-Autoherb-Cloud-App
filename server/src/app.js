@@ -156,12 +156,12 @@ io.on('connection', (socket) => {
   socket.on('join_delivery', async ({ deliveryId }) => {
     try {
       const [rows] = await pool.query(
-        'SELECT * FROM deliveries WHERE id = ? AND status = ?',
-        [deliveryId, 'in_transit']
+        'SELECT * FROM deliveries WHERE id = ?',
+        [deliveryId]
       );
       if (!rows.length) return socket.emit('error', { message: 'Delivery not found' });
       const delivery = rows[0];
-      if (socket.user.id !== delivery.staff_id && socket.user.id !== delivery.customer_id) {
+      if (socket.user.role !== 'admin' && socket.user.id !== delivery.staff_id && socket.user.id !== delivery.customer_id) {
         return socket.emit('error', { message: 'Not authorized' });
       }
       socket.join(`delivery_${deliveryId}`);
@@ -173,15 +173,28 @@ io.on('connection', (socket) => {
 
   socket.on('location_update', async ({ deliveryId, lat, lng }) => {
     try {
+      const parsedLat = parseFloat(lat);
+      const parsedLng = parseFloat(lng);
+      if (isNaN(parsedLat) || isNaN(parsedLng)) return;
+
       const [rows] = await pool.query(
-        'SELECT staff_id FROM deliveries WHERE id = ? AND status = ?',
-        [deliveryId, 'in_transit']
+        'SELECT staff_id FROM deliveries WHERE id = ?',
+        [deliveryId]
       );
       if (!rows.length) return;
-      if (socket.user.id !== rows[0].staff_id) return;
-      io.to(`delivery_${deliveryId}`).emit('location', { lat, lng, timestamp: Date.now() });
-    } catch {
-      // silently ignore
+      if (socket.user.role !== 'admin' && socket.user.id !== rows[0].staff_id) return;
+
+      // Persist to database
+      await pool.query(
+        'UPDATE deliveries SET last_lat = ?, last_lng = ?, location_updated_at = NOW() WHERE id = ?',
+        [parsedLat, parsedLng, deliveryId]
+      );
+
+      const locPayload = { deliveryId: parseInt(deliveryId), delivery_id: parseInt(deliveryId), lat: parsedLat, lng: parsedLng, timestamp: Date.now() };
+      io.to(`delivery_${deliveryId}`).emit('location', locPayload);
+      io.to(`delivery_${deliveryId}`).emit('location_update', locPayload);
+    } catch (err) {
+      console.error('[SOCKET] location_update error:', err.message);
     }
   });
 

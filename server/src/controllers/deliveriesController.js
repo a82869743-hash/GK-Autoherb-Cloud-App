@@ -130,8 +130,8 @@ exports.startDelivery = async (req, res) => {
     }
 
     const [result] = await pool.query(`
-      INSERT INTO deliveries (job_cart_id, staff_id, customer_id, status)
-      VALUES (?, ?, ?, 'in_transit')
+      INSERT INTO deliveries (job_cart_id, staff_id, customer_id, status, last_lat, last_lng, location_updated_at)
+      VALUES (?, ?, ?, 'in_transit', 22.3072, 73.1812, NOW())
     `, [job.id, req.user.id, job.customer_id]);
 
     const deliveryId = result.insertId;

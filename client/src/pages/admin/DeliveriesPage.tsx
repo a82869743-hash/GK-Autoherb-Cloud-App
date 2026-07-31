@@ -44,6 +44,8 @@ export default function DeliveriesPage() {
   const [filter, setFilter] = useState('all');
   const [trackingId, setTrackingId] = useState<number | null>(null);
   const [liveLocation, setLiveLocation] = useState<{ lat: number; lng: number; timestamp: number } | null>(null);
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [isBroadcastingGps, setIsBroadcastingGps] = useState(false);
   const { addToast } = useToastStore();
   const { token } = useAuthStore();
 
@@ -69,10 +71,69 @@ export default function DeliveriesPage() {
     return () => clearInterval(interval);
   }, [filter]);
 
+  // Handle Simulation Drive
+  useEffect(() => {
+    if (!isSimulating || !trackingId) return;
+
+    let lat = liveLocation?.lat || 22.3072;
+    let lng = liveLocation?.lng || 73.1812;
+
+    const simInterval = setInterval(async () => {
+      lat += (Math.random() * 0.0004 + 0.0002);
+      lng += (Math.random() * 0.0004 + 0.0002);
+
+      setLiveLocation({ lat, lng, timestamp: Date.now() });
+
+      try {
+        await api.patch(`/deliveries/${trackingId}/location`, { lat, lng });
+      } catch (e) {
+        console.error(e);
+      }
+    }, 3000);
+
+    return () => clearInterval(simInterval);
+  }, [isSimulating, trackingId, liveLocation?.lat, liveLocation?.lng]);
+
+  // Handle Device Browser Geolocation
+  useEffect(() => {
+    if (!isBroadcastingGps || !trackingId) return;
+
+    let watchId: number;
+    if (navigator.geolocation) {
+      addToast('success', 'Live Device GPS broadcasting enabled');
+      watchId = navigator.geolocation.watchPosition(
+        async (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          setLiveLocation({ lat, lng, timestamp: Date.now() });
+          try {
+            await api.patch(`/deliveries/${trackingId}/location`, { lat, lng });
+          } catch (e) {
+            console.error(e);
+          }
+        },
+        (err) => {
+          addToast('error', 'Device GPS error: ' + err.message);
+          setIsBroadcastingGps(false);
+        },
+        { enableHighAccuracy: true, maximumAge: 0 }
+      );
+    } else {
+      addToast('error', 'Browser does not support GPS Geolocation');
+      setIsBroadcastingGps(false);
+    }
+
+    return () => {
+      if (watchId) navigator.geolocation.clearWatch(watchId);
+    };
+  }, [isBroadcastingGps, trackingId]);
+
   // Poll live location for tracked delivery and connect socket
   useEffect(() => {
     if (!trackingId) {
       setLiveLocation(null);
+      setIsSimulating(false);
+      setIsBroadcastingGps(false);
       return;
     }
 
@@ -80,15 +141,13 @@ export default function DeliveriesPage() {
       try {
         const res = await api.get(`/deliveries/${trackingId}/location`);
         if (res.data?.success && res.data.data) {
-          const lat = parseFloat(res.data.data.last_lat);
-          const lng = parseFloat(res.data.data.last_lng);
-          if (!isNaN(lat) && !isNaN(lng)) {
-            setLiveLocation({
-              lat,
-              lng,
-              timestamp: res.data.data.location_updated_at ? new Date(res.data.data.location_updated_at).getTime() : Date.now(),
-            });
-          }
+          const lat = parseFloat(res.data.data.last_lat) || 22.3072;
+          const lng = parseFloat(res.data.data.last_lng) || 73.1812;
+          setLiveLocation({
+            lat,
+            lng,
+            timestamp: res.data.data.location_updated_at ? new Date(res.data.data.location_updated_at).getTime() : Date.now(),
+          });
         }
       } catch (err) {
         console.error('Failed to fetch live location:', err);
@@ -197,35 +256,83 @@ export default function DeliveriesPage() {
       </div>
 
       {trackingId && (
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 mb-4">
-          <div className="flex items-center justify-between mb-3">
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 mb-4 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center animate-pulse">
-                <MapPin size={20} className="text-blue-600" />
+              <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center animate-pulse shadow-md">
+                <MapPin size={20} />
               </div>
               <div>
-                <p className="text-sm font-bold text-gray-900">
-                  Live Tracking — Delivery #{trackingId}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-bold text-gray-900">
+                    Live GPS Tracking — Delivery #{trackingId}
+                  </p>
+                  {isSimulating && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-black uppercase tracking-wider animate-pulse">
+                      Simulation Active
+                    </span>
+                  )}
+                  {isBroadcastingGps && (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-black uppercase tracking-wider animate-pulse">
+                      Device GPS Active
+                    </span>
+                  )}
+                </div>
                 {liveLocation ? (
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Lat: {!isNaN(liveLocation.lat) ? liveLocation.lat.toFixed(6) : 'N/A'}, Lng: {!isNaN(liveLocation.lng) ? liveLocation.lng.toFixed(6) : 'N/A'}
+                  <p className="text-xs text-gray-600 font-mono mt-0.5">
+                    Lat: {liveLocation.lat.toFixed(6)}, Lng: {liveLocation.lng.toFixed(6)}
                     {liveLocation.timestamp ? ` · Updated ${Math.max(0, Math.round((Date.now() - liveLocation.timestamp) / 1000))}s ago` : ''}
                   </p>
                 ) : (
-                  <p className="text-xs text-gray-500 mt-0.5">Fetching location...</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Initializing GPS coordinates...</p>
                 )}
               </div>
             </div>
-            <button
-              onClick={() => setTrackingId(null)}
-              className="px-3 py-1.5 bg-white text-gray-600 rounded-lg border border-gray-200 text-xs font-medium hover:bg-gray-50"
-            >
-              Stop
-            </button>
+            
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBroadcastingGps(!isBroadcastingGps);
+                  if (!isBroadcastingGps) setIsSimulating(false);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 ${
+                  isBroadcastingGps 
+                    ? 'bg-emerald-600 text-white hover:bg-emerald-700' 
+                    : 'bg-white text-emerald-700 border border-emerald-300 hover:bg-emerald-50'
+                }`}
+              >
+                <Navigation size={13} />
+                {isBroadcastingGps ? 'Stop Device GPS' : '📡 Broadcast Device GPS'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSimulating(!isSimulating);
+                  if (!isSimulating) setIsBroadcastingGps(false);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 ${
+                  isSimulating 
+                    ? 'bg-amber-600 text-white hover:bg-amber-700' 
+                    : 'bg-white text-amber-700 border border-amber-300 hover:bg-amber-50'
+                }`}
+              >
+                <Truck size={13} />
+                {isSimulating ? 'Stop Simulation' : '🚗 Simulate Transit Drive'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTrackingId(null)}
+                className="px-3 py-1.5 bg-white text-gray-600 rounded-lg border border-gray-200 text-xs font-medium hover:bg-gray-50"
+              >
+                Close Map
+              </button>
+            </div>
           </div>
           
-          <div className="w-full h-64 bg-white rounded-lg border border-gray-200 overflow-hidden relative shadow-inner">
+          <div className="w-full h-72 bg-white rounded-lg border border-gray-200 overflow-hidden relative shadow-inner">
             {liveLocation && !isNaN(liveLocation.lat) && !isNaN(liveLocation.lng) ? (
               <iframe 
                 key={`${liveLocation.lat}-${liveLocation.lng}`}
@@ -240,8 +347,8 @@ export default function DeliveriesPage() {
             ) : (
               <div className="absolute inset-0 flex items-center justify-center bg-gray-50 text-gray-400">
                 <div className="text-center">
-                  <Navigation size={24} className="mx-auto mb-2 opacity-50 animate-pulse" />
-                  <p className="text-sm font-medium">Waiting for GPS signal...</p>
+                  <Navigation size={24} className="mx-auto mb-2 opacity-50 animate-pulse text-blue-600" />
+                  <p className="text-sm font-medium">Connecting to GPS positioning...</p>
                 </div>
               </div>
             )}

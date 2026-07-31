@@ -46,17 +46,26 @@ export default function DeliveryPage() {
 
       if (navigator.geolocation) {
         watchId = navigator.geolocation.watchPosition(
-          (position) => {
+          async (position) => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
             socket.emit('location_update', {
               deliveryId: activeDeliveryId,
-              lat: position.coords.latitude,
-              lng: position.coords.longitude,
+              lat,
+              lng,
             });
+            try {
+              await api.patch(`/deliveries/${activeDeliveryId}/location`, { lat, lng });
+            } catch (e) {
+              console.error(e);
+            }
           },
-          (error) => toast('error', 'Location Access Denied. Cannot broadcast GPS.'),
+          (error) => toast('error', 'Location Access Denied: ' + error.message),
           { enableHighAccuracy: true, maximumAge: 0 }
         );
         toast('success', 'GPS Tracking Started');
+      } else {
+        toast('error', 'Geolocation not supported on this browser');
       }
     } else {
       if (socket?.connected) socket.disconnect();
