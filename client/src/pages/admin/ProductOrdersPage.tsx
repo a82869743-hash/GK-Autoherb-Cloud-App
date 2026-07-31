@@ -217,22 +217,54 @@ export default function ProductOrdersPage() {
               <tbody className="divide-y divide-gray-100 text-sm font-medium text-gray-800">
                 {filteredOrders.map((order) => (
                   <tr key={order.id} className="hover:bg-gray-50/50 transition-colors">
-                    {/* Product Details */}
-                    <td className="px-6 py-4 flex items-center gap-3">
-                      <img
-                        src={getProductImage(order.product_name)}
-                        alt={order.product_name}
-                        className="w-10 h-10 object-cover rounded-lg border border-gray-100 shrink-0"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1563720223185-11003d516935?w=100';
-                        }}
-                      />
-                      <div>
-                        <div className="font-extrabold text-gray-900 leading-tight">{order.product_name}</div>
-                        <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
-                          SKU: {order.sku || '—'}
-                        </span>
-                      </div>
+                    {/* Product Details & Cart Breakdown */}
+                    <td className="px-6 py-4">
+                      {order.items_json ? (
+                        <div className="space-y-1">
+                          <div className="text-xs font-black text-gray-900 flex items-center gap-1.5">
+                            <ShoppingBag size={14} className="text-amber-500" />
+                            <span>Cart Order ({(() => {
+                              try { return JSON.parse(order.items_json).length; } catch { return 1; }
+                            })()} items)</span>
+                          </div>
+                          <div className="space-y-1 text-xs text-gray-600">
+                            {(() => {
+                              try {
+                                const items = JSON.parse(order.items_json);
+                                return items.map((it: any, i: number) => (
+                                  <div key={i} className="flex items-center gap-2">
+                                    <span className="font-bold text-gray-800">• {it.product_name}</span>
+                                    <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded font-black">x{it.quantity}</span>
+                                    <span className="text-[11px] text-gray-500">₹{it.total_price}</span>
+                                  </div>
+                                ));
+                              } catch {
+                                return <span>{order.product_name}</span>;
+                              }
+                            })()}
+                          </div>
+                          {order.shipping_address && (
+                            <p className="text-[10px] text-blue-600 font-bold mt-1">📍 Delivery: {order.shipping_address}</p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={getProductImage(order.product_name)}
+                            alt={order.product_name}
+                            className="w-10 h-10 object-cover rounded-lg border border-gray-100 shrink-0"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1563720223185-11003d516935?w=100';
+                            }}
+                          />
+                          <div>
+                            <div className="font-extrabold text-gray-900 leading-tight">{order.product_name}</div>
+                            <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                              SKU: {order.sku || '—'}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </td>
 
                     {/* Customer CRM info */}

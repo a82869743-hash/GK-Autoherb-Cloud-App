@@ -339,14 +339,32 @@ export default function CustomerBookingsPage() {
                       </div>
                     </div>
 
-                    {/* Service */}
+                    {/* Service / Services Cart Details */}
                     <div className="flex items-start gap-2">
                       <FileText size={14} className="text-[#D32F2F] shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e]">Service</p>
-                        <p className="text-xs font-bold text-[#1c1b1b] truncate">
-                          {b.service_name || b.package_name || '—'}
-                        </p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e]">Services Cart</p>
+                        {b.cart_items_json ? (
+                          <div className="space-y-1 mt-0.5">
+                            {(() => {
+                              try {
+                                const items = JSON.parse(b.cart_items_json);
+                                return items.map((it: any, i: number) => (
+                                  <div key={i} className="text-[11px] font-extrabold text-[#1c1b1b] flex items-center gap-1">
+                                    <span>• {it.name}</span>
+                                    {it.is_wash && <span className="text-[9px] bg-red-100 text-red-700 px-1 rounded">Wash</span>}
+                                  </div>
+                                ));
+                              } catch {
+                                return <p className="text-xs font-bold text-[#1c1b1b]">{b.service_name || b.package_name || '—'}</p>;
+                              }
+                            })()}
+                          </div>
+                        ) : (
+                          <p className="text-xs font-bold text-[#1c1b1b] truncate">
+                            {b.service_name || b.package_name || '—'}
+                          </p>
+                        )}
                       </div>
                     </div>
 

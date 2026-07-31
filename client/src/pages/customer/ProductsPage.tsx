@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { ShoppingBag, CreditCard, CheckCircle, Clock, AlertTriangle, ArrowRight, Star, ThumbsUp, Check, Truck, ShieldCheck, ShoppingCart, RefreshCw, X, QrCode, Search } from 'lucide-react';
 import api from '../../api/axiosInstance';
 import { useUIStore } from '../../store/uiStore';
+import { useCartStore } from '../../store/useCartStore';
+import ProductsCartDrawer from '../../components/shared/ProductsCartDrawer';
 
 function resolveImageUrl(url: string | undefined): string {
   if (!url) return '';
@@ -303,6 +305,7 @@ const PRODUCT_TEMPLATES = [
 
 export default function ProductsPage() {
   const toast = useUIStore((s) => s.toast);
+  const { productsCart, productsDrawerOpen, setProductsDrawerOpen } = useCartStore();
   const [products, setProducts] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -902,22 +905,43 @@ export default function ProductsPage() {
                         </div>
                         <span className="text-[10px] text-emerald-600 font-bold">In Stock</span>
                       </div>
-                      <button
-                        onClick={() => setSelectedProduct(product)}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer ${
-                          product.inStock
-                            ? 'bg-[#D32F2F] hover:bg-[#B71C1C] text-white shadow-red-500/20'
-                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                        }`}
-                        disabled={!product.inStock}
-                      >
-                        See More
-                        <ArrowRight size={12} />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setSelectedProduct(product)}
+                          className="px-3 py-2 rounded-xl text-xs font-bold border border-gray-200 hover:bg-gray-50 text-gray-700 transition-all cursor-pointer"
+                        >
+                          Details ℹ️
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!product.dbId) {
+                              toast('error', 'This product is unavailable');
+                              return;
+                            }
+                            useCartStore.getState().addProductToCart({
+                              id: product.dbId,
+                              product_name: product.displayName,
+                              selling_price: product.price,
+                              image_url: product.image,
+                              stock: product.dbQty || 99,
+                            });
+                            toast('success', `Added "${product.displayName}" to Products Cart!`);
+                          }}
+                          className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer ${
+                            product.inStock
+                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20'
+                              : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          }`}
+                          disabled={!product.inStock}
+                        >
+                          <ShoppingCart size={14} /> Add
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
               ))}
+              <ProductsCartDrawer />
             </div>
           )}
         </div>
@@ -1240,6 +1264,29 @@ export default function ProductsPage() {
           </div>
         </div>
       )}
+
+      {/* Floating Products Cart Button */}
+      {productsCart.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-40 animate-bounce">
+          <button
+            onClick={() => setProductsDrawerOpen(true)}
+            className="flex items-center gap-2.5 px-5 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-700 text-white font-black text-xs uppercase tracking-wider rounded-full shadow-2xl hover:scale-105 transition-all cursor-pointer"
+          >
+            <ShoppingBag size={18} />
+            <span>Products Cart</span>
+            <span className="w-5 h-5 rounded-full bg-white text-emerald-800 text-[11px] font-black flex items-center justify-center">
+              {productsCart.length}
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* Products Cart Drawer */}
+      <ProductsCartDrawer
+        isOpen={productsDrawerOpen}
+        onClose={() => setProductsDrawerOpen(false)}
+        onOrderSuccess={() => loadData()}
+      />
     </div>
   );
 }

@@ -80,11 +80,11 @@ exports.listMyOrders = async (req, res) => {
 exports.createOrder = async (req, res) => {
   const conn = await pool.getConnection();
   try {
-    const { product_id, quantity = 1, payment_method, qr_transaction_id } = req.body;
+    const { product_id, quantity = 1, cart_items, shipping_address, payment_method, qr_transaction_id } = req.body;
     const customerId = req.user.id;
 
-    if (!product_id || !payment_method) {
-      return res.status(400).json({ success: false, error: 'Product ID and payment method are required' });
+    if ((!product_id && (!cart_items || !cart_items.length)) || !payment_method) {
+      return res.status(400).json({ success: false, error: 'Product ID or cart items and payment method are required' });
     }
 
     if (!['razorpay', 'qr'].includes(payment_method)) {
@@ -93,26 +93,68 @@ exports.createOrder = async (req, res) => {
 
     await conn.beginTransaction();
 
-    // Fetch product details to get unit price and stock
-    const [products] = await conn.query(
-      'SELECT id, product_name, selling_price, quantity FROM inventory WHERE id = ? AND is_deleted = 0',
-      [product_id]
-    );
+    let totalAmount = 0;
+    let itemsSummary = [];
+    let primaryProductId = product_id || null;
+    let primaryQuantity = quantity || 1;
 
-    if (!products.length) {
-      await conn.rollback();
-      return res.status(404).json({ success: false, error: 'Product not found' });
+    if (cart_items && Array.isArray(cart_items) && cart_items.length > 0) {
+      primaryProductId = cart_items[0].product_id || cart_items[0].id;
+      for (const item of cart_items) {
+        const pid = item.product_id || item.id;
+        const q = parseInt(item.quantity) || 1;
+        const [products] = await conn.query(
+          'SELECT id, product_name, selling_price, quantity FROM inventory WHERE id = ? AND is_deleted = 0',
+          [pid]
+        );
+        if (!products.length) {
+          await conn.rollback();
+          return res.status(404).json({ success: false, error: `Product #${pid} not found` });
+        }
+        const prod = products[0];
+        if (parseFloat(prod.quantity) < q) {
+          await conn.rollback();
+          return res.status(400).json({ success: false, error: `Insufficient stock for "${prod.product_name}"` });
+        }
+        const uPrice = parseFloat(prod.selling_price) || 0;
+        const iTotal = uPrice * q;
+        totalAmount += iTotal;
+        itemsSummary.push({
+          product_id: pid,
+          product_name: prod.product_name,
+          quantity: q,
+          unit_price: uPrice,
+          total_price: iTotal
+        });
+      }
+    } else {
+      // Single product backward compatibility
+      const [products] = await conn.query(
+        'SELECT id, product_name, selling_price, quantity FROM inventory WHERE id = ? AND is_deleted = 0',
+        [product_id]
+      );
+      if (!products.length) {
+        await conn.rollback();
+        return res.status(404).json({ success: false, error: 'Product not found' });
+      }
+      const prod = products[0];
+      const uPrice = parseFloat(prod.selling_price) || 0;
+      totalAmount = uPrice * quantity;
+      if (parseFloat(prod.quantity) < quantity) {
+        await conn.rollback();
+        return res.status(400).json({ success: false, error: 'Insufficient stock available' });
+      }
+      itemsSummary.push({
+        product_id: prod.id,
+        product_name: prod.product_name,
+        quantity: quantity,
+        unit_price: uPrice,
+        total_price: totalAmount
+      });
     }
 
-    const product = products[0];
-    const unitPrice = parseFloat(product.selling_price) || 0;
-    const totalAmount = unitPrice * quantity;
-
-    if (parseFloat(product.quantity) < quantity) {
-      await conn.rollback();
-      return res.status(400).json({ success: false, error: 'Insufficient stock available' });
-    }
-
+    const itemsJsonStr = JSON.stringify(itemsSummary);
+    const unitPrice = itemsSummary.length > 0 ? itemsSummary[0].unit_price : 0;
     let razorpayOrder = null;
     let orderId = null;
 
@@ -138,9 +180,9 @@ exports.createOrder = async (req, res) => {
       // Insert product order as pending
       const [oResult] = await conn.query(
         `INSERT INTO product_orders 
-         (customer_id, product_id, quantity, unit_price, total_amount, payment_method, payment_status, razorpay_order_id)
-         VALUES (?, ?, ?, ?, ?, 'razorpay', 'pending', ?)`,
-        [customerId, product_id, quantity, unitPrice, totalAmount, razorpayOrder.id]
+         (customer_id, product_id, quantity, unit_price, total_amount, payment_method, payment_status, razorpay_order_id, items_json, shipping_address)
+         VALUES (?, ?, ?, ?, ?, 'razorpay', 'pending', ?, ?, ?)`,
+        [customerId, primaryProductId, primaryQuantity, unitPrice, totalAmount, razorpayOrder.id, itemsJsonStr, shipping_address || null]
       );
       orderId = oResult.insertId;
 
@@ -149,7 +191,7 @@ exports.createOrder = async (req, res) => {
         `INSERT INTO v2_payments 
          (customer_id, product_id, amount, payment_method, status, razorpay_order_id, notes)
          VALUES (?, ?, ?, 'razorpay', 'pending', ?, ?)`,
-        [customerId, product_id, totalAmount, razorpayOrder.id, JSON.stringify({ product_order_id: orderId, quantity })]
+        [customerId, primaryProductId, totalAmount, razorpayOrder.id, JSON.stringify({ product_order_id: orderId, items: itemsSummary })]
       );
 
       await conn.commit();
@@ -170,9 +212,9 @@ exports.createOrder = async (req, res) => {
       // Insert product order as pending
       const [oResult] = await conn.query(
         `INSERT INTO product_orders 
-         (customer_id, product_id, quantity, unit_price, total_amount, payment_method, payment_status, qr_transaction_id)
-         VALUES (?, ?, ?, ?, ?, 'qr', 'pending', ?)`,
-        [customerId, product_id, quantity, unitPrice, totalAmount, qr_transaction_id]
+         (customer_id, product_id, quantity, unit_price, total_amount, payment_method, payment_status, qr_transaction_id, items_json, shipping_address)
+         VALUES (?, ?, ?, ?, ?, 'qr', 'pending', ?, ?, ?)`,
+        [customerId, primaryProductId, primaryQuantity, unitPrice, totalAmount, qr_transaction_id, itemsJsonStr, shipping_address || null]
       );
       orderId = oResult.insertId;
 

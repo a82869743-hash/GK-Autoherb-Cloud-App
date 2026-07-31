@@ -31,6 +31,11 @@ export default function ServicesPage() {
   const [editItem, setEditItem] = useState<any>(null);
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
+  const [features, setFeatures] = useState('');
+  const [whatsIncluded, setWhatsIncluded] = useState('');
+  const [processSteps, setProcessSteps] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+
   const [prices, setPrices] = useState<Record<string, number>>({
     price_hatchback: 0, price_medium_hatchback: 0, price_sedan: 0, price_premium_sedan: 0, price_suv: 0,
   });
@@ -45,14 +50,32 @@ export default function ServicesPage() {
 
   const updatePrice = (key: string, val: number) => setPrices(prev => ({ ...prev, [key]: val }));
 
+  const formatListToStr = (val: any) => {
+    if (!val) return '';
+    if (Array.isArray(val)) return val.join('\n');
+    if (typeof val === 'string') {
+      try {
+        const parsed = JSON.parse(val);
+        return Array.isArray(parsed) ? parsed.join('\n') : val;
+      } catch {
+        return val;
+      }
+    }
+    return '';
+  };
+
   const openAdd = () => {
-    setEditItem(null); setName(''); setDesc('');
+    setEditItem(null); setName(''); setDesc(''); setFeatures(''); setWhatsIncluded(''); setProcessSteps(''); setImageUrl('');
     setPrices({ price_hatchback: 0, price_medium_hatchback: 0, price_sedan: 0, price_premium_sedan: 0, price_suv: 0 });
     setActive(true); setPremium(false); setDurationMinutes(60); setModalOpen(true);
   };
 
   const openEdit = (svc: any) => {
     setEditItem(svc); setName(svc.name); setDesc(svc.description || '');
+    setFeatures(formatListToStr(svc.features_json));
+    setWhatsIncluded(formatListToStr(svc.whats_included_json));
+    setProcessSteps(formatListToStr(svc.process_json));
+    setImageUrl(svc.image_url || '');
     setPrices({
       price_hatchback: parseFloat(svc.price_hatchback) || 0,
       price_medium_hatchback: parseFloat(svc.price_medium_hatchback) || 0,
@@ -66,7 +89,18 @@ export default function ServicesPage() {
   const handleSave = async () => {
     if (!name.trim()) { toast('error', 'Name is required'); return; }
     try {
-      const payload = { name, description: desc, ...prices, is_active: active, is_premium: premium, duration_minutes: durationMinutes };
+      const payload = {
+        name,
+        description: desc,
+        features_json: features.split('\n').map(s => s.trim()).filter(Boolean),
+        whats_included_json: whatsIncluded.split('\n').map(s => s.trim()).filter(Boolean),
+        process_json: processSteps.split('\n').map(s => s.trim()).filter(Boolean),
+        image_url: imageUrl,
+        ...prices,
+        is_active: active,
+        is_premium: premium,
+        duration_minutes: durationMinutes
+      };
       if (editItem) {
         await updateMut.mutateAsync({ id: editItem.id, ...payload });
         toast('success', 'Service updated');
@@ -98,11 +132,13 @@ export default function ServicesPage() {
       />
 
       {isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[1,2,3].map(i => <SkeletonCard key={i} />)}</div>
-      ) : !services.length ? (
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <SkeletonCard /><SkeletonCard /><SkeletonCard />
+        </div>
+      ) : services.length === 0 ? (
         <EmptyState icon={Wrench} title="No Services" description="Create your first service" actionLabel="+ Add Service" onAction={openAdd} />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="p-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {services.map((svc: any) => (
             <div key={svc.id} className={`bg-white rounded-lg p-5 shadow-sm border-l-4 transition-all ${svc.is_active ? 'border-[#D32F2F]' : 'border-gray-300 opacity-60'}`}>
               <div className="flex items-start justify-between mb-3">
@@ -136,13 +172,60 @@ export default function ServicesPage() {
       )}
 
       {/* Add/Edit Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editItem ? 'Edit Service' : 'Add Service'} size="md"
-        footer={<><Button variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button><Button onClick={handleSave} loading={createMut.isPending || updateMut.isPending}>{editItem ? 'Save' : 'Create'}</Button></>}
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editItem ? 'Edit Service Details & Catalog' : 'Add New Service'} size="lg"
+        footer={<><Button variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button><Button onClick={handleSave} loading={createMut.isPending || updateMut.isPending}>{editItem ? 'Save Service' : 'Create Service'}</Button></>}
       >
-        <div className="space-y-4">
-          <Input label="Service Name" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Interior Cleaning" />
-          <Input label="Description" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Brief description" />
+        <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+          <Input label="Service Name *" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Executive Foam Wash" />
+          
+          <div>
+            <label className="text-xs font-bold text-[#1c1b1b] block mb-1">English Overview / Description</label>
+            <textarea
+              value={desc}
+              onChange={e => setDesc(e.target.value)}
+              placeholder="Comprehensive English description of the service displayed to customers..."
+              rows={3}
+              className="w-full text-xs font-medium p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D32F2F]"
+            />
+          </div>
+
+          <Input label="Banner / Icon Image URL" value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://example.com/wash-banner.jpg" />
+
+          <div>
+            <label className="text-xs font-bold text-[#1c1b1b] block mb-1">Key Features & Highlights (1 item per line)</label>
+            <textarea
+              value={features}
+              onChange={e => setFeatures(e.target.value)}
+              placeholder="High pressure snow foam wash&#10;pH neutral shampoo wash&#10;Microfiber hand dry"
+              rows={3}
+              className="w-full text-xs font-medium p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-[#1c1b1b] block mb-1">What's Included (1 item per line)</label>
+            <textarea
+              value={whatsIncluded}
+              onChange={e => setWhatsIncluded(e.target.value)}
+              placeholder="Underbody pressure wash&#10;Dashboard cleaning & polish&#10;Tyre dressing"
+              rows={3}
+              className="w-full text-xs font-medium p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-[#1c1b1b] block mb-1">Process Steps (1 step per line)</label>
+            <textarea
+              value={processSteps}
+              onChange={e => setProcessSteps(e.target.value)}
+              placeholder="1. High pressure body rinse&#10;2. Snow foam application & soak&#10;3. Dual bucket microfiber wash&#10;4. Air dry & final inspection"
+              rows={3}
+              className="w-full text-xs font-medium p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+
           <Input label="Duration (Minutes) *" type="number" value={durationMinutes || ''} onChange={e => setDurationMinutes(parseInt(e.target.value) || 0)} placeholder="60" />
+          
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2">Pricing by Vehicle Category</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -151,7 +234,7 @@ export default function ServicesPage() {
               ))}
             </div>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-6 pt-2">
             <label className="flex items-center gap-3 cursor-pointer">
               <button type="button" onClick={() => setActive(!active)} className={`w-10 h-5 rounded-full transition-colors ${active ? 'bg-green-500' : 'bg-gray-300'}`}>
                 <div className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform ${active ? 'translate-x-5' : 'translate-x-0.5'}`} />

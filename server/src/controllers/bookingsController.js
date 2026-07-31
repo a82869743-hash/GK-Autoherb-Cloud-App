@@ -484,13 +484,23 @@ exports.create = async (req, res) => {
     }
 
     // 7. Insert booking
+    const cartSummary = (cart_items && Array.isArray(cart_items) && cart_items.length > 0)
+      ? cart_items
+      : servicesList.map(s => ({
+          id: s.id,
+          name: s.name,
+          price: Number(s[priceKey]) || Number(s.price_sedan) || 0,
+          is_wash: s.name && s.name.toLowerCase().includes('wash')
+        }));
+    const cartItemsJsonStr = JSON.stringify(cartSummary);
+
     console.log('[BOOKING] Inserting booking — type:', bookingType, 'status:', targetStatus, 'advance_amount:', advanceAmount);
     const [result] = await conn.query(
       `INSERT INTO bookings 
        (customer_id, vehicle_id, slot_id, service_id, package_id, 
         vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category, total_duration,
-        status, is_free_wash, notes, booking_type, user_package_id, package_service_name, expires_at, advance_amount, total_amount, pickup_type, pickup_charge, discount_percent, discount_amount)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        status, is_free_wash, notes, booking_type, user_package_id, package_service_name, expires_at, advance_amount, total_amount, pickup_type, pickup_charge, discount_percent, discount_amount, cart_items_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         customerId, resolvedVehicleId, slot_id,
         primaryServiceId || null, package_id || null,
@@ -498,7 +508,7 @@ exports.create = async (req, res) => {
         targetStatus, is_free_wash ? 1 : 0, notes || null,
         bookingType, resolvedUserPackageId, package_service_name || null,
         expiresAt, advanceAmount, calculatedTotal, pickup_type, calculatedPickupCharge,
-        discountPercent, discountAmount
+        discountPercent, discountAmount, cartItemsJsonStr
       ]
     );
 

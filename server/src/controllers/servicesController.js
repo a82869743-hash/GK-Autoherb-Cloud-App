@@ -39,12 +39,20 @@ exports.getOne = async (req, res) => {
 // ─── CREATE ─────────────────────────────────
 exports.create = async (req, res) => {
   try {
-    const { name, description, price_hatchback = 0, price_medium_hatchback = 0, price_sedan = 0, price_premium_sedan = 0, price_suv = 0, duration_minutes = 60, category_id, is_active = true } = req.body;
+    const { name, description, features_json, whats_included_json, process_json, image_url, price_hatchback = 0, price_medium_hatchback = 0, price_sedan = 0, price_premium_sedan = 0, price_suv = 0, duration_minutes = 60, category_id, is_active = true } = req.body;
     if (!name) return res.status(400).json({ success: false, error: 'Service name is required' });
 
     const [result] = await pool.query(
-      'INSERT INTO services (name, description, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, duration_minutes, category_id, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, description || null, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, duration_minutes, category_id || null, is_active ? 1 : 0]
+      'INSERT INTO services (name, description, features_json, whats_included_json, process_json, image_url, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, duration_minutes, category_id, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        name,
+        description || null,
+        typeof features_json === 'object' ? JSON.stringify(features_json) : (features_json || null),
+        typeof whats_included_json === 'object' ? JSON.stringify(whats_included_json) : (whats_included_json || null),
+        typeof process_json === 'object' ? JSON.stringify(process_json) : (process_json || null),
+        image_url || null,
+        price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, duration_minutes, category_id || null, is_active ? 1 : 0
+      ]
     );
     res.status(201).json({ success: true, data: { id: result.insertId }, message: 'Service created' });
   } catch (err) {
@@ -56,13 +64,17 @@ exports.create = async (req, res) => {
 // ─── UPDATE ─────────────────────────────────
 exports.update = async (req, res) => {
   try {
-    const { name, description, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, duration_minutes, category_id, is_active, is_premium, sort_order } = req.body;
+    const { name, description, features_json, whats_included_json, process_json, image_url, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, duration_minutes, category_id, is_active, is_premium, sort_order } = req.body;
     const [existing] = await pool.query('SELECT id FROM services WHERE id = ?', [req.params.id]);
     if (!existing.length) return res.status(404).json({ success: false, error: 'Service not found' });
 
     const updates = []; const params = [];
     if (name !== undefined) { updates.push('name = ?'); params.push(name); }
     if (description !== undefined) { updates.push('description = ?'); params.push(description); }
+    if (features_json !== undefined) { updates.push('features_json = ?'); params.push(typeof features_json === 'object' ? JSON.stringify(features_json) : features_json); }
+    if (whats_included_json !== undefined) { updates.push('whats_included_json = ?'); params.push(typeof whats_included_json === 'object' ? JSON.stringify(whats_included_json) : whats_included_json); }
+    if (process_json !== undefined) { updates.push('process_json = ?'); params.push(typeof process_json === 'object' ? JSON.stringify(process_json) : process_json); }
+    if (image_url !== undefined) { updates.push('image_url = ?'); params.push(image_url); }
     if (price_hatchback !== undefined) { updates.push('price_hatchback = ?'); params.push(price_hatchback); }
     if (price_medium_hatchback !== undefined) { updates.push('price_medium_hatchback = ?'); params.push(price_medium_hatchback); }
     if (price_sedan !== undefined) { updates.push('price_sedan = ?'); params.push(price_sedan); }
