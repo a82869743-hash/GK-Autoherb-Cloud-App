@@ -1,10 +1,18 @@
 const { Client } = require('ssh2');
-const c = new Client();
-c.on('ready', () => {
-  c.exec('mysql -u root -p"1234" gk_autoherb -e "UPDATE deliveries SET last_lat = 22.3072, last_lng = 73.1812, location_updated_at = NOW() WHERE status = \'in_transit\' AND (last_lat IS NULL OR last_lng IS NULL); SELECT * FROM deliveries WHERE status = \'in_transit\';"', (err, stream) => {
+const conn = new Client();
+conn.on('ready', () => {
+  const cmd = 'mysql -u root -p1234 gk_autoherb -e "ALTER TABLE product_orders ADD COLUMN notes TEXT NULL AFTER shipping_address;"';
+  conn.exec(cmd, (err, stream) => {
     if (err) throw err;
-    stream.on('close', () => c.end())
-          .on('data', d => process.stdout.write(d))
-          .stderr.on('data', d => process.stderr.write(d));
+    stream.on('close', (code) => {
+      console.log('ALTER TABLE product_orders ADD COLUMN notes completed with code:', code);
+      conn.end();
+    }).on('data', (d) => process.stdout.write(d.toString()))
+      .stderr.on('data', (d) => process.stderr.write(d.toString()));
   });
-}).connect({ host: '187.127.151.21', port: 22, username: 'root', password: 'AryanSingh123@' });
+}).connect({
+  host: '187.127.151.21',
+  port: 22,
+  username: 'root',
+  password: 'AryanSingh123@'
+});
