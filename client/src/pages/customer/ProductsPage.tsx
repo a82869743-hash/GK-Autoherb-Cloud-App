@@ -963,60 +963,101 @@ export default function ProductsPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4">
-              {orders.map((order) => (
-                <div
-                  key={order.id}
-                  className="bg-white rounded-2xl border border-gray-100 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400 border border-gray-100 shrink-0">
-                      <ShoppingBag size={24} />
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h4 className="font-bold text-gray-900 text-sm">{order.product_name}</h4>
-                        <span
-                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                            order.payment_status === 'completed'
-                              ? 'bg-green-50 text-green-700 border border-green-200'
-                              : order.payment_status === 'pending'
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                              : 'bg-red-50 text-red-700 border border-red-200'
-                          }`}
-                        >
-                          {order.payment_status === 'completed'
-                            ? 'Paid'
-                            : order.payment_status === 'pending'
-                            ? 'Pending Verification'
-                            : 'Failed'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-500">
-                        Qty: <strong>{parseInt(order.quantity)}</strong> &bull; Total: <strong>₹{order.total_amount}</strong>
-                      </p>
-                      <p className="text-[10px] text-gray-400">
-                        Ordered: {new Date(order.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}
-                      </p>
-                    </div>
-                  </div>
+              {orders.map((order) => {
+                let cartItems: any[] = [];
+                if (order.items_json) {
+                  try {
+                    cartItems = typeof order.items_json === 'string' ? JSON.parse(order.items_json) : order.items_json;
+                  } catch {
+                    cartItems = [];
+                  }
+                }
 
-                  <div className="text-left md:text-right space-y-1 md:self-center shrink-0">
-                    <p className="text-[11px] text-gray-500 font-medium">
-                      Method: <span className="uppercase font-bold text-gray-700">{order.payment_method}</span>
-                    </p>
-                    {order.payment_method === 'razorpay' && order.razorpay_payment_id && (
-                      <p className="text-[10px] text-gray-400 font-mono">
-                        Ref: {order.razorpay_payment_id}
+                return (
+                  <div
+                    key={order.id}
+                    className="bg-white rounded-2xl border border-gray-100 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm hover:border-gray-200 transition-all"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 bg-red-50 text-red-600 rounded-xl flex items-center justify-center border border-red-100 shrink-0 shadow-sm">
+                        <ShoppingBag size={22} />
+                      </div>
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="font-extrabold text-gray-900 text-sm">
+                            {cartItems.length > 1
+                              ? `Cart Order (${cartItems.length} items)`
+                              : cartItems.length === 1
+                              ? cartItems[0].product_name
+                              : order.product_name}
+                          </h4>
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                              order.payment_status === 'completed'
+                                ? 'bg-green-50 text-green-700 border border-green-200'
+                                : order.payment_status === 'pending'
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                : 'bg-red-50 text-red-700 border border-red-200'
+                            }`}
+                          >
+                            {order.payment_status === 'completed'
+                              ? 'Paid & Approved'
+                              : order.payment_status === 'pending'
+                              ? 'Pending Verification / Awaiting Approval'
+                              : 'Failed'}
+                          </span>
+                        </div>
+
+                        {/* Cart Items List */}
+                        {cartItems.length > 0 ? (
+                          <div className="bg-gray-50/80 p-3 rounded-xl border border-gray-100 space-y-1.5 text-xs text-gray-700">
+                            {cartItems.map((item: any, idx: number) => (
+                              <div key={idx} className="flex items-center justify-between gap-2">
+                                <span className="font-semibold text-gray-800">• {item.product_name}</span>
+                                <div className="flex items-center gap-2 text-[11px]">
+                                  <span className="bg-gray-200/80 text-gray-700 font-bold px-1.5 py-0.5 rounded">x{item.quantity}</span>
+                                  <span className="font-bold text-gray-900">₹{item.total_price || (item.unit_price * item.quantity)}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-500">
+                            Qty: <strong>{parseInt(order.quantity)}</strong> &bull; Total: <strong>₹{order.total_amount}</strong>
+                          </p>
+                        )}
+
+                        {order.shipping_address && (
+                          <p className="text-[11px] text-blue-600 font-semibold flex items-center gap-1 pt-0.5">
+                            <span>📍</span> {order.shipping_address}
+                          </p>
+                        )}
+
+                        <p className="text-[10px] text-gray-400">
+                          Ordered: {new Date(order.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-left md:text-right space-y-1 md:self-center shrink-0 border-t md:border-t-0 pt-3 md:pt-0 border-gray-100">
+                      <div className="text-lg font-black text-gray-900">₹{order.total_amount}</div>
+                      <p className="text-[11px] text-gray-500 font-medium">
+                        Payment: <span className="uppercase font-bold text-gray-700">{order.payment_method}</span>
                       </p>
-                    )}
-                    {order.payment_method === 'qr' && order.qr_transaction_id && (
-                      <p className="text-[10px] text-gray-400 font-mono">
-                        Ref: {order.qr_transaction_id}
-                      </p>
-                    )}
+                      {order.payment_method === 'razorpay' && order.razorpay_payment_id && (
+                        <p className="text-[10px] text-gray-400 font-mono">
+                          Ref: {order.razorpay_payment_id}
+                        </p>
+                      )}
+                      {order.payment_method === 'qr' && order.qr_transaction_id && (
+                        <p className="text-[10px] text-gray-400 font-mono">
+                          Ref: {order.qr_transaction_id}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

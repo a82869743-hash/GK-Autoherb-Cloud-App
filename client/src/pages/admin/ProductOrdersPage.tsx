@@ -336,21 +336,23 @@ export default function ProductOrdersPage() {
 
                     {/* Action buttons */}
                     <td className="px-6 py-4 text-right">
-                      {order.payment_status === 'pending' && order.payment_method === 'qr' ? (
+                      {order.payment_status === 'pending' ? (
                         <button
                           onClick={() => handleConfirmQrPayment(order.id)}
                           disabled={actionLoading === order.id}
-                          className="px-3 py-1.5 bg-[#D32F2F] hover:bg-[#af101a] text-white text-xs font-black rounded-lg transition-all shadow-sm flex items-center gap-1 inline-flex"
+                          className="px-3 py-1.5 bg-[#D32F2F] hover:bg-[#af101a] text-white text-xs font-black rounded-lg transition-all shadow-sm flex items-center gap-1 inline-flex cursor-pointer"
                         >
                           {actionLoading === order.id ? (
                             <RefreshCw size={12} className="animate-spin" />
                           ) : (
                             <Check size={12} />
                           )}
-                          Confirm Payment
+                          Approve & Confirm Order
                         </button>
                       ) : (
-                        <span className="text-xs text-gray-400 italic">No Action Needed</span>
+                        <span className="text-xs text-emerald-600 font-bold flex items-center justify-end gap-1">
+                          <Check size={13} /> Order Approved
+                        </span>
                       )}
                     </td>
                   </tr>

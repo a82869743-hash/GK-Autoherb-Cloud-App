@@ -344,7 +344,7 @@ exports.verifyPayment = async (req, res) => {
   }
 };
 
-// ─── CONFIRM QR PAYMENT (ADMIN) ───────────────────────
+// ─── CONFIRM PRODUCT ORDER (ADMIN) ───────────────────────
 exports.confirmQrOrder = async (req, res) => {
   const conn = await pool.getConnection();
   try {
@@ -363,61 +363,81 @@ exports.confirmQrOrder = async (req, res) => {
     }
 
     const order = orders[0];
-
-    // Check inventory stock
-    const [products] = await conn.query('SELECT quantity FROM inventory WHERE id = ?', [order.product_id]);
-    if (!products.length || parseFloat(products[0].quantity) < order.quantity) {
-      await conn.rollback();
-      return res.status(400).json({ success: false, error: 'Insufficient stock in inventory to fulfill this order' });
+    let cartItems = [];
+    if (order.items_json) {
+      try {
+        cartItems = typeof order.items_json === 'string' ? JSON.parse(order.items_json) : order.items_json;
+      } catch {
+        cartItems = [];
+      }
     }
 
-    // Update order status
-    await conn.query(
-      `UPDATE product_orders SET payment_status = 'completed' WHERE id = ?`,
-      [id]
-    );
+    // If multi-item order
+    if (cartItems.length > 0) {
+      // 1. Verify stock for all items
+      for (const item of cartItems) {
+        const pid = item.product_id || item.id;
+        const q = parseInt(item.quantity) || 1;
+        const [products] = await conn.query('SELECT quantity, product_name FROM inventory WHERE id = ?', [pid]);
+        if (!products.length || parseFloat(products[0].quantity) < q) {
+          await conn.rollback();
+          return res.status(400).json({
+            success: false,
+            error: `Insufficient stock for "${products[0]?.product_name || `Product #${pid}`}" to fulfill order`
+          });
+        }
+      }
 
-    // Update v2_payments status to captured
-    const [payments] = await conn.query(
-      `SELECT id FROM v2_payments 
-       WHERE customer_id = ? AND product_id = ? AND status = 'pending' AND payment_method = 'qr' 
-       ORDER BY created_at DESC LIMIT 1`,
-      [order.customer_id, order.product_id]
-    );
+      // 2. Update order status
+      await conn.query(`UPDATE product_orders SET payment_status = 'completed' WHERE id = ?`, [id]);
 
-    if (payments.length) {
-      const paymentId = payments[0].id;
+      // 3. Deduct stock & log buy_sell B2C for each item
+      for (const item of cartItems) {
+        const pid = item.product_id || item.id;
+        const q = parseInt(item.quantity) || 1;
+        const uPrice = parseFloat(item.unit_price) || 0;
+        const tPrice = parseFloat(item.total_price) || (uPrice * q);
+
+        await conn.query('UPDATE inventory SET quantity = quantity - ? WHERE id = ?', [q, pid]);
+
+        await conn.query(
+          `INSERT INTO buy_sell (type, party_name, party_mobile, product_id, product_name, quantity, unit_price, total_amount, note, status, transaction_date, created_by)
+           SELECT 'sell_b2c', u.name, u.mobile, i.id, i.product_name, ?, ?, ?, 'B2C product purchase (Cart Approved by Admin)', 'complete', CURDATE(), ?
+           FROM users u, inventory i
+           WHERE u.id = ? AND i.id = ?`,
+          [q, uPrice, tPrice, req.user.id, order.customer_id, pid]
+        );
+      }
+
+    } else {
+      // Single product backward compatibility
+      const [products] = await conn.query('SELECT quantity FROM inventory WHERE id = ?', [order.product_id]);
+      if (!products.length || parseFloat(products[0].quantity) < order.quantity) {
+        await conn.rollback();
+        return res.status(400).json({ success: false, error: 'Insufficient stock in inventory to fulfill this order' });
+      }
+
+      await conn.query(`UPDATE product_orders SET payment_status = 'completed' WHERE id = ?`, [id]);
+
+      await conn.query('UPDATE inventory SET quantity = quantity - ? WHERE id = ?', [order.quantity, order.product_id]);
+
       await conn.query(
-        `UPDATE v2_payments SET status = 'captured' WHERE id = ?`,
-        [paymentId]
-      );
-
-      // Log transaction
-      await conn.query(
-        `INSERT INTO v2_payment_transactions 
-         (payment_id, transaction_type, amount, status) 
-         VALUES (?, 'credit', ?, 'success')`,
-        [paymentId, order.total_amount]
+        `INSERT INTO buy_sell (type, party_name, party_mobile, product_id, product_name, quantity, unit_price, total_amount, note, status, transaction_date, created_by)
+         SELECT 'sell_b2c', u.name, u.mobile, i.id, i.product_name, ?, ?, ?, 'B2C product purchase (Approved by Admin)', 'complete', CURDATE(), ?
+         FROM users u, inventory i
+         WHERE u.id = ? AND i.id = ?`,
+        [order.quantity, order.unit_price, order.total_amount, req.user.id, order.customer_id, order.product_id]
       );
     }
 
-    // Deduct stock quantity in inventory
+    // Update v2_payments status to captured if present
     await conn.query(
-      'UPDATE inventory SET quantity = quantity - ? WHERE id = ?',
-      [order.quantity, order.product_id]
-    );
-
-    // Log Buy & Sell record as complete
-    await conn.query(
-      `INSERT INTO buy_sell (type, party_name, party_mobile, product_id, product_name, quantity, unit_price, total_amount, note, status, transaction_date, created_by)
-       SELECT 'sell_b2c', u.name, u.mobile, i.id, i.product_name, ?, ?, ?, 'B2C product purchase via customer portal (QR Confirmed)', 'complete', CURDATE(), ?
-       FROM users u, inventory i
-       WHERE u.id = ? AND i.id = ?`,
-      [order.quantity, order.unit_price, order.total_amount, req.user.id, order.customer_id, order.product_id]
+      `UPDATE v2_payments SET status = 'captured' WHERE customer_id = ? AND status = 'pending'`,
+      [order.customer_id]
     );
 
     await conn.commit();
-    res.json({ success: true, message: 'QR payment confirmed and stock deducted successfully' });
+    res.json({ success: true, message: 'Product order approved, payment completed, and inventory stock updated successfully' });
 
   } catch (err) {
     await conn.rollback();

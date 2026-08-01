@@ -42,10 +42,6 @@ export default function ProductsCartDrawer({ isOpen, onClose, onOrderSuccess }: 
       toast('error', 'Please enter your home delivery address');
       return;
     }
-    if (paymentMethod === 'qr' && !qrTransactionId.trim()) {
-      toast('error', 'Please enter your UPI QR Transaction Reference ID');
-      return;
-    }
 
     setSubmitting(true);
     try {
@@ -57,12 +53,12 @@ export default function ProductsCartDrawer({ isOpen, onClose, onOrderSuccess }: 
         })),
         shipping_address: finalAddress,
         payment_method: paymentMethod,
-        qr_transaction_id: paymentMethod === 'qr' ? qrTransactionId : undefined,
+        qr_transaction_id: paymentMethod === 'qr' ? (qrTransactionId.trim() || `UPI_DIRECT_${Date.now()}`) : undefined,
       };
 
       const res = await api.post('/products/order', payload);
       if (res.data.success) {
-        toast('success', 'Multi-product order placed! Admin has been notified for approval.');
+        toast('success', 'Order placed successfully! Pending Admin Approval & Verification.');
         clearProductsCart();
         onClose();
         if (onOrderSuccess) onOrderSuccess();
@@ -190,6 +186,7 @@ export default function ProductsCartDrawer({ isOpen, onClose, onOrderSuccess }: 
                 </h4>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <button
+                    type="button"
                     onClick={() => setPaymentMethod('qr')}
                     className={`p-3 rounded-xl border text-left font-bold transition-all ${
                       paymentMethod === 'qr' ? 'border-emerald-600 bg-emerald-50 text-emerald-900' : 'border-gray-200 bg-gray-50'
@@ -198,6 +195,7 @@ export default function ProductsCartDrawer({ isOpen, onClose, onOrderSuccess }: 
                     UPI QR Code
                   </button>
                   <button
+                    type="button"
                     onClick={() => setPaymentMethod('razorpay')}
                     className={`p-3 rounded-xl border text-left font-bold transition-all ${
                       paymentMethod === 'razorpay' ? 'border-emerald-600 bg-emerald-50 text-emerald-900' : 'border-gray-200 bg-gray-50'
@@ -208,13 +206,35 @@ export default function ProductsCartDrawer({ isOpen, onClose, onOrderSuccess }: 
                 </div>
 
                 {paymentMethod === 'qr' && (
-                  <div className="mt-3 space-y-2">
-                    <Input
-                      label="UPI Transaction Reference ID"
-                      value={qrTransactionId}
-                      onChange={(e) => setQrTransactionId(e.target.value)}
-                      placeholder="e.g. 123456789012"
-                    />
+                  <div className="mt-3 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-4 space-y-3">
+                    <div className="text-center space-y-2">
+                      <p className="text-xs font-black text-emerald-900">Scan GK AutoHerb Studio QR Code to Pay</p>
+                      <div className="w-44 h-44 mx-auto bg-white p-2.5 rounded-2xl border border-emerald-200 shadow-md flex items-center justify-center">
+                        <img
+                          src="/qr.jpg"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=upi://pay?pa=gkautoherb@upi&pn=GK%20AutoHerb%20Studio&am=${subtotal}&cu=INR`;
+                          }}
+                          alt="GK AutoHerb Studio UPI QR Code"
+                          className="w-full h-full object-contain rounded-lg"
+                        />
+                      </div>
+                      <p className="text-[11px] font-bold text-gray-700 font-mono">
+                        UPI ID: <span className="text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200">gkautoherb@upi</span>
+                      </p>
+                      <p className="text-[10px] text-gray-500">
+                        Scan with GPay, PhonePe, Paytm or any UPI app to pay <strong className="text-emerald-700">₹{subtotal}</strong>.
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-emerald-200/60">
+                      <Input
+                        label="UPI Transaction Ref / UTR (Optional)"
+                        value={qrTransactionId}
+                        onChange={(e) => setQrTransactionId(e.target.value)}
+                        placeholder="e.g. 123456789012 (Optional)"
+                      />
+                    </div>
                   </div>
                 )}
               </div>
