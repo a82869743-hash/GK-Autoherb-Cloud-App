@@ -42,6 +42,10 @@ export default function ProductsCartDrawer({ isOpen, onClose, onOrderSuccess }: 
       toast('error', 'Please enter your home delivery address');
       return;
     }
+    if (paymentMethod === 'qr' && (!qrTransactionId.trim() || qrTransactionId.trim().length < 6)) {
+      toast('error', 'Please enter your valid 12-digit UPI UTR / Transaction Reference ID from GPay, PhonePe, or Paytm.');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -53,7 +57,7 @@ export default function ProductsCartDrawer({ isOpen, onClose, onOrderSuccess }: 
         })),
         shipping_address: finalAddress,
         payment_method: paymentMethod,
-        qr_transaction_id: paymentMethod === 'qr' ? (qrTransactionId.trim() || `UPI_DIRECT_${Date.now()}`) : undefined,
+        qr_transaction_id: paymentMethod === 'qr' ? qrTransactionId.trim() : undefined,
       };
 
       const res = await api.post('/products/order', payload);
@@ -227,13 +231,16 @@ export default function ProductsCartDrawer({ isOpen, onClose, onOrderSuccess }: 
                       </p>
                     </div>
 
-                    <div className="pt-2 border-t border-emerald-200/60">
+                    <div className="pt-2 border-t border-emerald-200/60 space-y-1">
                       <Input
-                        label="UPI Transaction Ref / UTR (Optional)"
+                        label="12-Digit UPI Transaction Ref / UTR *"
                         value={qrTransactionId}
                         onChange={(e) => setQrTransactionId(e.target.value)}
-                        placeholder="e.g. 123456789012 (Optional)"
+                        placeholder="e.g. 421589304812 (Found in GPay/PhonePe payment details)"
                       />
+                      <p className="text-[10px] text-emerald-800 font-semibold">
+                        📌 After completing UPI payment, copy the 12-digit UTR Ref number from your app and paste it above for Admin verification.
+                      </p>
                     </div>
                   </div>
                 )}

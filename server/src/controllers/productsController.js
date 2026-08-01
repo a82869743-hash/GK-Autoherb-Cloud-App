@@ -448,6 +448,41 @@ exports.confirmQrOrder = async (req, res) => {
   }
 };
 
+// ─── REJECT PRODUCT ORDER (ADMIN) ───────────────────────
+exports.rejectOrder = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const { id } = req.params;
+    const { reason = 'UPI payment reference not received in Studio account' } = req.body;
+
+    await conn.beginTransaction();
+
+    const [orders] = await conn.query(
+      'SELECT * FROM product_orders WHERE id = ? FOR UPDATE',
+      [id]
+    );
+
+    if (!orders.length) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, error: 'Product order not found' });
+    }
+
+    await conn.query(
+      `UPDATE product_orders SET payment_status = 'failed', notes = ? WHERE id = ?`,
+      [reason, id]
+    );
+
+    await conn.commit();
+    res.json({ success: true, message: 'Order rejected. Customer payment verification marked as failed.' });
+  } catch (err) {
+    await conn.rollback();
+    console.error('rejectOrder error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  } finally {
+    conn.release();
+  }
+};
+
 // ─── LIST CUSTOMER PRODUCTS ────────────────────────
 exports.listCustomerProducts = async (req, res) => {
   try {

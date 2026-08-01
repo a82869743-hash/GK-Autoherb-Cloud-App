@@ -13,5 +13,6 @@ router.get('/my-orders', auth, role(['customer', 'admin', 'staff']), ctrl.listMy
 // Admin routes
 router.get('/orders', auth, role(['admin']), ctrl.listOrders);
 router.post('/orders/:id/confirm', auth, role(['admin']), ctrl.confirmQrOrder);
+router.post('/orders/:id/reject', auth, role(['admin']), ctrl.rejectOrder);
 
 module.exports = router;

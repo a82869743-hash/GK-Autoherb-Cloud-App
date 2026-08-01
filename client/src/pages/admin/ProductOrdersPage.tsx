@@ -85,16 +85,35 @@ export default function ProductOrdersPage() {
   }, [page, statusFilter]);
 
   const handleConfirmQrPayment = async (orderId: number) => {
-    const confirm = window.confirm("Are you sure you want to confirm this QR payment? This will update the payment status to 'completed' and deduct stock quantity from inventory.");
+    const confirm = window.confirm("Are you sure you want to approve this order? This will update status to 'completed', deduct inventory stock, and record sales entry.");
     if (!confirm) return;
 
     try {
       setActionLoading(orderId);
       await api.post(`/products/orders/${orderId}/confirm`);
-      toast('success', 'Payment confirmed! Stock deducted and B2C transaction logged.');
+      toast('success', 'Order approved! Inventory stock deducted and B2C sale logged.');
       loadOrders();
     } catch (err: any) {
-      toast('error', err.response?.data?.error || 'Failed to confirm payment.');
+      toast('error', err.response?.data?.error || 'Failed to approve order.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRejectOrder = async (orderId: number) => {
+    const reason = window.prompt(
+      "Enter reason for rejecting this order (e.g. Payment not received in Studio account):",
+      "UPI payment reference not received in Studio account"
+    );
+    if (reason === null) return;
+
+    try {
+      setActionLoading(orderId);
+      await api.post(`/products/orders/${orderId}/reject`, { reason });
+      toast('info', 'Order rejected. Customer payment marked as failed.');
+      loadOrders();
+    } catch (err: any) {
+      toast('error', err.response?.data?.error || 'Failed to reject order.');
     } finally {
       setActionLoading(null);
     }
@@ -286,19 +305,38 @@ export default function ProductOrdersPage() {
                       <div className="text-[10px] text-gray-400">₹{order.unit_price} / unit</div>
                     </td>
 
-                    {/* Method & Ref */}
+                    {/* Method & Submitted UTR */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-1.5 font-bold text-gray-700 text-xs uppercase">
                         {order.payment_method === 'razorpay' ? (
                           <CreditCard size={14} className="text-[#D32F2F]" />
                         ) : (
-                          <QrCode size={14} className="text-[#D32F2F]" />
+                          <QrCode size={14} className="text-emerald-600" />
                         )}
-                        {order.payment_method}
+                        {order.payment_method === 'qr' ? 'UPI QR Code' : order.payment_method}
                       </div>
-                      <div className="text-[11px] text-gray-400 font-mono mt-0.5 max-w-[150px] truncate" title={order.razorpay_payment_id || order.qr_transaction_id || '—'}>
-                        Ref: {order.razorpay_payment_id || order.qr_transaction_id || '—'}
-                      </div>
+
+                      {/* Prominent UTR Reference Badge with Copy Button */}
+                      {(order.qr_transaction_id || order.razorpay_payment_id) ? (
+                        <div className="mt-1 flex items-center gap-1">
+                          <span className="text-[11px] font-mono font-extrabold text-amber-900 bg-amber-100/90 border border-amber-300 px-2 py-0.5 rounded-md">
+                            UTR #{order.qr_transaction_id || order.razorpay_payment_id}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(order.qr_transaction_id || order.razorpay_payment_id);
+                              toast('info', `Copied UTR "${order.qr_transaction_id || order.razorpay_payment_id}" to clipboard!`);
+                            }}
+                            className="text-[10px] text-gray-500 hover:text-black bg-gray-100 hover:bg-gray-200 px-1.5 py-0.5 rounded font-bold transition-all cursor-pointer"
+                            title="Copy UTR to verify in GPay/PhonePe App"
+                          >
+                            Copy 📋
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-gray-400 italic">No UTR submitted</span>
+                      )}
                     </td>
 
                     {/* Status Badge */}
@@ -320,12 +358,12 @@ export default function ProductOrdersPage() {
                         ) : order.payment_status === 'pending' ? (
                           <>
                             <Clock size={12} />
-                            Awaiting Verify
+                            Awaiting UTR Verification
                           </>
                         ) : (
                           <>
                             <ShieldAlert size={12} />
-                            Failed
+                            Verification Failed
                           </>
                         )}
                       </span>
@@ -334,24 +372,42 @@ export default function ProductOrdersPage() {
                       </div>
                     </td>
 
-                    {/* Action buttons */}
+                    {/* Action buttons: Approve & Confirm / Reject Order */}
                     <td className="px-6 py-4 text-right">
                       {order.payment_status === 'pending' ? (
-                        <button
-                          onClick={() => handleConfirmQrPayment(order.id)}
-                          disabled={actionLoading === order.id}
-                          className="px-3 py-1.5 bg-[#D32F2F] hover:bg-[#af101a] text-white text-xs font-black rounded-lg transition-all shadow-sm flex items-center gap-1 inline-flex cursor-pointer"
-                        >
-                          {actionLoading === order.id ? (
-                            <RefreshCw size={12} className="animate-spin" />
-                          ) : (
-                            <Check size={12} />
-                          )}
-                          Approve & Confirm Order
-                        </button>
-                      ) : (
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleConfirmQrPayment(order.id)}
+                            disabled={actionLoading === order.id}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-lg transition-all shadow-sm flex items-center gap-1 cursor-pointer"
+                            title="Verify UTR in GPay/PhonePe & Approve Order"
+                          >
+                            {actionLoading === order.id ? (
+                              <RefreshCw size={12} className="animate-spin" />
+                            ) : (
+                              <Check size={12} />
+                            )}
+                            Approve & Deduct Stock
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRejectOrder(order.id)}
+                            disabled={actionLoading === order.id}
+                            className="px-2.5 py-1.5 bg-white text-red-600 border border-red-200 hover:bg-red-50 text-xs font-bold rounded-lg transition-all cursor-pointer"
+                            title="Reject if payment not received in Studio bank account"
+                          >
+                            <X size={12} /> Reject
+                          </button>
+                        </div>
+                      ) : order.payment_status === 'completed' ? (
                         <span className="text-xs text-emerald-600 font-bold flex items-center justify-end gap-1">
-                          <Check size={13} /> Order Approved
+                          <Check size={13} /> Approved
+                        </span>
+                      ) : (
+                        <span className="text-xs text-red-600 font-bold flex items-center justify-end gap-1">
+                          <X size={13} /> Payment Rejected
                         </span>
                       )}
                     </td>
