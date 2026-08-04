@@ -314,6 +314,8 @@ exports.create = async (req, res) => {
 
     let calculatedTotal = 0;
     let advanceAmount = 0;
+    let washServicesTotal = 0;
+    let nonWashServicesTotal = 0;
     const isAdvanceEligible = !is_free_wash && !use_package;
     let fetchedServicesList = [];
     const cat = vehicle_category || 'sedan';
@@ -328,8 +330,8 @@ exports.create = async (req, res) => {
     }
 
     if (isAdvanceEligible && fetchedServicesList.length > 0) {
-      let washServicesTotal = 0;
-      let nonWashServicesTotal = 0;
+      washServicesTotal = 0;
+      nonWashServicesTotal = 0;
 
       for (const s of fetchedServicesList) {
         const price = Number(s[priceKey]) || Number(s.price_sedan) || 0;

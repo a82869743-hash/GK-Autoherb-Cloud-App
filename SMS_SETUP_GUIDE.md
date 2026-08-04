@@ -82,7 +82,7 @@ MSG91_SENDER_ID=GKAUTO
 SSH into your server and edit the env file:
 
 ```bash
-ssh root@187.127.151.21
+ssh root@<YOUR_VPS_IP>
 
 # Edit the env file
 nano ~/app/server/.env

@@ -14,3 +14,16 @@ yarn-debug.log*
 yarn-error.log*
 scratch/
 
+# ─── One-off deploy/utility scripts (may contain credentials) ───
+deploy*.js
+query.js
+test.js
+check_*.js
+fix_*.js
+sync_*.js
+ssh-check.js
+run_*.js
+set_*.js
+seed_*.js
+update-*.js
+api-test.js

@@ -1,7 +1,23 @@
 import axios from 'axios';
 
+// ─── Safety Guard: Prevent local dev from hitting production API ─────
+const apiUrl = import.meta.env.VITE_API_URL || '/api';
+if (import.meta.env.DEV && apiUrl.includes('gkautobook.cloud')) {
+  console.error(
+    '%c🚨 SAFETY BLOCK: Your VITE_API_URL points to PRODUCTION!',
+    'color: red; font-size: 18px; font-weight: bold;'
+  );
+  console.error(
+    '%cYou are running locally but your client/.env has VITE_API_URL pointing to the live server.\n' +
+    'This would cause your local changes to modify PRODUCTION data.\n\n' +
+    'FIX: Change VITE_API_URL=/api in your client/.env file',
+    'color: orange; font-size: 14px;'
+  );
+  throw new Error('BLOCKED: Cannot use production API URL in development mode. Set VITE_API_URL=/api in client/.env');
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: apiUrl,
   timeout: 120_000,
   headers: { 'Content-Type': 'application/json' },
 });

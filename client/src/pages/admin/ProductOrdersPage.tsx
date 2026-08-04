@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ShoppingBag, Check, X, Search, RefreshCw, Clock, CreditCard, DollarSign, CheckCircle2, ShieldAlert, AlertCircle, QrCode } from 'lucide-react';
+import { ShoppingBag, Check, X, Search, RefreshCw, Clock, CreditCard, DollarSign, CheckCircle2, ShieldAlert, AlertCircle, QrCode, Printer, Download } from 'lucide-react';
 import api from '../../api/axiosInstance';
 import { useUIStore } from '../../store/uiStore';
 import PremiumPageHeader from '../../components/shared/PremiumPageHeader';
@@ -34,6 +34,7 @@ export default function ProductOrdersPage() {
   const [page, setPage] = useState(1);
   const [totalOrders, setTotalOrders] = useState(0);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
+  const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<any | null>(null);
 
   // Stats
   const [stats, setStats] = useState({
@@ -124,6 +125,136 @@ export default function ProductOrdersPage() {
     return match?.image || 'https://images.unsplash.com/photo-1563720223185-11003d516935?w=200';
   };
 
+  const handlePrintInvoice = (order: any) => {
+    let itemsList: any[] = [];
+    if (order.items_json) {
+      try {
+        itemsList = JSON.parse(order.items_json);
+      } catch {
+        itemsList = [{ product_name: order.product_name, quantity: order.quantity, unit_price: order.unit_price, total_price: order.total_amount }];
+      }
+    } else {
+      itemsList = [{ product_name: order.product_name, quantity: order.quantity, unit_price: order.unit_price, total_price: order.total_amount }];
+    }
+
+    const orderDate = new Date(order.created_at).toLocaleDateString('en-IN', {
+      day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+
+    const printWin = window.open('', '_blank', 'width=800,height=900');
+    if (!printWin) {
+      toast('error', 'Please allow popups to download/print bill.');
+      return;
+    }
+
+    const itemsHtml = itemsList.map((item, idx) => `
+      <tr style="border-bottom: 1px solid #e5e7eb;">
+        <td style="padding: 10px; font-weight: 600;">${idx + 1}. ${item.product_name}</td>
+        <td style="padding: 10px; text-align: center;">${item.quantity || 1}</td>
+        <td style="padding: 10px; text-align: right;">₹${parseFloat(item.unit_price || item.total_price || 0).toFixed(2)}</td>
+        <td style="padding: 10px; text-align: right; font-weight: 700;">₹${parseFloat(item.total_price || 0).toFixed(2)}</td>
+      </tr>
+    `).join('');
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Tax Invoice - Order #${order.id} | GK AutoHerb</title>
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1f2937; margin: 0; padding: 24px; background: #fff; }
+          .invoice-box { max-width: 750px; margin: auto; padding: 30px; border: 1px solid #eee; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #ef4444; padding-bottom: 16px; margin-bottom: 20px; }
+          .brand { font-size: 24px; font-weight: 900; color: #111; letter-spacing: -0.5px; }
+          .brand span { color: #d32f2f; }
+          .title { text-align: right; }
+          .title h2 { margin: 0; color: #d32f2f; font-size: 20px; text-transform: uppercase; letter-spacing: 1px; }
+          .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; font-size: 13px; }
+          .meta-card { background: #f9fafb; padding: 14px; border-radius: 10px; border: 1px solid #f3f4f6; }
+          .meta-card strong { color: #111; display: block; margin-bottom: 4px; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 13px; }
+          th { background: #111; color: #fff; padding: 10px; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; text-align: left; }
+          .total-box { background: #fef2f2; border: 1px solid #fecaca; padding: 16px; border-radius: 12px; text-align: right; margin-bottom: 24px; }
+          .total-box div { font-size: 14px; margin-bottom: 4px; }
+          .total-box .grand-total { font-size: 22px; font-weight: 900; color: #b91c1c; }
+          .footer { text-align: center; font-size: 11px; color: #6b7280; border-top: 1px solid #eee; pt-12; padding-top: 16px; }
+          @media print {
+            body { padding: 0; }
+            .invoice-box { border: none; box-shadow: none; padding: 0; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="invoice-box">
+          <div class="no-print" style="margin-bottom: 20px; text-align: right;">
+            <button onclick="window.print()" style="background: #d32f2f; color: white; border: none; padding: 10px 20px; font-weight: bold; border-radius: 8px; cursor: pointer;">🖨️ Print / Download Bill PDF</button>
+          </div>
+
+          <div class="header">
+            <div>
+              <div class="brand">GK <span>AutoHerb</span></div>
+              <div style="font-size: 11px; color: #6b7280; margin-top: 2px;">Premium Detailing Studio & Car Care Centre</div>
+              <div style="font-size: 11px; color: #6b7280;">Vadodara, Gujarat | Contact: +91 9408424541</div>
+            </div>
+            <div class="title">
+              <h2>Tax Invoice</h2>
+              <div style="font-size: 12px; font-weight: 700; color: #374151;">Invoice #${order.id}</div>
+              <div style="font-size: 11px; color: #6b7280;">${orderDate}</div>
+            </div>
+          </div>
+
+          <div class="meta-grid">
+            <div class="meta-card">
+              <strong>Billed To (Customer):</strong>
+              <div style="font-weight: 700; font-size: 14px;">${order.customer_name}</div>
+              <div>Phone: +91 ${order.customer_mobile}</div>
+              ${order.shipping_address ? `<div style="margin-top: 4px; font-size: 11px; color: #2563eb;">Delivery: ${order.shipping_address}</div>` : '<div style="font-size: 11px; color: #059669;">Store Pickup (GK AutoHerb Studio)</div>'}
+            </div>
+            <div class="meta-card">
+              <strong>Payment Details:</strong>
+              <div>Method: <b>${order.payment_method === 'qr' ? 'UPI QR Code' : order.payment_method?.toUpperCase()}</b></div>
+              <div>UTR / Ref: <b>${order.qr_transaction_id || order.razorpay_payment_id || 'N/A'}</b></div>
+              <div>Status: <span style="color: #059669; font-weight: 800;">${order.payment_status?.toUpperCase()}</span></div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Product Description</th>
+                <th style="text-align: center;">Qty</th>
+                <th style="text-align: right;">Price</th>
+                <th style="text-align: right;">Total Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+
+          <div class="total-box">
+            <div>Subtotal: <b>₹${parseFloat(order.total_amount).toFixed(2)}</b></div>
+            <div>GST (18% Included): <b>₹${(parseFloat(order.total_amount) * 0.18).toFixed(2)}</b></div>
+            <div class="grand-total">Grand Total: ₹${parseFloat(order.total_amount).toFixed(2)}</div>
+          </div>
+
+          <div class="footer">
+            <p style="margin: 0; font-weight: 700; color: #111;">Thank you for shopping with GK AutoHerb Studio!</p>
+            <p style="margin: 4px 0 0 0;">This is a computer-generated tax invoice. No signature required.</p>
+          </div>
+        </div>
+        <script>
+          window.onload = function() {
+            setTimeout(function() { window.print(); }, 500);
+          };
+        </script>
+      </body>
+      </html>
+    `);
+    printWin.document.close();
+  };
+
   const filteredOrders = orders.filter((o) => {
     const term = search.toLowerCase();
     return (
@@ -139,7 +270,7 @@ export default function ProductOrdersPage() {
     <div className="space-y-6">
       <PremiumPageHeader
         title="Product Orders"
-        subtitle="Manage B2C product purchases, confirm QR codes, and view sales details."
+        subtitle="Manage B2C product purchases, confirm QR codes, print tax bills, and view sales details."
         icon={ShoppingBag}
       />
 
@@ -230,7 +361,7 @@ export default function ProductOrdersPage() {
                   <th className="px-6 py-4">Total Amount</th>
                   <th className="px-6 py-4">Payment Method / Ref</th>
                   <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
+                  <th className="px-6 py-4 text-right">Actions / Bill</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-sm font-medium text-gray-800">
@@ -372,44 +503,57 @@ export default function ProductOrdersPage() {
                       </div>
                     </td>
 
-                    {/* Action buttons: Approve & Confirm / Reject Order */}
+                    {/* Action buttons: Approve & Confirm / Reject Order + Print Bill */}
                     <td className="px-6 py-4 text-right">
-                      {order.payment_status === 'pending' ? (
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleConfirmQrPayment(order.id)}
-                            disabled={actionLoading === order.id}
-                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-lg transition-all shadow-sm flex items-center gap-1 cursor-pointer"
-                            title="Verify UTR in GPay/PhonePe & Approve Order"
-                          >
-                            {actionLoading === order.id ? (
-                              <RefreshCw size={12} className="animate-spin" />
-                            ) : (
-                              <Check size={12} />
-                            )}
-                            Approve & Deduct Stock
-                          </button>
+                      <div className="flex flex-col items-end gap-1.5">
+                        {order.payment_status === 'pending' ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleConfirmQrPayment(order.id)}
+                              disabled={actionLoading === order.id}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-lg transition-all shadow-sm flex items-center gap-1 cursor-pointer"
+                              title="Verify UTR in GPay/PhonePe & Approve Order"
+                            >
+                              {actionLoading === order.id ? (
+                                <RefreshCw size={12} className="animate-spin" />
+                              ) : (
+                                <Check size={12} />
+                              )}
+                              Approve & Deduct Stock
+                            </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleRejectOrder(order.id)}
-                            disabled={actionLoading === order.id}
-                            className="px-2.5 py-1.5 bg-white text-red-600 border border-red-200 hover:bg-red-50 text-xs font-bold rounded-lg transition-all cursor-pointer"
-                            title="Reject if payment not received in Studio bank account"
-                          >
-                            <X size={12} /> Reject
-                          </button>
-                        </div>
-                      ) : order.payment_status === 'completed' ? (
-                        <span className="text-xs text-emerald-600 font-bold flex items-center justify-end gap-1">
-                          <Check size={13} /> Approved
-                        </span>
-                      ) : (
-                        <span className="text-xs text-red-600 font-bold flex items-center justify-end gap-1">
-                          <X size={13} /> Payment Rejected
-                        </span>
-                      )}
+                            <button
+                              type="button"
+                              onClick={() => handleRejectOrder(order.id)}
+                              disabled={actionLoading === order.id}
+                              className="px-2.5 py-1.5 bg-white text-red-600 border border-red-200 hover:bg-red-50 text-xs font-bold rounded-lg transition-all cursor-pointer"
+                              title="Reject if payment not received in Studio bank account"
+                            >
+                              <X size={12} /> Reject
+                            </button>
+                          </div>
+                        ) : order.payment_status === 'completed' ? (
+                          <span className="text-xs text-emerald-600 font-bold flex items-center justify-end gap-1">
+                            <Check size={13} /> Approved
+                          </span>
+                        ) : (
+                          <span className="text-xs text-red-600 font-bold flex items-center justify-end gap-1">
+                            <X size={13} /> Payment Rejected
+                          </span>
+                        )}
+
+                        {/* Print Bill / Download Tax Invoice Button */}
+                        <button
+                          type="button"
+                          onClick={() => handlePrintInvoice(order)}
+                          className="px-3 py-1 bg-gradient-to-r from-gray-900 to-gray-800 hover:from-black hover:to-gray-900 text-white text-[11px] font-extrabold rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98]"
+                          title="Download & Print Official GK AutoHerb Tax Invoice Bill"
+                        >
+                          <Printer size={12} className="text-red-400" />
+                          <span>Print Bill / PDF</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
