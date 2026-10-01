@@ -7,7 +7,7 @@ import {
   DollarSign, MessageSquare, HelpCircle, Upload, Settings, LogOut, X, ShoppingCart,
   Layers, FileText, Wallet, Archive, PlusCircle, Trash2, ChevronDown, ChevronRight,
   Droplets, Star, Truck, Sparkles, CreditCard, BarChart3, Shield, CheckSquare, Gift, MapPin,
-  ShoppingBag
+  ShoppingBag, Bot
 } from 'lucide-react';
 
 // ─── Category-based navigation with collapsible sections ─────
@@ -63,14 +63,14 @@ const navCategories: NavCategory[] = [
     label: 'Services',
     items: [
       { to: '/admin/services', icon: Wrench, label: 'All Services', permission: 'settings.view' },
-      { to: '/admin/premium-services', icon: Sparkles, label: 'Premium Services', badge: 'New', permission: 'settings.view' },
+      { to: '/admin/premium-services', icon: Sparkles, label: 'Service Add-ons', badge: 'New', permission: 'settings.view' },
     ],
   },
   {
     label: 'Inventory & Stock',
     items: [
       { to: '/admin/inventory', icon: Package, label: 'Inventory', permission: 'inventory.view' },
-      { to: '/admin/buy-sell', icon: ShoppingCart, label: 'Buy & Sell', permission: 'inventory.view' },
+      { to: '/admin/buy-sell', icon: ShoppingCart, label: 'B2B Stock Trading', permission: 'inventory.view' },
       { to: '/admin/product-orders', icon: ShoppingBag, label: 'Product Orders', permission: 'inventory.view' },
     ],
   },
@@ -84,6 +84,7 @@ const navCategories: NavCategory[] = [
       { to: '/admin/invoices', icon: Archive, label: 'All Invoices', permission: 'accounts.view' },
       { to: '/admin/quotations', icon: ClipboardList, label: 'Quotations', badge: 'New', permission: 'accounts.view' },
       { to: '/admin/balance-sheet', icon: BarChart3, label: 'Balance Sheet', badge: 'New', permission: 'accounts.view' },
+      { to: '/admin/reports', icon: BarChart3, label: 'Reports & Analytics', permission: 'accounts.view' },
     ],
   },
   {
@@ -97,6 +98,7 @@ const navCategories: NavCategory[] = [
   {
     label: 'Communication',
     items: [
+      { to: '/admin/chatbot', icon: Bot, label: 'AI Bot Monitoring', badge: 'Live', permission: 'notifications.send' },
       { to: '/admin/messages', icon: MessageSquare, label: 'Messages', permission: 'notifications.send' },
       { to: '/admin/whatsapp', icon: MessageSquare, label: 'WhatsApp', badge: 'New', permission: 'notifications.send' },
       { to: '/admin/inquiries', icon: HelpCircle, label: 'Inquiries', permission: 'notifications.send' },

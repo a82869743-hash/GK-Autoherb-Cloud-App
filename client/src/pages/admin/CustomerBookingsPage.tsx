@@ -7,6 +7,9 @@ import {
 import { useBookings, useVehicleHistory, useCreateManualBooking } from '../../api/hooks/useBookings';
 import { useServices } from '../../api/hooks/useServices';
 import AdminTopBar from '../../components/layout/AdminTopBar';
+import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
+import AdminMetricCard from '../../components/admin/AdminMetricCard';
+import VehicleBrandBadge from '../../components/admin/VehicleBrandBadge';
 import Button from '../../components/ui/Button';
 import StatusBadge from '../../components/ui/StatusBadge';
 import Modal from '../../components/ui/Modal';
@@ -22,7 +25,7 @@ const TABS = [
   { key: 'pending_approval', label: 'Pending Approvals', color: 'bg-yellow-500' },
   { key: 'confirmed', label: 'Confirmed', color: 'bg-green-500' },
   { key: 'all', label: 'All', color: 'bg-gray-500' },
-  { key: 'completed', label: 'Completed', color: 'bg-blue-500' },
+  { key: 'completed', label: 'Completed', color: 'bg-[#D32F2F]' },
   { key: 'cancelled', label: 'Cancelled', color: 'bg-red-500' },
 ];
 
@@ -220,29 +223,64 @@ export default function CustomerBookingsPage() {
   };
 
   return (
-    <>
-      <AdminTopBar
+    <div className="space-y-6 pb-28 lg:pb-12 max-w-[1600px] mx-auto font-sans">
+      <AdminHeaderBar
         title="Customer Bookings"
-        subtitle="Manage incoming customer slot bookings"
-        actions={
-          <Button onClick={() => setManualBookingOpen(true)} icon={<Plus size={16} />}>
-            New Manual Booking
-          </Button>
-        }
-      />
+        subtitle="Manage incoming customer slot appointments & convert to Job Cards"
+      >
+        <button
+          onClick={() => setManualBookingOpen(true)}
+          className="px-4 py-2.5 bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs font-bold rounded-2xl shadow-sm hover:shadow transition-all inline-flex items-center gap-1.5 active:scale-95"
+        >
+          <Plus size={15} />
+          <span>+ New Manual Booking</span>
+        </button>
+      </AdminHeaderBar>
+
+      {/* ─── Top 4 KPI Metrics ────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+        <AdminMetricCard
+          label="Pending Approvals"
+          value={bookings.filter((b: any) => b.status === 'pending_approval').length || 0}
+          icon={<Clock size={18} />}
+          trend="Awaiting Action"
+          variant="amber"
+        />
+        <AdminMetricCard
+          label="Confirmed Appointments"
+          value={bookings.filter((b: any) => b.status === 'confirmed').length || 0}
+          icon={<Calendar size={18} />}
+          trend="Slots Reserved"
+          variant="red"
+        />
+        <AdminMetricCard
+          label="Completed Today"
+          value={bookings.filter((b: any) => b.status === 'completed').length || 0}
+          icon={<Car size={18} />}
+          trend="Services Done"
+          variant="emerald"
+        />
+        <AdminMetricCard
+          label="Total Bookings"
+          value={pagination.total || 0}
+          icon={<FileText size={18} />}
+          trend="Lifetime Intake"
+          variant="red"
+        />
+      </div>
 
       {/* Tabs + Search Row */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-white p-4 rounded-3xl border border-slate-200/70 shadow-[0_2px_16px_rgba(0,0,0,0.02)]">
         {/* Tabs */}
-        <div className="flex gap-1 bg-[#f6f3f2] rounded-xl p-1 overflow-x-auto max-w-full w-full sm:w-auto scrollbar-none">
+        <div className="flex gap-1.5 overflow-x-auto max-w-full w-full sm:w-auto pb-1 sm:pb-0 scrollbar-none">
           {TABS.map((tab) => (
             <button
               key={tab.key}
               onClick={() => { setActiveTab(tab.key); setPage(1); }}
-              className={`px-3.5 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-200 shrink-0 whitespace-nowrap ${
+              className={`px-4 py-2 rounded-2xl text-xs font-bold tracking-tight transition-all shrink-0 ${
                 activeTab === tab.key
-                  ? 'bg-white text-[#1c1b1b] shadow-sm'
-                  : 'text-[#5f5e5e] hover:text-[#1c1b1b]'
+                  ? 'bg-[#D32F2F] text-white shadow-xs'
+                  : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200/60'
               }`}
             >
               {tab.label}
@@ -251,17 +289,17 @@ export default function CustomerBookingsPage() {
         </div>
 
         {/* Search */}
-        <div className="relative w-full sm:w-72">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <div className="relative w-full sm:w-80">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             placeholder="Search name, mobile, vehicle..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-gray-200 text-sm font-medium bg-white focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F] outline-none transition-all"
+            className="w-full pl-10 pr-8 py-2 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs font-medium text-slate-800 placeholder-slate-400 outline-none focus:bg-white focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F] transition-all"
           />
           {search && (
-            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
               <X size={14} />
             </button>
           )}
@@ -293,23 +331,24 @@ export default function CustomerBookingsPage() {
           {bookings.map((b: any) => (
             <div
               key={b.id}
-              className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md hover:border-gray-200 transition-all duration-200 group"
+              className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6 shadow-[0_4px_24px_rgba(0,0,0,0.03)] hover:shadow-md transition-all group"
             >
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 {/* Left: Customer + Vehicle Info */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-3">
-                    {/* Avatar */}
-                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#D32F2F]/10 to-[#D32F2F]/20 flex items-center justify-center text-[#D32F2F] font-black text-sm shrink-0">
-                      {b.customer_name?.charAt(0)?.toUpperCase() || '?'}
-                    </div>
+                  <div className="flex items-center gap-3.5 mb-3">
+                    {/* Brand Badge & Avatar */}
+                    <VehicleBrandBadge brand={b.vehicle_brand} model={b.vehicle_model} size="md" showText={false} />
                     <div className="min-w-0">
-                      <h4 className="font-bold text-[#1c1b1b] text-sm truncate">{b.customer_name}</h4>
-                      <div className="flex items-center gap-3 text-xs text-[#5f5e5e]">
-                        <span className="flex items-center gap-1">
-                          <Phone size={10} />
+                      <h4 className="font-black text-slate-900 text-sm tracking-tight truncate">{b.customer_name}</h4>
+                      <div className="flex items-center gap-3 text-xs text-slate-500">
+                        <a
+                          href={`tel:${b.customer_mobile}`}
+                          className="flex items-center gap-1 text-[#D32F2F] hover:underline font-bold"
+                        >
+                          <Phone size={11} />
                           {b.customer_mobile}
-                        </span>
+                        </a>
                         {b.customer_email && (
                           <span className="hidden sm:inline truncate">{b.customer_email}</span>
                         )}
@@ -318,13 +357,13 @@ export default function CustomerBookingsPage() {
                   </div>
 
                   {/* Details Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100">
                     {/* Vehicle */}
                     <div className="flex items-start gap-2">
                       <Car size={14} className="text-[#D32F2F] shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e]">Vehicle</p>
-                        <p className="text-xs font-bold text-[#1c1b1b]">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Vehicle</p>
+                        <p className="text-xs font-black text-slate-900">
                           {b.vehicle_brand || '—'} {b.vehicle_model || ''}
                         </p>
                         {b.vehicle_reg_no && (
@@ -396,50 +435,46 @@ export default function CustomerBookingsPage() {
 
                 {/* Right: Status + Actions */}
                 <div className="flex flex-row lg:flex-col items-center lg:items-end gap-3 shrink-0">
-                  <span className={`text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg ${
-                    b.status === 'confirmed' ? 'bg-green-100 text-green-700' :
-                    b.status === 'completed' ? 'bg-blue-100 text-blue-700' :
-                    b.status === 'pending_approval' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-red-100 text-red-700'
+                  <span className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full border ${
+                    b.status === 'confirmed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                    b.status === 'completed' ? 'bg-red-50 text-[#b71c1c] border-red-200' :
+                    b.status === 'pending_approval' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                    'bg-rose-50 text-rose-700 border-rose-200'
                   }`}>
                     {b.status.replace('_', ' ')}
                   </span>
 
                   {b.status === 'pending_approval' && (
                     <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="!text-red-600 hover:bg-red-50"
+                      <button
                         onClick={() => {
                           setConfirmType('reject');
                           setConfirmTargetId(b.id);
                         }}
+                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-2xl text-xs font-bold transition-all"
                       >
                         Reject
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="bg-green-600 hover:bg-green-700"
+                      </button>
+                      <button
                         onClick={() => {
                           setConfirmType('approve');
                           setConfirmTargetId(b.id);
                         }}
+                        className="px-4 py-1.5 bg-[#D32F2F] hover:bg-[#b71c1c] text-white rounded-2xl text-xs font-bold transition-all shadow-xs active:scale-95"
                       >
                         Approve
-                      </Button>
+                      </button>
                     </div>
                   )}
 
                   {b.status === 'confirmed' && !b.job_cart_id && (
-                    <Button
-                      size="sm"
+                    <button
                       onClick={() => handleCreateJobCart(b)}
-                      icon={<FileText size={14} />}
-                      className="whitespace-nowrap"
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-2xl shadow-xs transition-all flex items-center gap-1.5 active:scale-95 whitespace-nowrap"
                     >
-                      Create Job Cart
-                    </Button>
+                      <FileText size={13} />
+                      <span>+ Create Job Card</span>
+                    </button>
                   )}
 
                   {b.job_cart_id && (
@@ -448,7 +483,7 @@ export default function CustomerBookingsPage() {
                       className="flex items-center gap-1.5 text-xs font-bold text-[#D32F2F] hover:underline"
                     >
                       <Eye size={12} />
-                      View Job Cart #{b.job_cart_id}
+                      <span>View Job Card #{b.job_cart_id}</span>
                     </button>
                   )}
                 </div>
@@ -462,7 +497,7 @@ export default function CustomerBookingsPage() {
                     📦 Package Credit ({b.package_name || 'Active Package'})
                   </span>
                 ) : b.is_free_wash ? (
-                  <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg">
+                  <span className="text-xs font-bold text-[#b71c1c] bg-red-50 border border-red-200 px-2 py-0.5 rounded-lg">
                     🎁 Free Wash (Loyalty)
                   </span>
                 ) : b.advance_payment_id ? (
@@ -478,7 +513,7 @@ export default function CustomerBookingsPage() {
                         const token = useAuthStore.getState().token;
                         window.open(`/api/payments/${b.advance_payment_id}/invoice?token=${token}`, '_blank');
                       }}
-                      className="text-blue-600 hover:text-blue-800 font-bold text-xs inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 px-2 py-1 rounded-lg hover:bg-blue-100 transition-colors"
+                      className="text-[#D32F2F] hover:text-[#991b1b] font-bold text-xs inline-flex items-center gap-1.5 bg-red-50 border border-red-200 px-2 py-1 rounded-lg hover:bg-red-100 transition-colors"
                       title="Download Payment Receipt"
                     >
                       <Download className="w-3.5 h-3.5" />
@@ -505,7 +540,7 @@ export default function CustomerBookingsPage() {
                     const token = useAuthStore.getState().token;
                     window.open(`/api/bookings/${b.id}/invoice?token=${token}`, '_blank');
                   }}
-                  className="ml-auto text-blue-600 hover:text-blue-800 font-bold text-xs inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
+                  className="ml-auto text-[#D32F2F] hover:text-[#991b1b] font-bold text-xs inline-flex items-center gap-1.5 bg-red-50 border border-red-200 px-2.5 py-1.5 rounded-lg hover:bg-red-100 transition-colors"
                   title="Download Booking Invoice"
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -607,7 +642,7 @@ export default function CustomerBookingsPage() {
                         <span className="text-xs font-black text-[#D32F2F]">Visit #{jc.visit_number}</span>
                         <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
                           jc.status === 'complete' ? 'bg-green-100 text-green-700' :
-                          jc.status === 'open' ? 'bg-blue-100 text-blue-700' :
+                          jc.status === 'open' ? 'bg-red-100 text-[#b71c1c]' :
                           'bg-gray-100 text-gray-600'
                         }`}>{jc.status}</span>
                       </div>
@@ -706,7 +741,7 @@ export default function CustomerBookingsPage() {
                               <p className="font-bold">{c.name}</p>
                               <p className="text-xs text-[#5f5e5e]">{c.mobile}</p>
                               {matchedVeh && (
-                                <p className="text-[10px] text-blue-600 font-bold mt-0.5">
+                                <p className="text-[10px] text-[#D32F2F] font-bold mt-0.5">
                                   🚗 Matched Reg: {matchedVeh.registration_no} ({matchedVeh.brand} {matchedVeh.model})
                                 </p>
                               )}
@@ -913,6 +948,6 @@ export default function CustomerBookingsPage() {
         isDestructive={confirmType === 'reject'}
         loading={isConfirming}
       />
-    </>
+    </div>
   );
 }

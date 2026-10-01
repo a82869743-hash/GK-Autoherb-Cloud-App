@@ -5,6 +5,8 @@ import { useJobCart, useSubmitJobCart, useCompleteJobCart, useAddService, useUpd
 import { useMessagesLog } from '../../api/hooks/useMessages';
 import api from '../../api/axiosInstance';
 import AdminTopBar from '../../components/layout/AdminTopBar';
+import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
+import VehicleBrandBadge from '../../components/admin/VehicleBrandBadge';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
@@ -549,44 +551,51 @@ export default function JobCartDetailPage() {
   );
 
   return (
-    <>
-      <AdminTopBar
-        title={cart.vehicle?.registration_no || `Cart #${cart.id}`}
+    <div className="space-y-6 pb-28 lg:pb-12 max-w-[1600px] mx-auto font-sans">
+      <AdminHeaderBar
+        title={cart.vehicle?.registration_no || `Job Card #${cart.id}`}
         subtitle={
           cart.vehicle
             ? `${cart.vehicle.brand} ${cart.vehicle.model}${cart.vehicle.car_year || cart.vehicle.manufacture_year ? ' (' + (cart.vehicle.car_year || cart.vehicle.manufacture_year) + ')' : ''} · Visit #${cart.visit_number}`
             : `Visit #${cart.visit_number}`
         }
-        actions={
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={() => navigate(-1)} icon={<ArrowLeft size={14} />}>
-              Back
-            </Button>
-          </div>
-        }
-      />
+        badge={<VehicleBrandBadge brand={cart.vehicle?.brand} model={cart.vehicle?.model} showText={false} />}
+      >
+        <button
+          onClick={() => navigate(isStaff ? "/staff/job-carts" : "/admin/job-carts")}
+          className="px-3.5 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-2xl text-xs font-bold text-slate-700 transition-all inline-flex items-center gap-1.5"
+        >
+          <ArrowLeft size={14} />
+          <span>Back to Jobs</span>
+        </button>
+      </AdminHeaderBar>
 
-      <div className="max-w-4xl space-y-6">
+      <div className="space-y-6">
 
-        {/* ─── Header Card ─────────────────────── */}
+        {/* ─── Status Alert Card ─────────────────────── */}
         {cart.status === 'complete' && canEdit && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800 flex items-center gap-2 mb-2">
-            <Edit2 size={16} />
-            <span className="font-medium">
+          <div className="bg-amber-50 border border-amber-200/80 rounded-2xl p-4 text-xs text-amber-900 flex items-center gap-2.5 shadow-xs">
+            <Edit2 size={16} className="text-amber-600 shrink-0" />
+            <span className="font-bold">
               {isAdmin 
-                ? "Admin Override: You can edit this completed job cart." 
+                ? "Admin Override: You have full permissions to edit this completed job cart." 
                 : `Edit Window Open: You have ${editTimeRemaining} hours left to edit this completed job cart.`}
             </span>
           </div>
         )}
-        <div className="bg-white rounded-lg p-6 shadow-sm">
+
+        <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/70 shadow-[0_4px_24px_rgba(0,0,0,0.03)]">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
-                <h3 className="text-xl font-extrabold text-[#1c1b1b] tracking-tight">{cart.vehicle?.registration_no}</h3>
+                <VehicleBrandBadge brand={cart.vehicle?.brand} model={cart.vehicle?.model} size="lg" showText={false} />
+                <div>
+                  <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">{cart.vehicle?.registration_no}</h3>
+                  <p className="text-xs font-bold text-slate-500">{cart.vehicle?.brand} {cart.vehicle?.model}</p>
+                </div>
                 <StatusBadge status={cart.status} />
                 {canEdit && !editingInfo && (
-                  <button onClick={handleStartEditInfo} className="p-1.5 rounded-lg text-gray-400 hover:text-[#D32F2F] hover:bg-red-50 transition-colors" title="Edit details">
+                  <button onClick={handleStartEditInfo} className="p-1.5 rounded-xl text-slate-400 hover:text-[#D32F2F] hover:bg-red-50 transition-colors" title="Edit details">
                     <Edit2 size={14} />
                   </button>
                 )}
@@ -889,7 +898,7 @@ export default function JobCartDetailPage() {
                           {log.channel}
                         </span>
                         {log.template_name && (
-                          <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                          <span className="text-[10px] font-semibold text-[#D32F2F] bg-red-50 px-1.5 py-0.5 rounded">
                             {log.template_name}
                           </span>
                         )}
@@ -1141,6 +1150,6 @@ export default function JobCartDetailPage() {
           )}
         </div>
       </Modal>
-    </>
+    </div>
   );
 }

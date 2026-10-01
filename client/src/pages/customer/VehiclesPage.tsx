@@ -6,6 +6,7 @@ import EmptyState from '../../components/shared/EmptyState';
 import { SkeletonCard } from '../../components/ui/SkeletonLoader';
 import { useCustomerVehicles } from '../../api/hooks/useVehicles';
 import AddCarModal from '../../components/shared/AddCarModal';
+import CarImage from '../../components/shared/CarImage';
 import api from '../../api/axiosInstance';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -86,9 +87,15 @@ export default function VehiclesPage() {
                   </div>
                 ) : null}
                 
-                <div className="w-14 h-14 bg-gradient-to-br from-gray-100 to-gray-50 text-gray-500 rounded-2xl flex items-center justify-center mb-4 group-hover:from-[#D32F2F] group-hover:to-[#af101a] group-hover:text-white group-hover:shadow-glow-red transition-all duration-300">
-                  <Car size={26} />
-                </div>
+                {/* Real Car Photo Showcase */}
+                <CarImage
+                  brand={v.brand}
+                  model={v.model}
+                  containerClassName="h-36 w-full rounded-xl bg-slate-50/80 mb-4 p-2 border border-slate-100 group-hover:border-[#D32F2F]/20 transition-all"
+                  className="w-full h-full object-contain drop-shadow-sm group-hover:scale-105 transition-transform duration-300"
+                  showShadow
+                />
+                
                 <h3 className="text-xl font-black text-[#1c1b1b] mb-1 tracking-tight">
                   {v.brand} {v.model} {v.car_year ? `(${v.car_year})` : ''}
                 </h3>

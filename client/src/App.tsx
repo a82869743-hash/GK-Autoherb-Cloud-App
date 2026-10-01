@@ -32,7 +32,6 @@ import BookingsPage from './pages/customer/BookingsPage';
 import ServicesPage from './pages/admin/ServicesPage';
 import PackagesPage from './pages/admin/PackagesPage';
 import LoyaltyAwardPage from './pages/admin/LoyaltyAwardPage';
-import CustomerServicesPage from './pages/customer/ServicesPage';
 import LoyaltyPage from './pages/customer/LoyaltyPage';
 import VehiclesPage from './pages/customer/VehiclesPage';
 import ProfilePage from './pages/customer/ProfilePage';
@@ -58,6 +57,7 @@ import CheckInOutPage from './pages/staff/CheckInOutPage';
 // Messages, Inquiries & Import pages
 import MessagesPage from './pages/admin/MessagesPage';
 import InquiriesPage from './pages/admin/InquiriesPage';
+import AdminChatbotPage from './pages/admin/AdminChatbotPage';
 import ImportPage from './pages/admin/ImportPage';
 import StaffInquiryPage from './pages/staff/InquiryPage';
 
@@ -296,8 +296,12 @@ export default function App() {
       }>
         <Route index element={<DashboardPage />} />
         <Route path="job-carts" element={<JobCartListPage />} />
+        <Route path="job_carts" element={<JobCartListPage />} />
+        <Route path="job carts" element={<JobCartListPage />} />
         <Route path="job-carts/new" element={<JobCartCreatePage />} />
         <Route path="job-carts/:id" element={<JobCartDetailPage />} />
+        <Route path="job_carts/:id" element={<JobCartDetailPage />} />
+        <Route path="job carts/:id" element={<JobCartDetailPage />} />
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="slots" element={<SlotsPage />} />
         <Route path="customer-bookings" element={<CustomerBookingsPage />} />
@@ -310,6 +314,7 @@ export default function App() {
         <Route path="product-orders" element={<AdminProductOrdersPage />} />
         <Route path="messages" element={<MessagesPage />} />
         <Route path="inquiries" element={<InquiriesPage />} />
+        <Route path="chatbot" element={<AdminChatbotPage />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="customers" element={<CustomersListPage />} />
@@ -327,6 +332,7 @@ export default function App() {
         {/* ─── Phase 2 Routes ─── */}
         <Route path="quick-wash" element={<QuickWashPage />} />
         <Route path="loyalty" element={<LoyaltySettingsPage />} />
+        <Route path="loyalty/award" element={<LoyaltyAwardPage />} />
         <Route path="premium-services" element={<PremiumServicesPage />} />
         <Route path="deliveries" element={<AdminDeliveriesPage />} />
         <Route path="pickups" element={<PickupsPage />} />
@@ -350,7 +356,7 @@ export default function App() {
         <ProtectedRoute><RoleRoute allowedRoles={['customer']}><CustomerLayout /></RoleRoute></ProtectedRoute>
       }>
         <Route index element={<CustomerDashboardPage />} />
-        <Route path="services" element={<CustomerServicesPage />} />
+        <Route path="services" element={<Navigate to="/customer/bookings/new" replace />} />
         <Route path="job-carts" element={<CustomerJobCartsPage />} />
         <Route path="bookings" element={<BookingsPage />} />
         <Route path="bookings/new" element={<BookingPage />} />

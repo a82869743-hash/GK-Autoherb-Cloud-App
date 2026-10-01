@@ -5,6 +5,8 @@ import { useCreateJobCart, useVehicleLookup, useAddService, useUploadPhoto } fro
 import { useBrands, useModels, useVariants } from '../../api/hooks/useVehicles';
 import api from '../../api/axiosInstance';
 import AdminTopBar from '../../components/layout/AdminTopBar';
+import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
+import VehicleBrandBadge from '../../components/admin/VehicleBrandBadge';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
@@ -312,17 +314,28 @@ export default function JobCartCreatePage() {
     .map(i => ({ value: i.id, label: `${i.product_name} (${i.quantity} ${i.unit})` }));
 
   return (
-    <>
-      <AdminTopBar
-        title="Create Job Cart"
-        subtitle="New service entry"
-      />
+    <div className="space-y-6 pb-28 lg:pb-12 max-w-[1600px] mx-auto font-sans">
+      <AdminHeaderBar
+        title="Create Job Card"
+        subtitle="New service entry & vehicle detailing intake"
+        badge={carBrand ? <VehicleBrandBadge brand={carBrand} model={carModel} showText={false} /> : undefined}
+      >
+        <button
+          onClick={() => navigate(cancelPath)}
+          className="px-3.5 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-2xl text-xs font-bold text-slate-700 transition-all"
+        >
+          Cancel
+        </button>
+      </AdminHeaderBar>
 
-      <div className="max-w-4xl space-y-8">
+      <div className="space-y-6">
 
         {/* ─── SECTION A: Vehicle Registration ─────── */}
-        <section className="bg-white rounded-lg p-6 shadow-sm">
-          <h3 className="text-xs font-extrabold uppercase tracking-widest text-[#5f5e5e] mb-5">Vehicle Registration</h3>
+        <section className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/70 shadow-[0_4px_24px_rgba(0,0,0,0.03)]">
+          <div className="flex items-center gap-2 mb-5">
+            <span className="w-2 h-2 rounded-full bg-[#D32F2F]" />
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">Vehicle Registration</h3>
+          </div>
           <div className="flex gap-3 items-end">
             <div className="flex-1">
               <Input
@@ -352,8 +365,11 @@ export default function JobCartCreatePage() {
         </section>
 
         {/* ─── SECTION B: Customer & Vehicle ────────── */}
-        <section className="bg-white rounded-lg p-6 shadow-sm">
-          <h3 className="text-xs font-extrabold uppercase tracking-widest text-[#5f5e5e] mb-5">Customer & Vehicle</h3>
+        <section className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/70 shadow-[0_4px_24px_rgba(0,0,0,0.03)]">
+          <div className="flex items-center gap-2 mb-5">
+            <span className="w-2 h-2 rounded-full bg-[#D32F2F]" />
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">Customer & Vehicle Details</h3>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <Input label="Customer Name" value={customerName} onChange={e => setCustomerName(e.target.value)} disabled={!!customerId} />
             <Input label="Mobile Number" value={customerMobile} onChange={e => setCustomerMobile(e.target.value)} disabled={!!customerId} />
@@ -427,8 +443,11 @@ export default function JobCartCreatePage() {
         </section>
 
         {/* ─── SECTION C: Services ─────────────────── */}
-        <section className="bg-white rounded-lg p-6 shadow-sm">
-          <h3 className="text-xs font-extrabold uppercase tracking-widest text-[#5f5e5e] mb-5">Services</h3>
+        <section className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/70 shadow-[0_4px_24px_rgba(0,0,0,0.03)]">
+          <div className="flex items-center gap-2 mb-5">
+            <span className="w-2 h-2 rounded-full bg-[#D32F2F]" />
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">Detailing & Workshop Services</h3>
+          </div>
 
           {serviceBlocks.map((block, blockIdx) => (
             <div key={block.key} className="mb-6 last:mb-0 border border-gray-100 rounded-lg p-5 relative group">
@@ -543,15 +562,18 @@ export default function JobCartCreatePage() {
 
           <button
             onClick={() => setServiceBlocks(prev => [...prev, emptyService()])}
-            className="mt-4 w-full py-3 border-2 border-dashed border-gray-200 rounded-lg text-sm font-bold text-[#5f5e5e] hover:border-[#D32F2F] hover:text-[#D32F2F] transition-colors flex items-center justify-center gap-2"
+            className="mt-4 w-full py-3 border-2 border-dashed border-red-200 rounded-2xl text-xs font-bold text-[#D32F2F] hover:bg-red-50/50 transition-colors flex items-center justify-center gap-2"
           >
             <Plus size={16} /> Add Another Service
           </button>
         </section>
 
         {/* ─── SECTION D: Photos ───────────────────── */}
-        <section className="bg-white rounded-lg p-6 shadow-sm">
-          <h3 className="text-xs font-extrabold uppercase tracking-widest text-[#5f5e5e] mb-5">Photos</h3>
+        <section className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/70 shadow-[0_4px_24px_rgba(0,0,0,0.03)]">
+          <div className="flex items-center gap-2 mb-5">
+            <span className="w-2 h-2 rounded-full bg-[#D32F2F]" />
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">Inspection & Vehicle Photos</h3>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <FileUpload
               label="Before Photos"
@@ -570,8 +592,8 @@ export default function JobCartCreatePage() {
 
         {/* ─── SECTION E: Grand Total ──────────────── */}
         {!isStaff && (
-          <div className="bg-[#1c1b1b] rounded-lg p-6 flex items-center justify-between">
-            <span className="text-white text-sm font-bold uppercase tracking-widest">Grand Total</span>
+          <div className="bg-slate-900 rounded-3xl p-6 sm:p-7 flex items-center justify-between border border-slate-800 shadow-sm">
+            <span className="text-slate-300 text-xs font-black uppercase tracking-widest">Grand Total</span>
             <span className="text-3xl font-black text-white tracking-tight">
               ₹{grandTotal.toLocaleString('en-IN')}
             </span>
@@ -591,6 +613,6 @@ export default function JobCartCreatePage() {
           </Button>
         </div>
       </div>
-    </>
+    </div>
   );
 }

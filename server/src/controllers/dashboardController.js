@@ -136,7 +136,7 @@ exports.getCustomerDashboard = async (req, res) => {
 
     const [
       [vehicles], [bookings], [loyalty], [recentJobs], [totalVisits],
-      packageData, fwCheck
+      [activeDelivery], packageData, fwCheck
     ] = await Promise.all([
       // My vehicles (ordered by primary first)
       pool.query(`SELECT id, registration_no, brand, model, is_primary FROM vehicles WHERE customer_id = ? ORDER BY is_primary DESC, created_at DESC`, [customerId]),
@@ -161,7 +161,7 @@ exports.getCustomerDashboard = async (req, res) => {
                v.registration_no, v.brand, v.model,
                (SELECT GROUP_CONCAT(js.service_name SEPARATOR ', ')
                 FROM job_services js WHERE js.job_cart_id = jc.id) AS services_done
-        FROM job_carts jc
+            FROM job_carts jc
         JOIN vehicles v ON jc.vehicle_id = v.id
         WHERE v.customer_id = ?
         ORDER BY jc.created_at DESC
@@ -173,6 +173,18 @@ exports.getCustomerDashboard = async (req, res) => {
         JOIN vehicles v ON jc.vehicle_id = v.id
         WHERE v.customer_id = ? AND jc.status = 'complete'
       `, [customerId]),
+      // Active delivery for customer
+      pool.query(`
+        SELECT d.id, d.job_cart_id, d.status, d.address_to AS destination_address, d.started_at,
+               u.name AS driver_name, u.mobile AS driver_mobile,
+               v.registration_no, v.brand, v.model
+        FROM deliveries d
+        JOIN users u ON d.staff_id = u.id
+        JOIN job_carts jc ON d.job_cart_id = jc.id
+        JOIN vehicles v ON jc.vehicle_id = v.id
+        WHERE d.customer_id = ? AND d.status IN ('in_transit')
+        ORDER BY d.started_at DESC LIMIT 1
+      `, [customerId]),
       // ─── TASK 7: Primary car + active package + remaining services
       userPkgCtrl.getDashboardPackageData(customerId),
       // Check 50% first wash eligibility
@@ -182,15 +194,17 @@ exports.getCustomerDashboard = async (req, res) => {
     res.json({
       success: true,
       data: {
-        vehicles: vehicles,
-        upcoming_bookings: bookings,
+        vehicles: vehicles || [],
+        upcoming_bookings: bookings || [],
         loyalty: loyalty[0] || { credits: 0, free_washes: 0, wax_count: 0 },
-        recent_jobs: recentJobs,
-        total_visits: totalVisits[0].total || 0,
+        recent_jobs: recentJobs || [],
+        total_visits: totalVisits[0]?.total || 0,
+        active_delivery: activeDelivery[0] || null,
         // ─── Task 7 data ────────────────────────────────────
-        primary_car: packageData.primary_car,
-        active_package: packageData.active_package,
-        first_wash_eligible: fwCheck.isEligible,
+        primary_car: packageData?.primary_car || null,
+        active_package: packageData?.active_package || null,
+        active_packages: packageData?.active_packages || (packageData?.active_package ? [packageData.active_package] : []),
+        first_wash_eligible: fwCheck?.isEligible ?? true,
       }
     });
   } catch (err) {

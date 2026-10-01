@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ClipboardList, ChevronDown, ChevronUp, Download, Calendar, Car, Hash } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ClipboardList, ChevronDown, ChevronUp, Download, Calendar, Car, Hash, Clock } from 'lucide-react';
 import { useJobCarts } from '../../api/hooks/useJobCarts';
 import { useAuthStore } from '../../store/authStore';
 import StatusBadge from '../../components/shared/StatusBadge';
@@ -108,16 +109,23 @@ export default function CustomerJobCartsPage() {
                         <p className="text-sm text-[#5f5e5e]">{cart.services_count} service(s) · Total: {formatINR(cart.total_amount)}</p>
                       </div>
 
-                      {cart.status === 'complete' && (
-                        <div className="pt-3 border-t border-gray-100">
+                      <div className="pt-3 border-t border-gray-100 flex flex-wrap items-center gap-2">
+                        <Link
+                          to={`/job/${cart.id}`}
+                          className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-lg transition-all"
+                        >
+                          <Clock size={14} className="text-[#D32F2F]" />
+                          <span>Track Progress & Photos</span>
+                        </Link>
+                        {cart.status === 'complete' && (
                           <button
                             onClick={(e) => { e.stopPropagation(); handleDownloadInvoice(cart.id); }}
                             className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-br from-[#af101a] to-[#D32F2F] text-white text-xs font-bold uppercase tracking-wider rounded-lg hover:shadow-glow-red transition-all hover:-translate-y-0.5"
                           >
                             <Download size={14} /> Download Invoice
                           </button>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>

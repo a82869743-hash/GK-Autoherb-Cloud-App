@@ -393,8 +393,20 @@ exports.createExpense = async (req, res) => {
     if (!amount || !category_id) return res.status(400).json({ success: false, error: 'Amount and category required' });
     const [result] = await pool.query(
       `INSERT INTO expenses (category_id, amount, description, expense_date, payment_method, gst_amount, gst_number, created_by) VALUES (?,?,?,?,?,?,?,?)`,
-      [category_id, amount, description, expense_date || new Date().toISOString().split('T')[0], payment_method || 'cash', gst_amount || 0, gst_number, req.user.id]
+      [category_id, amount, description, expense_date || new Date().toISOString().split('T')[0], payment_method || 'cash', gst_amount || 0, gst_number, req.user ? req.user.id : null]
     );
+
+    // Synchronize expense with transactions table as cash outflow
+    try {
+      await pool.query(
+        `INSERT INTO transactions (type, reference_id, amount, direction, note, transaction_date, created_by)
+         VALUES ('expense', ?, ?, 'out', ?, ?, ?)`,
+        [result.insertId, amount, description || 'General Operating Expense', expense_date || new Date().toISOString().split('T')[0], req.user ? req.user.id : null]
+      );
+    } catch (txnErr) {
+      console.warn('Notice: logging transaction failed for expense:', txnErr.message);
+    }
+
     res.status(201).json({ success: true, data: { id: result.insertId }, message: 'Expense recorded' });
   } catch (err) { res.status(500).json({ success: false, error: 'Failed to create expense' }); }
 };

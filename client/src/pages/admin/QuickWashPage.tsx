@@ -1,18 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Droplets, Clock, CheckCircle2, Truck, Plus, RefreshCw, Hash, Search, Car, X, ChevronDown, Download, Check } from 'lucide-react';
+import { Droplets, Clock, CheckCircle2, Truck, Plus, RefreshCw, Hash, Search, Car, X, ChevronDown, Download, Check, Sparkles } from 'lucide-react';
 import { useQuickWashes, useQuickWashStats, useCreateQuickWash, useUpdateWashStatus } from '../../api/hooks/useQuickWash';
 import { useCustomerSearch } from '../../api/hooks/useSearch';
 import { useBrands, useModels } from '../../api/hooks/useVehicles';
 import { useServices } from '../../api/hooks/useServices';
 import type { QuickWashBooking, WashStatus } from '../../types';
 import { useToastStore } from '../../store/toastStore';
-import AdminTopBar from '../../components/layout/AdminTopBar';
+import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
+import AdminMetricCard from '../../components/admin/AdminMetricCard';
+import VehicleBrandBadge from '../../components/admin/VehicleBrandBadge';
 
 const STATUS_CONFIG: Record<WashStatus, { label: string; color: string; bg: string; icon: React.ElementType; next?: WashStatus }> = {
-  pending:   { label: 'In Queue',  color: 'text-amber-600',   bg: 'bg-amber-50 border-amber-200',     icon: Clock,        next: 'washing' },
-  washing:   { label: 'Washing',   color: 'text-blue-600',    bg: 'bg-blue-50 border-blue-200',       icon: Droplets,     next: 'completed' },
-  completed: { label: 'Completed', color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-200', icon: CheckCircle2, next: 'delivered' },
-  delivered: { label: 'Delivered', color: 'text-gray-500',    bg: 'bg-gray-50 border-gray-200',       icon: Truck },
+  pending:   { label: 'In Queue',  color: 'text-amber-700',   bg: 'bg-amber-50 border-amber-200',     icon: Clock,        next: 'washing' },
+  washing:   { label: 'Washing',   color: 'text-[#b71c1c]',    bg: 'bg-red-50 border-red-200',       icon: Droplets,     next: 'completed' },
+  completed: { label: 'Completed', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200', icon: CheckCircle2, next: 'delivered' },
+  delivered: { label: 'Delivered', color: 'text-slate-500',    bg: 'bg-slate-50 border-slate-200',       icon: Truck },
 };
 
 const VEHICLE_CATEGORIES = [
@@ -52,45 +54,58 @@ export default function QuickWashPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <AdminTopBar
-        title="Quick Wash"
-        subtitle="Fast-track walk-in wash bookings"
-        actions={
-          <div className="flex gap-2">
-            <button
-              onClick={() => refetch()}
-              className="px-3.5 py-2 bg-white text-gray-600 rounded-lg border border-gray-200 hover:bg-gray-50 transition-all flex items-center gap-2 text-sm font-medium shadow-sm"
-            >
-              <RefreshCw size={15} />
-              Refresh
-            </button>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="px-4 py-2 bg-[#D32F2F] text-white rounded-lg shadow-sm hover:bg-[#b71c1c] transition-all flex items-center gap-2 text-sm font-semibold"
-            >
-              <Plus size={15} />
-              New Wash
-            </button>
-          </div>
-        }
-      />
+    <div className="space-y-6 pb-28 lg:pb-12 max-w-[1600px] mx-auto font-sans">
+      <AdminHeaderBar
+        title="Quick Wash Express"
+        subtitle="Fast-track walk-in wash bookings & live bay queue tracking"
+      >
+        <button
+          onClick={() => refetch()}
+          className="px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-2xl text-xs font-bold text-slate-700 transition-all shadow-xs inline-flex items-center gap-1.5"
+        >
+          <RefreshCw size={14} />
+          <span>Refresh</span>
+        </button>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="px-4 py-2.5 bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs font-bold rounded-2xl shadow-sm hover:shadow transition-all inline-flex items-center gap-1.5 active:scale-95"
+        >
+          <Plus size={15} />
+          <span>+ New Wash</span>
+        </button>
+      </AdminHeaderBar>
 
       {/* Stats Cards */}
       {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          {([
-            { label: 'In Queue', value: stats.pending_count, color: 'text-amber-600', border: 'border-amber-200', bg: 'bg-amber-50' },
-            { label: 'Washing', value: stats.washing_count, color: 'text-blue-600', border: 'border-blue-200', bg: 'bg-blue-50' },
-            { label: 'Completed', value: stats.completed_count, color: 'text-emerald-600', border: 'border-emerald-200', bg: 'bg-emerald-50' },
-            { label: 'Delivered', value: stats.delivered_count, color: 'text-gray-500', border: 'border-gray-200', bg: 'bg-gray-50' },
-            { label: 'Total Today', value: stats.total_today, color: 'text-purple-600', border: 'border-purple-200', bg: 'bg-purple-50' },
-          ]).map((stat) => (
-            <div key={stat.label} className={`p-4 rounded-xl bg-white border ${stat.border} shadow-sm`}>
-              <p className="text-[11px] text-gray-400 uppercase tracking-wider font-medium">{stat.label}</p>
-              <p className={`text-2xl font-bold mt-1 ${stat.color}`}>{stat.value}</p>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-5">
+          <AdminMetricCard
+            label="In Intake Queue"
+            value={stats.pending_count || 0}
+            icon={<Clock size={18} />}
+            trend="Awaiting Bay"
+            variant="amber"
+          />
+          <AdminMetricCard
+            label="Active In Washing Bay"
+            value={stats.washing_count || 0}
+            icon={<Droplets size={18} />}
+            trend="Under Wash"
+            variant="red"
+          />
+          <AdminMetricCard
+            label="Completed Today"
+            value={stats.completed_count || 0}
+            icon={<CheckCircle2 size={18} />}
+            trend="Ready for Handover"
+            variant="emerald"
+          />
+          <AdminMetricCard
+            label="Delivered Today"
+            value={stats.delivered_count || 0}
+            icon={<Truck size={18} />}
+            trend="Vehicles Released"
+            variant="red"
+          />
         </div>
       )}
 
@@ -100,13 +115,13 @@ export default function QuickWashPage() {
           <button
             key={status}
             onClick={() => setFilter(status)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+            className={`px-4 py-2 rounded-2xl text-xs font-bold tracking-tight transition-all shrink-0 ${
               filter === status
-                ? 'bg-[#D32F2F] text-white shadow-sm'
-                : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-200 hover:text-gray-700'
+                ? 'bg-[#D32F2F] text-white shadow-xs'
+                : 'bg-white hover:bg-slate-50 text-slate-600 border border-slate-200/80'
             }`}
           >
-            {status === 'all' ? 'All' : STATUS_CONFIG[status as WashStatus]?.label || status}
+            {status === 'all' ? 'All Queues' : STATUS_CONFIG[status as WashStatus]?.label || status}
           </button>
         ))}
       </div>
@@ -131,35 +146,41 @@ export default function QuickWashPage() {
             return (
               <div
                 key={wash.id}
-                className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all group"
+                className="bg-white border border-slate-200/80 rounded-3xl p-5 hover:shadow-md transition-all group shadow-[0_4px_20px_rgba(0,0,0,0.02)]"
               >
                 <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center">
-                      <Hash size={14} className="text-[#D32F2F]" />
-                    </div>
+                  <div className="flex items-center gap-2.5">
+                    <VehicleBrandBadge brand={wash.vehicle_brand} model={wash.vehicle_model} size="md" showText={false} />
                     <div>
-                      <span className="text-gray-900 font-semibold text-sm">Queue #{wash.queue_position}</span>
-                      <p className="text-[11px] text-gray-400">#{wash.id}</p>
+                      <span className="text-slate-900 font-black text-sm tracking-tight">Queue #{wash.queue_position}</span>
+                      <p className="text-[11px] text-slate-400 font-mono">ID: #{wash.id}</p>
                     </div>
                   </div>
-                  <span className={`text-[11px] font-medium px-2.5 py-1 rounded-full border ${config.bg} ${config.color}`}>
+                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border uppercase tracking-wider ${config.bg} ${config.color}`}>
                     <StatusIcon size={12} className="inline mr-1 -mt-0.5" />
                     {config.label}
                   </span>
                 </div>
 
                 {/* Vehicle */}
-                <div className="space-y-1.5 mb-3">
-                  <p className="text-sm text-gray-900 font-medium">
-                    {wash.vehicle_brand} {wash.vehicle_model}
-                  </p>
-                  <p className="text-xs text-gray-500">{wash.vehicle_reg_no || 'No reg'}</p>
+                <div className="space-y-1.5 mb-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-slate-900 font-black">
+                      {wash.vehicle_brand} {wash.vehicle_model}
+                    </p>
+                    <span className="text-[10px] font-mono font-bold text-slate-500 bg-white px-2 py-0.5 rounded-lg border border-slate-200">
+                      {wash.vehicle_reg_no || 'Walk-in'}
+                    </span>
+                  </div>
                   {wash.customer_name && (
-                    <p className="text-xs text-gray-400">{wash.customer_name} · {wash.customer_mobile}</p>
+                    <p className="text-xs text-slate-600 font-medium">
+                      {wash.customer_name} {wash.customer_mobile && (
+                        <span>· <a href={`tel:${wash.customer_mobile}`} className="text-[#D32F2F] hover:underline font-bold">{wash.customer_mobile}</a></span>
+                      )}
+                    </p>
                   )}
                   {wash.service_name && (
-                    <p className="text-xs text-blue-600 font-medium">{wash.service_name}</p>
+                    <p className="text-xs text-[#D32F2F] font-bold mt-1">{wash.service_name}</p>
                   )}
                 </div>
 
@@ -221,9 +242,9 @@ export default function QuickWashPage() {
                           addToast('error', 'Failed to advance wash phase');
                         }
                       }}
-                      className="w-full py-1.5 bg-[#D32F2F]/5 hover:bg-[#D32F2F]/10 text-[#D32F2F] border border-[#D32F2F]/10 rounded-lg text-xs font-bold transition-all uppercase tracking-wider flex items-center justify-center gap-1.5"
+                      className="w-full py-2 bg-red-50 hover:bg-red-100 text-[#D32F2F] border border-red-200/70 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
                     >
-                      <Clock size={12} />
+                      <Clock size={13} />
                       Advance Phase
                     </button>
                   </div>
@@ -247,18 +268,18 @@ export default function QuickWashPage() {
                         addToast('error', 'Failed to download invoice');
                       }
                     }}
-                    className="flex-1 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-sm text-gray-700 rounded-lg transition-all flex items-center justify-center gap-2 font-medium"
+                    className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 text-xs text-slate-700 rounded-2xl transition-all flex items-center justify-center gap-1.5 font-bold"
                   >
-                    <Download size={14} />
+                    <Download size={13} />
                     Invoice
                   </button>
                   {config.next && (
                     <button
                       onClick={() => handleStatusAdvance(wash.id, config.next!)}
                       disabled={updateStatus.isPending}
-                      className="flex-1 py-2 bg-[#D32F2F]/10 hover:bg-[#D32F2F]/20 text-[#D32F2F] border border-[#D32F2F]/20 text-sm rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 font-medium"
+                      className="flex-1 py-2 bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs rounded-2xl transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 font-bold shadow-xs active:scale-95"
                     >
-                      <StatusIcon size={14} />
+                      <StatusIcon size={13} />
                       {STATUS_CONFIG[config.next].label}
                     </button>
                   )}
@@ -403,7 +424,7 @@ function CreateQuickWashModal({ onClose }: { onClose: () => void }) {
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
           <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-            <Droplets size={20} className="text-blue-600" />
+            <Droplets size={20} className="text-[#D32F2F]" />
             New Quick Wash
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">

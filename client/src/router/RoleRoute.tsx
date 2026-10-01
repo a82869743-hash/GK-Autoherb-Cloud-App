@@ -3,7 +3,7 @@ import { useAuthStore } from '../store/authStore';
 
 const ROLE_REDIRECTS: Record<string, string> = {
   admin: '/admin',
-  customer: '/customer/services',
+  customer: '/customer',
   staff: '/staff/job-carts',
 };
 

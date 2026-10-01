@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useSlots, useBulkCreateSlots, useUpdateSlot, useDeleteSlot } from '../../api/hooks/useSlots';
 import AdminTopBar from '../../components/layout/AdminTopBar';
+import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
@@ -175,46 +176,52 @@ export default function SlotsPage() {
   };
 
   return (
-    <>
-      <AdminTopBar
-        title="Slots & Bookings"
+    <div className="space-y-6 pb-28 lg:pb-12 max-w-[1600px] mx-auto font-sans">
+      <AdminHeaderBar
+        title="Slots & Bay Allocation"
         subtitle={`Week of ${weekDates[0].toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} – ${weekDates[6].toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`}
-        actions={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => navigate('/admin/customer-bookings')}
-              icon={<ExternalLink size={14} />}
-            >
-              All Bookings
-            </Button>
-            <Button onClick={() => { setGenFrom(from_date); setGenTo(to_date); setGenOpen(true); }} icon={<Plus size={16} />}>
-              Generate Slots
-            </Button>
-          </div>
-        }
-      />
+      >
+        <button
+          onClick={() => navigate('/admin/customer-bookings')}
+          className="px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-2xl text-xs font-bold text-slate-700 transition-all shadow-xs inline-flex items-center gap-1.5"
+        >
+          <ExternalLink size={14} />
+          <span>All Bookings</span>
+        </button>
+        <button
+          onClick={() => { setGenFrom(from_date); setGenTo(to_date); setGenOpen(true); }}
+          className="px-4 py-2.5 bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs font-bold rounded-2xl shadow-sm hover:shadow transition-all inline-flex items-center gap-1.5 active:scale-95"
+        >
+          <Plus size={15} />
+          <span>+ Generate Slots</span>
+        </button>
+      </AdminHeaderBar>
 
-      {/* Week Navigation */}
-      <div className="flex items-center gap-4 mb-6">
-        <button onClick={() => setWeekOffset(weekOffset - 1)} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-          <ChevronLeft size={20} />
+      {/* Week Navigation Pill Bar */}
+      <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-200/80 shadow-xs w-fit">
+        <button
+          onClick={() => setWeekOffset(weekOffset - 1)}
+          className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-600 transition-colors"
+        >
+          <ChevronLeft size={16} />
         </button>
         <button
           onClick={() => setWeekOffset(0)}
-          className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-[#f6f3f2] rounded-lg hover:bg-[#e5e2e1] transition-colors"
+          className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-red-50 text-[#D32F2F] hover:bg-red-100 transition-colors"
         >
           This Week
         </button>
-        <button onClick={() => setWeekOffset(weekOffset + 1)} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-          <ChevronRight size={20} />
+        <button
+          onClick={() => setWeekOffset(weekOffset + 1)}
+          className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-600 transition-colors"
+        >
+          <ChevronRight size={16} />
         </button>
       </div>
 
-      <div className="flex gap-6">
+      <div className="flex flex-col lg:flex-row gap-6">
         {/* Calendar Grid */}
-        <div className={`flex-1 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden transition-all ${selectedSlot ? 'max-w-[calc(100%-360px)]' : ''}`}>
+        <div className={`flex-1 bg-white rounded-3xl shadow-[0_4px_24px_rgba(0,0,0,0.03)] border border-slate-200/80 overflow-hidden transition-all ${selectedSlot ? 'lg:max-w-[calc(100%-360px)]' : ''}`}>
           {isLoading ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 size={24} className="animate-spin text-[#D32F2F]" />
@@ -335,13 +342,20 @@ export default function SlotsPage() {
           )}
         </div>
 
-        {/* Slide-out Panel */}
+        {/* Slide-out Panel (Desktop: side panel, Mobile: slide-up bottom drawer) */}
         {selectedSlot && (
-          <div className="w-[340px] bg-white rounded-xl shadow-sm border border-gray-100 p-5 shrink-0 self-start sticky top-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-extrabold uppercase tracking-wider text-[#1c1b1b]">Slot Details</h3>
-              <button onClick={() => setSelectedSlot(null)} className="p-1 hover:bg-gray-100 rounded"><X size={16} /></button>
-            </div>
+          <div 
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm lg:static lg:bg-transparent lg:z-auto flex items-end lg:items-start justify-center lg:justify-start"
+            onClick={() => setSelectedSlot(null)}
+          >
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-h-[85vh] overflow-y-auto lg:max-h-none lg:w-[340px] bg-white rounded-t-3xl lg:rounded-2xl shadow-2xl lg:shadow-sm border border-slate-200 p-5 shrink-0 self-auto lg:self-start lg:sticky lg:top-4"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-extrabold uppercase tracking-wider text-[#1c1b1b]">Slot Details</h3>
+                <button onClick={() => setSelectedSlot(null)} className="p-1 hover:bg-gray-100 rounded-full"><X size={16} /></button>
+              </div>
 
             <div className="space-y-3 text-sm">
               <div>
@@ -422,7 +436,7 @@ export default function SlotsPage() {
                         </div>
                         <span className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${
                           b.status === 'confirmed' ? 'bg-green-100 text-green-700' :
-                          b.status === 'completed' ? 'bg-blue-100 text-blue-700' :
+                          b.status === 'completed' ? 'bg-red-100 text-[#b71c1c]' :
                           'bg-red-100 text-red-700'
                         }`}>{b.status}</span>
                       </div>
@@ -508,8 +522,9 @@ export default function SlotsPage() {
               )}
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+    </div>
 
       {/* Generate Slots Modal */}
       <Modal
@@ -551,6 +566,6 @@ export default function SlotsPage() {
           />
         </div>
       </Modal>
-    </>
+    </div>
   );
 }

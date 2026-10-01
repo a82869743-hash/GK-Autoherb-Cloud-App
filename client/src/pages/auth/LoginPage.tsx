@@ -20,7 +20,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isPending, setIsPending] = useState(false);
 
-  const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
+  const { register, handleSubmit, setValue, formState: { errors } } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
   });
 
@@ -50,6 +50,12 @@ export default function LoginPage() {
     } finally {
       setIsPending(false);
     }
+  };
+
+  const handleQuickLogin = async (mobile: string, pass: string) => {
+    setValue('mobile', mobile);
+    setValue('password', pass);
+    await onSubmit({ mobile, password: pass });
   };
 
   return (
@@ -96,22 +102,71 @@ export default function LoginPage() {
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
         <div className="w-full max-w-md animate-fade-in-up">
           {/* Mobile brand header */}
-          <div className="lg:hidden text-center mb-10">
+          <div className="lg:hidden text-center mb-8">
             <img src="/assets/logo.png" alt="GK Auto Herb" className="w-36 h-auto mx-auto mb-3" />
             <h1 className="text-3xl font-black text-[#1c1b1b] tracking-tight">GK AutoHerb</h1>
             <div className="w-12 h-1 bg-[#D32F2F] mx-auto mt-3 rounded-full" />
           </div>
 
-          <div className="mb-10">
+          <div className="mb-6">
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#D32F2F] mb-2">
               Welcome Back
             </p>
             <h2 className="text-3xl font-extrabold text-[#1c1b1b] tracking-tight">
               Sign In
             </h2>
-            <p className="text-sm text-[#5f5e5e] mt-2 font-medium">
-              Enter your credentials to access the dashboard
+            <p className="text-sm text-[#5f5e5e] mt-1 font-medium">
+              Enter your credentials to access your dashboard
             </p>
+          </div>
+
+          {/* 1-Click Quick Demo Login Switcher */}
+          <div className="mb-6 p-3.5 bg-white/90 backdrop-blur rounded-xl border border-gray-200/80 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#5f5e5e] flex items-center gap-1.5">
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                ⚡ 1-Click Quick Demo Login
+              </span>
+              <span className="text-[10px] text-gray-400 font-medium">Auto-login</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => handleQuickLogin('9000000001', 'admin123')}
+                title="Login as Admin (Mobile: 9000000001, Pass: admin123)"
+                className="px-2 py-2 rounded-lg bg-red-50 hover:bg-red-100/80 border border-red-200/80 text-[#D32F2F] transition-all flex flex-col items-center justify-center text-center group active:scale-95 disabled:opacity-50"
+              >
+                <span className="text-base group-hover:scale-110 transition-transform">👑</span>
+                <span className="text-xs font-bold mt-0.5">Admin</span>
+                <span className="text-[9px] text-gray-600 font-mono font-semibold">9000000001</span>
+                <span className="text-[8px] text-gray-400 font-mono">admin123</span>
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => handleQuickLogin('9876543210', 'staff123')}
+                title="Login as Staff (Mobile: 9876543210 / 9000000003, Pass: staff123)"
+                className="px-2 py-2 rounded-lg bg-blue-50 hover:bg-blue-100/80 border border-blue-200/80 text-blue-700 transition-all flex flex-col items-center justify-center text-center group active:scale-95 disabled:opacity-50"
+              >
+                <span className="text-base group-hover:scale-110 transition-transform">🔧</span>
+                <span className="text-xs font-bold mt-0.5">Staff</span>
+                <span className="text-[9px] text-gray-600 font-mono font-semibold">9876543210</span>
+                <span className="text-[8px] text-gray-400 font-mono">staff123</span>
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => handleQuickLogin('9000000002', 'customer123')}
+                title="Login as Customer (Mobile: 9000000002, Pass: customer123)"
+                className="px-2 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/80 text-emerald-700 transition-all flex flex-col items-center justify-center text-center group active:scale-95 disabled:opacity-50"
+              >
+                <span className="text-base group-hover:scale-110 transition-transform">🚗</span>
+                <span className="text-xs font-bold mt-0.5">Customer</span>
+                <span className="text-[9px] text-gray-600 font-mono font-semibold">9000000002</span>
+                <span className="text-[8px] text-gray-400 font-mono">customer123</span>
+              </button>
+            </div>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">

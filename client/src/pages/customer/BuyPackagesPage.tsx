@@ -4,6 +4,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
 import { PackageOpen, Car, CheckCircle, Loader2, ArrowRight, ShieldCheck, X, AlertCircle, Clock, XCircle, Check, Minus, FileSpreadsheet, FileDown, CreditCard, QrCode } from 'lucide-react';
 import QrPaymentModal from '../../components/shared/QrPaymentModal';
+import PaymentSandboxModal from '../../components/shared/PaymentSandboxModal';
 import ErrorState from '../../components/shared/ErrorState';
 
 interface Vehicle {
@@ -172,6 +173,32 @@ export default function BuyPackagesPage() {
   const [showQrModal, setShowQrModal] = useState(false);
   const [qrAmount, setQrAmount] = useState(0);
   const [activePackageRequestId, setActivePackageRequestId] = useState<number | undefined>(undefined);
+
+  // Sandbox modal state
+  const [sandboxModal, setSandboxModal] = useState<{
+    isOpen: boolean;
+    orderId: string;
+    amount: number;
+    itemName: string;
+    handler: (resp: any) => Promise<void>;
+    onDismiss: () => void;
+    loading?: boolean;
+  } | null>(null);
+
+  const handleConfirmSandboxPayment = async () => {
+    if (!sandboxModal) return;
+    try {
+      setSandboxModal(prev => prev ? { ...prev, loading: true } : null);
+      await sandboxModal.handler({
+        razorpay_order_id: sandboxModal.orderId,
+        razorpay_payment_id: 'pay_mock_' + Date.now(),
+        razorpay_signature: 'sig_mock_' + Date.now()
+      });
+      setSandboxModal(null);
+    } catch {
+      setSandboxModal(null);
+    }
+  };
 
   const handleExport = async (format: 'pdf' | 'excel') => {
     if (format === 'pdf') setExportingPdf(true);
@@ -405,18 +432,14 @@ export default function BuyPackagesPage() {
       };
 
       if (orderData.id.startsWith('order_mock_')) {
-        const confirmSimulate = window.confirm(
-          "RAZORPAY SANDBOX MODE (Keys Missing)\n\nWould you like to simulate a successful online payment?"
-        );
-        if (confirmSimulate) {
-          await options.handler({
-            razorpay_order_id: orderData.id,
-            razorpay_payment_id: 'pay_mock_' + Date.now(),
-            razorpay_signature: 'sig_mock_' + Date.now()
-          });
-        } else {
-          options.modal.ondismiss();
-        }
+        setSandboxModal({
+          isOpen: true,
+          orderId: orderData.id,
+          amount: confirmPkg ? getPrice(confirmPkg) : 0,
+          itemName: confirmPkg?.name || 'Membership Package',
+          handler: options.handler,
+          onDismiss: options.modal.ondismiss,
+        });
         return;
       }
 
@@ -882,6 +905,20 @@ export default function BuyPackagesPage() {
             addToast('success', 'Your QR Payment confirmation request has been submitted for admin verification.');
             window.location.reload();
           }}
+        />
+      )}
+
+      {sandboxModal && (
+        <PaymentSandboxModal
+          isOpen={sandboxModal.isOpen}
+          onClose={() => {
+            sandboxModal.onDismiss();
+            setSandboxModal(null);
+          }}
+          onConfirm={handleConfirmSandboxPayment}
+          itemName={sandboxModal.itemName}
+          amount={sandboxModal.amount}
+          loading={sandboxModal.loading}
         />
       )}
     </div>

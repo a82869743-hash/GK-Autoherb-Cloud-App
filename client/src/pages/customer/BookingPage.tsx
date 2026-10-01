@@ -1,6 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Check, Calendar, Clock, Car, Sparkles, Loader2, ArrowLeft, CreditCard, QrCode, Gift } from 'lucide-react';
+import { 
+  ChevronLeft, ChevronRight, Check, Calendar, Clock, Car, Sparkles, Loader2, ArrowLeft, 
+  CreditCard, QrCode, Gift, Info, Search, X, MapPin, Navigation, Compass, 
+  LocateFixed, CheckCircle2, Map, AlertCircle, RefreshCw, ExternalLink 
+} from 'lucide-react';
 import { useSlots } from '../../api/hooks/useSlots';
 import { useCreateBooking } from '../../api/hooks/useBookings';
 import Button from '../../components/ui/Button';
@@ -14,7 +18,19 @@ import { getCategoryForModel } from '../../utils/carData';
 import api from '../../api/axiosInstance';
 import { useAuthStore } from '../../store/authStore';
 import QrPaymentModal from '../../components/shared/QrPaymentModal';
+import PaymentSandboxModal from '../../components/shared/PaymentSandboxModal';
 import Modal from '../../components/ui/Modal';
+import ServiceDetailsModal from '../../components/shared/ServiceDetailsModal';
+import { 
+  getDeviceLiveLocation, 
+  reverseGeocodeCoords, 
+  calculateHaversineDistance, 
+  estimateDriveMinutes, 
+  getRouteUrlToStudio, 
+  getMapPinUrl,
+  OWNER_STUDIO_LOCATION,
+  LocationCoordinates 
+} from '../../utils/locationService';
 
 const STEPS = ['Service & Vehicle', 'Date', 'Time', 'Confirm'];
 
@@ -34,6 +50,18 @@ function sortServicesByPriority(services: any[]): any[] {
   return [...services].sort((a, b) => getServicePriority(a.name) - getServicePriority(b.name));
 }
 
+function getServiceImage(name: string): string {
+  const n = (name || '').toLowerCase();
+  if (n.includes('ceramic') || n.includes('coating')) return '/services/ceramic_coating.jpg';
+  if (n.includes('ppf') || n.includes('paint protection') || n.includes('film')) return '/services/ppf_protection.jpg';
+  if (n.includes('interior') || n.includes('deep clean') || n.includes('upholstery') || n.includes('seat')) return '/services/interior_detailing.jpg';
+  if (n.includes('polish') || n.includes('compound') || n.includes('wax') || n.includes('teflon') || n.includes('rubbing')) return '/services/paint_polish.jpg';
+  if (n.includes('exterior body') || n.includes('body wash')) return '/services/exterior_body.jpg';
+  if (n.includes('wash') || n.includes('foam') || n.includes('clean')) return '/services/car_wash.jpg';
+  if (n.includes('detailing') || n.includes('spa') || n.includes('premium')) return '/services/detailing_spa.jpg';
+  return '/services/wash_clean.jpg';
+}
+
 export default function BookingPage() {
   const toast = useUIStore((s) => s.toast);
   const navigate = useNavigate();
@@ -42,6 +70,8 @@ export default function BookingPage() {
 
   const [step, setStep] = useState(0);
   const [filter, setFilter] = useState('sedan');
+  const [serviceSearch, setServiceSearch] = useState('');
+  const [selectedDetailService, setSelectedDetailService] = useState<any | null>(null);
   const [loyalty, setLoyalty] = useState<{ credits: number; free_washes: number; wax_count: number }>({ credits: 0, free_washes: 0, wax_count: 0 });
   const [useFreeWash, setUseFreeWash] = useState(false);
   const [isFirstWashEligible, setIsFirstWashEligible] = useState(false);
@@ -51,6 +81,17 @@ export default function BookingPage() {
   const [qrAmount, setQrAmount] = useState(0);
   const [activeBookingId, setActiveBookingId] = useState<number | undefined>(undefined);
   const [choiceBookingData, setChoiceBookingData] = useState<any | null>(null);
+
+  // Sandbox payment modal state
+  const [sandboxModal, setSandboxModal] = useState<{
+    isOpen: boolean;
+    orderId: string;
+    amount: number;
+    itemName: string;
+    handler: (resp: any) => Promise<void>;
+    onDismiss: () => void;
+    loading?: boolean;
+  } | null>(null);
 
   // Detect if this is a package-booking flow
   const isPackageBooking = searchParams.get('from_package') === '1';
@@ -100,6 +141,13 @@ export default function BookingPage() {
   const [city, setCity] = useState('');
   const [stateName, setStateName] = useState('Gujarat');
   const [pincode, setPincode] = useState('');
+
+  // Live GPS Location (Customer Device & Studio)
+  const [deviceLocationLoading, setDeviceLocationLoading] = useState(false);
+  const [customerCoords, setCustomerCoords] = useState<LocationCoordinates | null>(null);
+  const [distanceToStudio, setDistanceToStudio] = useState<number | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [gpsSuccessFlash, setGpsSuccessFlash] = useState(false);
 
   // Autocomplete data
   const { data: brandsRes } = useBrands();
@@ -156,6 +204,14 @@ export default function BookingPage() {
         const isEligibleFromDirect = fwRes?.data?.is_eligible;
         const finalEligibility = isEligibleFromDirect !== undefined ? isEligibleFromDirect : (isEligibleFromDash ?? false);
         setIsFirstWashEligible(finalEligibility);
+
+        const initialServiceId = searchParams.get('service_id');
+        if (initialServiceId) {
+          const sid = parseInt(initialServiceId);
+          if (!isNaN(sid)) {
+            setSelectedServices([sid]);
+          }
+        }
 
         if (searchParams.get('free_wash') === 'true' && loyaltyData.free_washes > 0) {
           setUseFreeWash(true);
@@ -402,18 +458,14 @@ export default function BookingPage() {
       };
 
       if (orderData.id.startsWith('order_mock_')) {
-        const confirmSimulate = window.confirm(
-          "RAZORPAY SANDBOX MODE (Keys Missing)\n\nWould you like to simulate a successful online payment?"
-        );
-        if (confirmSimulate) {
-          await options.handler({
-            razorpay_order_id: orderData.id,
-            razorpay_payment_id: 'pay_mock_' + Date.now(),
-            razorpay_signature: 'sig_mock_' + Date.now()
-          });
-        } else {
-          options.modal.ondismiss();
-        }
+        setSandboxModal({
+          isOpen: true,
+          orderId: orderData.id,
+          amount: advanceAmt,
+          itemName: 'Slot Advance Booking',
+          handler: options.handler,
+          onDismiss: options.modal.ondismiss,
+        });
         return;
       }
 
@@ -424,6 +476,44 @@ export default function BookingPage() {
       toast('error', err.message || 'An error occurred during Razorpay checkout.');
     } finally {
       setSubmittingOnline(false);
+    }
+  };
+
+  // ─── Fetch Device Live Location (100% Accurate GPS) ────────
+  const handleFetchLiveLocation = async (autoFillAddress = true) => {
+    setDeviceLocationLoading(true);
+    setLocationError(null);
+    try {
+      const coords = await getDeviceLiveLocation();
+      setCustomerCoords(coords);
+
+      const distKm = calculateHaversineDistance(
+        coords.lat,
+        coords.lng,
+        OWNER_STUDIO_LOCATION.lat,
+        OWNER_STUDIO_LOCATION.lng
+      );
+      setDistanceToStudio(distKm);
+
+      if (autoFillAddress) {
+        const geo = await reverseGeocodeCoords(coords.lat, coords.lng);
+        if (geo.street) setPickupAddress(geo.street);
+        if (geo.landmark) setLandmark(geo.landmark);
+        if (geo.city) setCity(geo.city);
+        if (geo.state) setStateName(geo.state);
+        if (geo.pincode) setPincode(geo.pincode);
+        setSelectedAddressId('new');
+      }
+
+      setGpsSuccessFlash(true);
+      setTimeout(() => setGpsSuccessFlash(false), 4000);
+      toast('success', `Live GPS detected! ${distKm} km from Gotri-Vasna-Bhayli Studio`);
+    } catch (err: any) {
+      console.error('GPS error:', err);
+      setLocationError(err.message || 'Unable to retrieve device GPS location.');
+      toast('error', err.message || 'GPS location error');
+    } finally {
+      setDeviceLocationLoading(false);
     }
   };
 
@@ -449,7 +539,10 @@ export default function BookingPage() {
           landmark,
           city,
           state: stateName,
-          pincode
+          pincode,
+          latitude: customerCoords?.lat,
+          longitude: customerCoords?.lng,
+          distance_to_studio_km: distanceToStudio,
         } : undefined
       });
 
@@ -458,9 +551,12 @@ export default function BookingPage() {
       if (bookingData && bookingData.id && (pickupOption === 'pickup' || pickupOption === 'both')) {
         await api.post('/pickup-requests', {
           booking_id: bookingData.id,
-          address: `${pickupAddress}${landmark ? ', Landmark: ' + landmark : ''}, ${city}, ${stateName} - ${pincode}`,
+          address: `${pickupAddress}${landmark ? ', Landmark: ' + landmark : ''}, ${city}, ${stateName} - ${pincode}${customerCoords ? ` [GPS: ${customerCoords.lat.toFixed(6)}, ${customerCoords.lng.toFixed(6)}]` : ''}`,
           scheduled_time: pickupTime || undefined,
-          request_type: pickupOption
+          request_type: pickupOption,
+          latitude: customerCoords?.lat,
+          longitude: customerCoords?.lng,
+          distance_km: distanceToStudio,
         });
       }
 
@@ -770,9 +866,10 @@ export default function BookingPage() {
                           return false;
                         });
                         const isSelected = selectedPackageServiceNames.includes(usage.service_name);
+                        const packageImg = matchedService?.image_url || getServiceImage(usage.service_name);
 
                         return (
-                          <button
+                          <div
                             key={usage.service_name}
                             onClick={() => {
                               setSelectedPackageServiceNames(prev => 
@@ -782,41 +879,88 @@ export default function BookingPage() {
                               );
                               setSelectedPackage(activePackages[0].package_id);
                             }}
-                            className={`text-left p-4 rounded-lg border-2 transition-all ${
-                              isSelected ? 'border-purple-500 bg-purple-50/50' :
-                              'border-gray-100 bg-white hover:border-purple-200'
+                            className={`group text-left rounded-2xl border-2 transition-all duration-200 overflow-hidden cursor-pointer flex flex-col sm:flex-row items-stretch ${
+                              isSelected
+                                ? 'border-purple-600 bg-purple-50/40 shadow-md ring-2 ring-purple-500/10'
+                                : 'border-slate-200 bg-white hover:border-purple-200 shadow-sm hover:shadow'
                             }`}
                           >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <Sparkles size={14} className={usage.complimentary > 0 ? "text-purple-500" : "text-blue-500"} />
-                                <p className="font-bold text-[#1c1b1b]">
-                                  {usage.service_name}
-                                  <span className={`ml-2 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                                    usage.complimentary > 0 ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700'
-                                  }`}>
-                                    {usage.complimentary > 0 ? 'Free' : 'Mandatory'}
+                            {/* Service Image */}
+                            <div className="relative w-full sm:w-44 h-32 sm:h-auto shrink-0 overflow-hidden bg-slate-100">
+                              <img
+                                src={packageImg}
+                                alt={usage.service_name}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t sm:bg-gradient-to-r from-black/50 via-transparent to-transparent pointer-events-none" />
+                              {matchedService?.duration_minutes && (
+                                <div className="absolute top-2.5 left-2.5">
+                                  <span className="px-2 py-0.5 bg-white/95 backdrop-blur-md text-slate-800 text-[10px] font-bold rounded-full flex items-center gap-1 shadow-sm">
+                                    <Clock size={10} className="text-slate-500" />
+                                    ~{matchedService.duration_minutes} min
                                   </span>
-                                  {matchedService?.duration_minutes ? ` · ~${matchedService.duration_minutes} min` : ''}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${
-                                  usage.remaining > 1 ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-amber-50 text-amber-600 border border-amber-200'
-                                }`}>
-                                  {usage.remaining} / {usage.total_count} left
-                                </span>
-                                <div className={`w-5 h-5 rounded border flex items-center justify-center ${
-                                  isSelected ? 'bg-purple-500 border-purple-500' : 'border-gray-300'
-                                }`}>
-                                  {isSelected && <Check size={12} className="text-white" />}
                                 </div>
+                              )}
+                            </div>
+
+                            {/* Details */}
+                            <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between">
+                              <div>
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <h4 className="font-extrabold text-[#1c1b1b] text-sm sm:text-base leading-snug group-hover:text-purple-700 transition-colors">
+                                        {usage.service_name}
+                                      </h4>
+                                      <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                                        usage.complimentary > 0 ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                                      }`}>
+                                        {usage.complimentary > 0 ? 'Free Credit' : 'Mandatory'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all shrink-0 ml-2 ${
+                                    isSelected ? 'bg-purple-600 border-purple-600 text-white shadow-sm' : 'border-slate-300 bg-white group-hover:border-purple-300'
+                                  }`}>
+                                    {isSelected && <Check size={14} strokeWidth={3} className="text-white" />}
+                                  </div>
+                                </div>
+
+                                {matchedService?.description && (
+                                  <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed font-normal">
+                                    {matchedService.description}
+                                  </p>
+                                )}
+
+                                {matchedService && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedDetailService(matchedService);
+                                    }}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-600 hover:text-purple-800 mt-2 hover:underline"
+                                  >
+                                    <Info size={12} />
+                                    <span>View service details & process</span>
+                                  </button>
+                                )}
+                              </div>
+
+                              <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100">
+                                <span className={`text-xs font-bold px-2 py-0.5 rounded-lg border ${
+                                  usage.remaining > 1 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'
+                                }`}>
+                                  {usage.remaining} of {usage.total_count} remaining in plan
+                                </span>
+                                <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition-colors ${
+                                  isSelected ? 'bg-purple-100 text-purple-700 font-extrabold' : 'bg-slate-100 text-slate-600'
+                                }`}>
+                                  {isSelected ? '✓ Selected' : '+ Use Credit'}
+                                </span>
                               </div>
                             </div>
-                            {matchedService?.description && (
-                              <p className="text-xs text-[#5f5e5e] mt-1 ml-[22px] line-clamp-2">{matchedService.description}</p>
-                            )}
-                          </button>
+                          </div>
                         );
                       });
                     })()}
@@ -856,52 +1000,196 @@ export default function BookingPage() {
                 <div className="space-y-6">
                   {services.length > 0 && (
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-3">Services</p>
-                      <div className="grid gap-3">
-                        {sortServicesByPriority(services.filter(s => s.is_active && (!useFreeWash || s.name.toLowerCase().includes('wash')))).map((svc) => {
-                          const isSelected = selectedServices.includes(svc.id);
-                          return (
+                      {/* Section Header and Search */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3.5">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e]">
+                            Select Detailing Services
+                          </p>
+                          <p className="text-xs text-slate-500 font-medium">
+                            Choose one or multiple services for this appointment
+                          </p>
+                        </div>
+
+                        {/* Search Input */}
+                        <div className="relative w-full sm:w-60">
+                          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="text"
+                            value={serviceSearch}
+                            onChange={(e) => setServiceSearch(e.target.value)}
+                            placeholder="Search washes, coatings..."
+                            className="w-full pl-8 pr-7 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/40 outline-none transition-all shadow-sm"
+                          />
+                          {serviceSearch && (
                             <button
-                              key={svc.id}
-                              onClick={() => {
-                                setSelectedServices(prev => prev.includes(svc.id) ? prev.filter(id => id !== svc.id) : [...prev, svc.id]);
-                                setSelectedPackage(null);
-                                setSelectedPackageServiceNames([]);
-                              }}
-                              className={`text-left p-4 rounded-lg border-2 transition-all ${
-                                isSelected ? 'border-[#D32F2F] bg-red-50/30' : 'border-gray-100 bg-white hover:border-gray-200'
-                              }`}
+                              type="button"
+                              onClick={() => setServiceSearch('')}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                             >
-                              <div className="flex items-center justify-between">
-                                <p className="font-bold text-[#1c1b1b]">{svc.name}{svc.duration_minutes ? ` · ~${svc.duration_minutes} min` : ''}</p>
-                                <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-[#D32F2F] border-[#D32F2F]' : 'border-gray-300'}`}>
-                                  {isSelected && <Check size={12} className="text-white" />}
-                                </div>
-                              </div>
-                            {svc.description && <p className="text-xs text-[#5f5e5e] mt-1 line-clamp-2">{svc.description}</p>}
-                            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-[#5f5e5e]">
-                              <span className="font-bold text-[#D32F2F]">
-                                {(() => {
-                                  const p = parseFloat(String(svc[`price_${filter}`] || svc.price_sedan || 0));
-                                  if (p <= 0) return 'Ask Studio';
-                                  const isWash = svc.name && svc.name.toLowerCase().includes('wash');
-                                  if (isFirstWashEligible && isWash && !isPackageBooking) {
-                                    const discounted = Math.round(p * 0.50);
-                                    return (
-                                      <span className="inline-flex items-center gap-1.5">
-                                        <span className="line-through text-gray-400 text-[11px]">₹{p}</span>
-                                        <span className="font-extrabold text-[#D32F2F]">₹{discounted}</span>
-                                        <span className="text-[9px] font-black bg-red-100 text-red-700 px-1.5 py-0.5 rounded">50% OFF</span>
-                                      </span>
-                                    );
-                                  }
-                                  return `₹${p}`;
-                                })()}
-                              </span>
-                            </div>
-                          </button>
-                        );})}
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
                       </div>
+
+                      {/* Filtered Services List */}
+                      {(() => {
+                        const activeList = sortServicesByPriority(
+                          services.filter(s => s.is_active && (!useFreeWash || (s.name && s.name.toLowerCase().includes('wash'))))
+                        ).filter(s => {
+                          if (!serviceSearch.trim()) return true;
+                          const q = serviceSearch.toLowerCase().trim();
+                          return (s.name && s.name.toLowerCase().includes(q)) || (s.description && s.description.toLowerCase().includes(q));
+                        });
+
+                        if (activeList.length === 0) {
+                          return (
+                            <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
+                              <p className="text-xs font-bold text-slate-600">No services match "{serviceSearch}"</p>
+                              <button
+                                type="button"
+                                onClick={() => setServiceSearch('')}
+                                className="mt-2 text-xs font-extrabold text-[#D32F2F] hover:underline"
+                              >
+                                Clear search
+                              </button>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="grid gap-3.5">
+                            {activeList.map((svc) => {
+                              const isSelected = selectedServices.includes(svc.id);
+                              const p = parseFloat(String(svc[`price_${filter}`] || svc.price_sedan || 0));
+                              const isWash = svc.name && svc.name.toLowerCase().includes('wash');
+                              const hasDiscount = isFirstWashEligible && isWash && !isPackageBooking && p > 0;
+                              const discounted = hasDiscount ? Math.round(p * 0.50) : p;
+                              const serviceImg = svc.image_url || getServiceImage(svc.name);
+
+                              return (
+                                <div
+                                  key={svc.id}
+                                  onClick={() => {
+                                    setSelectedServices(prev =>
+                                      prev.includes(svc.id) ? prev.filter(id => id !== svc.id) : [...prev, svc.id]
+                                    );
+                                    setSelectedPackage(null);
+                                    setSelectedPackageServiceNames([]);
+                                  }}
+                                  className={`group text-left rounded-2xl border-2 transition-all duration-200 overflow-hidden cursor-pointer flex flex-col sm:flex-row items-stretch ${
+                                    isSelected
+                                      ? 'border-[#D32F2F] bg-red-50/20 shadow-md ring-2 ring-red-500/10'
+                                      : 'border-slate-200/90 bg-white hover:border-slate-300 shadow-sm hover:shadow'
+                                  }`}
+                                >
+                                  {/* Service Relevant Image */}
+                                  <div className="relative w-full sm:w-44 h-36 sm:h-auto shrink-0 overflow-hidden bg-slate-100">
+                                    <img
+                                      src={serviceImg}
+                                      alt={svc.name}
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                    />
+                                    <div className="absolute inset-0 bg-gradient-to-t sm:bg-gradient-to-r from-black/50 via-transparent to-transparent pointer-events-none" />
+
+                                    {/* Duration Badge */}
+                                    {svc.duration_minutes && (
+                                      <div className="absolute top-2.5 left-2.5">
+                                        <span className="px-2 py-0.5 bg-white/95 backdrop-blur-md text-slate-800 text-[10px] font-bold rounded-full flex items-center gap-1 shadow-sm">
+                                          <Clock size={10} className="text-slate-500" />
+                                          ~{svc.duration_minutes} min
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {/* 50% Off First Wash Badge */}
+                                    {hasDiscount && (
+                                      <div className="absolute top-2.5 right-2.5 sm:right-auto sm:left-2.5 sm:top-9">
+                                        <span className="px-2 py-0.5 bg-gradient-to-r from-amber-500 to-red-500 text-white text-[9px] font-black uppercase tracking-wider rounded-full shadow-md animate-pulse">
+                                          50% OFF 🎉
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Service Info & Content */}
+                                  <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between">
+                                    <div>
+                                      {/* Header row: title and checkbox */}
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="flex-1">
+                                          <h4 className="font-extrabold text-[#1c1b1b] text-sm sm:text-base leading-snug group-hover:text-[#D32F2F] transition-colors">
+                                            {svc.name}
+                                          </h4>
+                                          {svc.category_name && (
+                                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                              {svc.category_name}
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {/* Selection Checkbox */}
+                                        <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all shrink-0 ml-2 ${
+                                          isSelected ? 'bg-[#D32F2F] border-[#D32F2F] text-white shadow-sm' : 'border-slate-300 bg-white group-hover:border-slate-400'
+                                        }`}>
+                                          {isSelected && <Check size={14} strokeWidth={3} className="text-white" />}
+                                        </div>
+                                      </div>
+
+                                      {/* Description */}
+                                      {svc.description && (
+                                        <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed font-normal">
+                                          {svc.description}
+                                        </p>
+                                      )}
+
+                                      {/* View Details Modal Trigger */}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedDetailService(svc);
+                                        }}
+                                        className="inline-flex items-center gap-1 text-[11px] font-bold text-[#D32F2F] hover:text-red-700 mt-2 hover:underline"
+                                      >
+                                        <Info size={12} />
+                                        <span>View service details & process</span>
+                                      </button>
+                                    </div>
+
+                                    {/* Footer row: pricing & selection status */}
+                                    <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100">
+                                      <div>
+                                        {p <= 0 ? (
+                                          <span className="text-xs font-bold text-slate-600">Ask Studio</span>
+                                        ) : hasDiscount ? (
+                                          <div className="flex items-center gap-2">
+                                            <span className="line-through text-slate-400 text-xs font-medium">₹{p}</span>
+                                            <span className="text-base font-black text-[#D32F2F]">₹{discounted}</span>
+                                            <span className="text-[9px] font-black bg-red-100 text-red-700 px-1.5 py-0.5 rounded">First Wash</span>
+                                          </div>
+                                        ) : (
+                                          <span className="text-base font-black text-[#1c1b1b]">₹{p}</span>
+                                        )}
+                                        <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">
+                                          For {filter === 'medium_hatchback' ? 'Med Hatch' : filter === 'premium_sedan' ? 'Prem Sedan' : filter.toUpperCase().replace('_', ' ')}
+                                        </p>
+                                      </div>
+
+                                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition-colors ${
+                                        isSelected ? 'bg-red-100 text-red-700 font-extrabold' : 'bg-slate-100 text-slate-600 group-hover:bg-slate-200'
+                                      }`}>
+                                        {isSelected ? '✓ Selected' : '+ Select'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
 
@@ -1221,22 +1509,170 @@ export default function BookingPage() {
               </div>
             )}
 
-            {/* Pickup & Drop Option Section */}
-            <div className="mt-4 p-4 rounded-xl border border-gray-100 bg-gray-50/50 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-[#5f5e5e] mb-1.5 uppercase tracking-wide">Pickup & Drop Option</label>
+            {/* ─── Studio & Customer Live Location Hub ─── */}
+            <div className="mt-4 rounded-2xl border border-red-100 bg-gradient-to-br from-red-50/40 via-white to-amber-50/30 p-4 sm:p-5 shadow-sm space-y-4">
+              {/* Owner Studio Live Location */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                    </span>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                      Owner Studio Live
+                    </span>
+                    <span className="text-[10px] font-bold text-gray-500">Gotri - Vasna - Bhayli</span>
+                  </div>
+                  <h4 className="text-sm sm:text-base font-black text-gray-900 flex items-center gap-1.5">
+                    <MapPin size={16} className="text-[#D32F2F] shrink-0" />
+                    {OWNER_STUDIO_LOCATION.name}
+                  </h4>
+                  <p className="text-xs text-gray-600 leading-snug">
+                    {OWNER_STUDIO_LOCATION.address}
+                  </p>
+                  <p className="text-[11px] text-gray-400 font-mono">
+                    Studio GPS: {OWNER_STUDIO_LOCATION.lat.toFixed(4)}° N, {OWNER_STUDIO_LOCATION.lng.toFixed(4)}° E
+                  </p>
+                </div>
+
+                <a
+                  href={getMapPinUrl(OWNER_STUDIO_LOCATION.lat, OWNER_STUDIO_LOCATION.lng, OWNER_STUDIO_LOCATION.name)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 hover:text-[#D32F2F] hover:border-red-200 shadow-2xs transition-all text-xs font-bold shrink-0 self-start sm:self-center"
+                  title="View Studio on Google Maps"
+                >
+                  <Map size={14} className="text-[#D32F2F]" />
+                  <span>View Studio Pin</span>
+                  <ExternalLink size={11} className="text-gray-400" />
+                </a>
+              </div>
+
+              {/* Customer Live Device Location */}
+              {customerCoords ? (
+                <div className="p-3.5 bg-white rounded-xl border border-emerald-200 shadow-xs space-y-2.5 animate-fade-in">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                        <CheckCircle2 size={16} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-gray-900 flex items-center gap-1.5">
+                          <span>Customer Live GPS Active</span>
+                          <span className="text-[9px] font-bold text-white bg-emerald-600 px-1.5 py-0.5 rounded uppercase">100% Accurate</span>
+                        </p>
+                        <p className="text-[10px] text-emerald-700 font-medium">
+                          {customerCoords.accuracy ? `Device GPS Hardware Accuracy: ±${customerCoords.accuracy.toFixed(0)}m` : 'Accurate device coordinates detected'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleFetchLiveLocation(pickupOption !== 'none')}
+                      disabled={deviceLocationLoading}
+                      className="px-2.5 py-1 text-[11px] font-bold text-gray-600 hover:text-[#D32F2F] bg-gray-50 hover:bg-red-50 rounded-lg border border-gray-200/80 transition-colors flex items-center gap-1"
+                      title="Re-scan device location"
+                    >
+                      <RefreshCw size={11} className={deviceLocationLoading ? 'animate-spin' : ''} />
+                      <span>Re-scan</span>
+                    </button>
+                  </div>
+
+                  {/* Distance & Drive Time to Gotri-Vasna-Bhayli Studio */}
+                  {distanceToStudio !== null && (
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+                      <div className="p-2.5 bg-slate-50 rounded-lg text-center border border-slate-100">
+                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Live Road Distance</p>
+                        <p className="text-base font-black text-gray-900 mt-0.5">
+                          {distanceToStudio} km
+                        </p>
+                        <p className="text-[9px] text-gray-400">To Bhayli-Gotri Studio</p>
+                      </div>
+                      <div className="p-2.5 bg-slate-50 rounded-lg text-center border border-slate-100">
+                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Est. Drive Time</p>
+                        <p className="text-base font-black text-gray-900 mt-0.5">
+                          ~{estimateDriveMinutes(distanceToStudio)} mins
+                        </p>
+                        <p className="text-[9px] text-gray-400">City traffic estimate</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-1 text-xs">
+                    <span className="text-[11px] font-mono text-gray-500">
+                      GPS: {customerCoords.lat.toFixed(5)}° N, {customerCoords.lng.toFixed(5)}° E
+                    </span>
+                    <a
+                      href={getRouteUrlToStudio(customerCoords.lat, customerCoords.lng)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 font-bold text-xs text-[#D32F2F] hover:underline"
+                    >
+                      <Navigation size={13} />
+                      <span>Drive Route in Maps</span>
+                      <ExternalLink size={10} />
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3.5 bg-white rounded-xl border border-gray-200/90 shadow-2xs space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-black text-gray-900 flex items-center gap-1.5">
+                        <LocateFixed size={15} className="text-[#D32F2F]" />
+                        Customer Live Location (Device GPS)
+                      </p>
+                      <p className="text-[11px] text-gray-500 leading-snug">
+                        Fetch 100% accurate coordinates directly from your device GPS chip for pickup & distance calculation.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={() => handleFetchLiveLocation(pickupOption !== 'none')}
+                      loading={deviceLocationLoading}
+                      className="bg-[#D32F2F] hover:bg-[#b52626] text-white text-xs font-bold py-2 px-3.5 rounded-xl shrink-0 shadow-sm"
+                      icon={<Compass size={14} />}
+                    >
+                      Fetch Live Location
+                    </Button>
+                  </div>
+
+                  {locationError && (
+                    <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-xs text-red-700 animate-fade-in">
+                      <AlertCircle size={14} className="shrink-0 mt-0.5 text-red-500" />
+                      <div>
+                        <p className="font-bold">Location Access Notice</p>
+                        <p className="text-[11px] mt-0.5">{locationError}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Pickup & Drop Option Selection */}
+              <div className="pt-2 border-t border-gray-100">
+                <label className="block text-xs font-bold text-[#5f5e5e] mb-1.5 uppercase tracking-wide">
+                  Pickup & Drop Option
+                </label>
                 <select
                   value={pickupOption}
-                  onChange={(e) => setPickupOption(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-bold text-[#1c1b1b] focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 transition-all cursor-pointer"
+                  onChange={(e) => {
+                    const opt = e.target.value as any;
+                    setPickupOption(opt);
+                    if (opt !== 'none' && customerCoords && !pickupAddress) {
+                      handleFetchLiveLocation(true);
+                    }
+                  }}
+                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-bold text-[#1c1b1b] focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 transition-all cursor-pointer"
                 >
-                  <option value="none">None (No Pickup/Drop)</option>
-                  <option value="pickup">Pickup Only</option>
-                  <option value="drop">Drop Only</option>
-                  <option value="both">Pickup + Drop</option>
+                  <option value="none">None (Visit Studio at Gotri - Vasna - Bhayli Road)</option>
+                  <option value="pickup">Doorstep Pickup Only (to Studio)</option>
+                  <option value="drop">Doorstep Drop Only (from Studio)</option>
+                  <option value="both">Doorstep Pickup + Drop (Round Trip)</option>
                 </select>
                 <p className="text-[11px] text-[#5f5e5e] mt-1">
-                  {pickupOption === 'none' ? 'No extra charges apply.' :
+                  {pickupOption === 'none' ? 'Self-drive to our Gotri - Vasna - Bhayli studio. No valet charges apply.' :
                    activePackageHasFreePickup ? '🎉 Free Pickup & Drop under your active package!' :
                    pickupOption === 'pickup' ? `Pickup charge: ₹${settings.pickup_charge || 150}` :
                    pickupOption === 'drop' ? `Drop charge: ₹${settings.drop_charge || 150}` :
@@ -1244,8 +1680,24 @@ export default function BookingPage() {
                 </p>
               </div>
 
+              {/* Doorstep Address Form */}
               {pickupOption !== 'none' && (
-                <div className="space-y-3 pt-2 border-t border-gray-200/50 animate-fade-in-up">
+                <div className="space-y-3 pt-3 border-t border-gray-200/60 animate-fade-in-up">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-black text-gray-900 uppercase tracking-wide">
+                      Doorstep Valet Address
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => handleFetchLiveLocation(true)}
+                      disabled={deviceLocationLoading}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-[#D32F2F] hover:underline"
+                    >
+                      <LocateFixed size={12} />
+                      <span>{customerCoords ? 'Re-fill from Live GPS' : 'Auto-fill from Device GPS'}</span>
+                    </button>
+                  </div>
+
                   {savedAddresses.length > 0 && (
                     <div>
                       <label className="block text-xs font-semibold text-gray-700 mb-1">Select Saved Address</label>
@@ -1259,14 +1711,14 @@ export default function BookingPage() {
                             if (addr) {
                               setPickupAddress(addr.address);
                               setLandmark(addr.landmark || '');
-                              setCity(addr.city || '');
+                              setCity(addr.city || 'Vadodara');
                               setStateName(addr.state || 'Gujarat');
                               setPincode(addr.pincode || '');
                             }
                           } else {
                             setPickupAddress('');
                             setLandmark('');
-                            setCity('');
+                            setCity('Vadodara');
                             setStateName('Gujarat');
                             setPincode('');
                           }
@@ -1278,7 +1730,7 @@ export default function BookingPage() {
                             📍 {addr.address}, {addr.city} {addr.is_default ? '(Default)' : ''}
                           </option>
                         ))}
-                        <option value="new">+ Add New Address</option>
+                        <option value="new">+ Add New Address / Use Live GPS</option>
                       </select>
                     </div>
                   )}
@@ -1289,7 +1741,7 @@ export default function BookingPage() {
                       rows={2}
                       value={pickupAddress}
                       onChange={(e) => setPickupAddress(e.target.value)}
-                      placeholder="Street address, building, apartment..."
+                      placeholder="House / flat no, apartment name, street..."
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white"
                       required
                       disabled={selectedAddressId !== 'new'}
@@ -1303,7 +1755,7 @@ export default function BookingPage() {
                         type="text"
                         value={landmark}
                         onChange={(e) => setLandmark(e.target.value)}
-                        placeholder="Near mall..."
+                        placeholder="Near Gotri / Bhayli circle..."
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white"
                         disabled={selectedAddressId !== 'new'}
                       />
@@ -1341,7 +1793,7 @@ export default function BookingPage() {
                         type="text"
                         value={pincode}
                         onChange={(e) => setPincode(e.target.value)}
-                        placeholder="390001"
+                        placeholder="390021"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white"
                         required
                         disabled={selectedAddressId !== 'new'}
@@ -1445,6 +1897,53 @@ export default function BookingPage() {
           </div>
         </Modal>
       )}
+
+      <PaymentSandboxModal
+        isOpen={!!sandboxModal?.isOpen}
+        orderId={sandboxModal?.orderId || ''}
+        amount={sandboxModal?.amount || 0}
+        itemName={sandboxModal?.itemName || 'Slot Advance Booking'}
+        isLoading={!!sandboxModal?.loading}
+        onSimulateSuccess={async () => {
+          if (!sandboxModal) return;
+          try {
+            setSandboxModal(prev => prev ? { ...prev, loading: true } : null);
+            await sandboxModal.handler({
+              razorpay_order_id: sandboxModal.orderId,
+              razorpay_payment_id: 'pay_mock_' + Date.now(),
+              razorpay_signature: 'sig_mock_' + Date.now(),
+            });
+            setSandboxModal(null);
+          } catch (e: any) {
+            setSandboxModal(prev => prev ? { ...prev, loading: false } : null);
+          }
+        }}
+        onSimulateFailure={() => {
+          if (sandboxModal) {
+            sandboxModal.onDismiss();
+            setSandboxModal(null);
+          }
+        }}
+        onClose={() => {
+          if (sandboxModal) {
+            sandboxModal.onDismiss();
+            setSandboxModal(null);
+          }
+        }}
+      />
+
+      {/* Service Details & Process Modal */}
+      <ServiceDetailsModal
+        isOpen={!!selectedDetailService}
+        onClose={() => setSelectedDetailService(null)}
+        service={selectedDetailService}
+        isFirstWashEligible={isFirstWashEligible}
+        onSelect={(svc) => {
+          setSelectedServices((prev) => (prev.includes(svc.id) ? prev : [...prev, svc.id]));
+          setSelectedPackage(null);
+          setSelectedPackageServiceNames([]);
+        }}
+      />
     </div>
   );
 }

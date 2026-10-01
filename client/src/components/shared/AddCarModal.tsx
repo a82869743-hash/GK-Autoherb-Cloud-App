@@ -5,6 +5,7 @@ import { carBrands as fallbackCarBrands, getModelsForBrand, getCategoryForModel 
 import { useBrands, useModels } from '../../api/hooks/useVehicles';
 import api from '../../api/axiosInstance';
 import { useQueryClient } from '@tanstack/react-query';
+import CarImage from './CarImage';
 
 interface AddCarModalProps {
   isOpen: boolean;
@@ -204,6 +205,26 @@ export default function AddCarModal({ isOpen, onClose, editVehicle }: AddCarModa
               <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
           </div>
+
+          {/* Live Real Car Photo Preview */}
+          {finalBrand && finalModel && (
+            <div className="p-2.5 bg-slate-50/80 rounded-xl border border-slate-200/80">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                  Model Preview
+                </span>
+                <span className="text-[10px] font-bold text-[#D32F2F]">
+                  {finalBrand} {finalModel}
+                </span>
+              </div>
+              <CarImage
+                brand={finalBrand}
+                model={finalModel}
+                containerClassName="h-28 w-full rounded-lg bg-white p-2 border border-slate-100"
+                showShadow
+              />
+            </div>
+          )}
 
           {/* Submit */}
           <button type="submit" disabled={isPending || !finalBrand || !finalModel} className="w-full py-3.5 bg-gradient-to-br from-[#af101a] to-[#D32F2F] text-white font-bold rounded-lg shadow-lg shadow-[#D32F2F]/20 hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 uppercase tracking-wider text-sm">

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Clock, CheckCircle2, ListChecks, ShieldCheck, ArrowRight } from 'lucide-react';
+import { Sparkles, Clock, CheckCircle2, ListChecks, ShieldCheck, ArrowRight, X } from 'lucide-react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 
@@ -9,9 +9,10 @@ interface ServiceDetailsModalProps {
   onClose: () => void;
   service: any;
   isFirstWashEligible?: boolean;
+  onSelect?: (service: any) => void;
 }
 
-export default function ServiceDetailsModal({ isOpen, onClose, service }: ServiceDetailsModalProps) {
+export default function ServiceDetailsModal({ isOpen, onClose, service, onSelect }: ServiceDetailsModalProps) {
   const navigate = useNavigate();
 
   if (!service) return null;
@@ -55,18 +56,59 @@ export default function ServiceDetailsModal({ isOpen, onClose, service }: Servic
   }
 
   return (
-    <Modal open={isOpen} onClose={onClose} title="" size="lg">
-      <div className="space-y-6">
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      title=""
+      size="lg"
+      footer={
+        <div className="flex items-center justify-between w-full gap-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-5 py-2 text-xs font-bold text-gray-500 hover:text-gray-800 transition-colors"
+          >
+            Close
+          </button>
+
+          <Button
+            onClick={() => {
+              onClose();
+              if (onSelect) {
+                onSelect(service);
+              } else {
+                navigate(`/customer/bookings/new?service_id=${service.id}`);
+              }
+            }}
+            className="bg-[#D32F2F] hover:bg-[#b52626] text-white py-2 px-5 font-bold text-xs rounded-xl shadow-md"
+            icon={<ArrowRight size={15} />}
+          >
+            {onSelect ? 'Select This Service' : 'Book This Service Now'}
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-5">
         {/* Banner Header */}
-        <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-gray-900 via-zinc-900 to-[#1c1b1b] p-6 text-white shadow-xl">
+        <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-gray-900 via-zinc-900 to-[#1c1b1b] p-5 sm:p-6 text-white shadow-xl">
+          {/* Top-right close button */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute top-3.5 right-3.5 z-20 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-md transition-all shadow-sm"
+            aria-label="Close"
+          >
+            <X size={16} />
+          </button>
+
           {service.image_url && (
             <img
               src={service.image_url}
               alt={service.name}
-              className="absolute inset-0 w-full h-full object-cover opacity-20"
+              className="absolute inset-0 w-full h-full object-cover opacity-20 pointer-events-none"
             />
           )}
-          <div className="relative z-10 space-y-2">
+          <div className="relative z-10 space-y-2 pr-8">
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-0.5 bg-red-600/90 text-white text-[10px] font-black uppercase tracking-wider rounded-md">
                 {service.category_name || 'GK AutoHerb Service'}
@@ -77,12 +119,12 @@ export default function ServiceDetailsModal({ isOpen, onClose, service }: Servic
                 </span>
               )}
             </div>
-            <h2 className="text-2xl font-black text-white">{service.name}</h2>
+            <h2 className="text-xl sm:text-2xl font-black text-white">{service.name}</h2>
             <p className="text-xs text-gray-300 max-w-xl leading-relaxed">
               {service.description || 'Comprehensive professional car care service engineered for maximum protection and showroom finish.'}
             </p>
 
-            <div className="flex items-center gap-4 pt-2 text-xs font-bold text-gray-300">
+            <div className="flex items-center gap-4 pt-1.5 text-xs font-bold text-gray-300">
               <div className="flex items-center gap-1.5">
                 <Clock size={14} className="text-red-500" />
                 <span>{service.duration_minutes || 60} Minutes</span>
@@ -95,19 +137,19 @@ export default function ServiceDetailsModal({ isOpen, onClose, service }: Servic
           </div>
         </div>
 
-        {/* 2-Column Grid: Key Features & What's Included */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Key Features */}
+        {/* 2-Column Grid: Key Highlights & What's Included */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          {/* Key Highlights */}
           {features.length > 0 && (
-            <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2.5">
+            <div className="p-3.5 sm:p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
               <h4 className="text-xs font-black uppercase tracking-wider text-gray-700 flex items-center gap-2">
-                <Sparkles size={15} className="text-amber-500" />
+                <Sparkles size={14} className="text-amber-500" />
                 Key Highlights
               </h4>
-              <ul className="space-y-2 text-xs font-medium text-gray-700">
+              <ul className="space-y-1.5 text-xs font-medium text-gray-700">
                 {features.map((item: string, idx: number) => (
                   <li key={idx} className="flex items-start gap-2">
-                    <CheckCircle2 size={14} className="text-emerald-500 shrink-0 mt-0.5" />
+                    <CheckCircle2 size={13} className="text-emerald-500 shrink-0 mt-0.5" />
                     <span>{item}</span>
                   </li>
                 ))}
@@ -117,15 +159,15 @@ export default function ServiceDetailsModal({ isOpen, onClose, service }: Servic
 
           {/* What's Included */}
           {whatsIncluded.length > 0 && (
-            <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2.5">
+            <div className="p-3.5 sm:p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
               <h4 className="text-xs font-black uppercase tracking-wider text-gray-700 flex items-center gap-2">
-                <ListChecks size={15} className="text-blue-500" />
+                <ListChecks size={14} className="text-blue-500" />
                 What's Included
               </h4>
-              <ul className="space-y-2 text-xs font-medium text-gray-700">
+              <ul className="space-y-1.5 text-xs font-medium text-gray-700">
                 {whatsIncluded.map((item: string, idx: number) => (
                   <li key={idx} className="flex items-start gap-2">
-                    <CheckCircle2 size={14} className="text-blue-500 shrink-0 mt-0.5" />
+                    <CheckCircle2 size={13} className="text-blue-500 shrink-0 mt-0.5" />
                     <span>{item}</span>
                   </li>
                 ))}
@@ -136,9 +178,9 @@ export default function ServiceDetailsModal({ isOpen, onClose, service }: Servic
 
         {/* Process Steps */}
         {processSteps.length > 0 && (
-          <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2.5">
+          <div className="p-3.5 sm:p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
             <h4 className="text-xs font-black uppercase tracking-wider text-gray-700 flex items-center gap-2">
-              <ShieldCheck size={15} className="text-purple-500" />
+              <ShieldCheck size={14} className="text-purple-500" />
               Service Process & Workflow
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-medium text-gray-700">
@@ -166,36 +208,15 @@ export default function ServiceDetailsModal({ isOpen, onClose, service }: Servic
             ].map((seg) => {
               const val = parseFloat(service[seg.key]) || 0;
               return (
-                <div key={seg.key} className="p-3 bg-gray-50 rounded-xl border border-gray-200/60">
+                <div key={seg.key} className="p-2.5 sm:p-3 bg-gray-50 rounded-xl border border-gray-200/60">
                   <p className="text-[9px] font-bold text-gray-400 uppercase">{seg.label}</p>
-                  <p className="text-xs font-black text-gray-900 mt-0.5">
+                  <p className="text-xs sm:text-sm font-black text-gray-900 mt-0.5">
                     {val > 0 ? `₹${val}` : 'Ask Studio'}
                   </p>
                 </div>
               );
             })}
           </div>
-        </div>
-
-        {/* Modal Action CTA */}
-        <div className="pt-4 border-t border-gray-100 flex items-center justify-between gap-4">
-          <button
-            onClick={onClose}
-            className="px-5 py-2.5 text-xs font-bold text-gray-500 hover:text-gray-800 transition-colors"
-          >
-            Close
-          </button>
-
-          <Button
-            onClick={() => {
-              onClose();
-              navigate(`/customer/bookings/new?service_id=${service.id}`);
-            }}
-            className="bg-[#D32F2F] hover:bg-[#b52626] text-white py-2.5 px-6 font-bold text-xs rounded-xl shadow-md"
-            icon={<ArrowRight size={16} />}
-          >
-            Book This Service Now
-          </Button>
         </div>
       </div>
     </Modal>

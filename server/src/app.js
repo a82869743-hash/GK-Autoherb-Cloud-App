@@ -132,6 +132,7 @@ app.use('/api/referrals',     require('./routes/referrals'));
 app.use('/api/pickup-requests', require('./routes/pickup'));
 app.use('/api/products',      require('./routes/products'));
 app.use('/api/wallets',       require('./routes/wallets'));
+app.use('/api/chatbot',       require('./routes/chatbot'));
 
 // ─── Socket.io Auth + GPS ───────────────────────────
 const jwt = require('jsonwebtoken');

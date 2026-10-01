@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Plus, Trash2, ArrowLeft, Loader2, Save, ShoppingBag, Search } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, Loader2, Save, ShoppingBag, Search, FileText, IndianRupee, Sparkles, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import io from 'socket.io-client';
 
@@ -10,6 +10,10 @@ import { usePackages } from '../../api/hooks/usePackages';
 import { useCreateQuotation, useUpdateQuotation, useQuotation } from '../../api/hooks/useQuotations';
 import { useBrands, useModels } from '../../api/hooks/useVehicles';
 import { getCategoryForModel, carBrands as fallbackCarBrands, getModelsForBrand } from '../../utils/carData';
+import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
+import AdminMetricCard from '../../components/admin/AdminMetricCard';
+import VehicleBrandBadge from '../../components/admin/VehicleBrandBadge';
+import CarImage from '../../components/shared/CarImage';
 
 const CAR_SEGMENTS = [
   { value: 'hatchback', label: 'Small Hatchback', packageCarType: 'SMALL_HATCHBACK', serviceCol: 'price_hatchback' },
@@ -24,14 +28,14 @@ function formatINR(n: number) {
 }
 
 interface FormItem {
-  id?: string; // client-side temp id
+  id?: string;
   item_type: 'service' | 'package' | 'custom';
   item_id: number | null;
   name: string;
   price: number;
   quantity: number;
   total: number;
-  pricing_type?: 'basic' | 'premium'; // packages only
+  pricing_type?: 'basic' | 'premium';
 }
 
 export default function QuotationCreatePage() {
@@ -57,8 +61,8 @@ export default function QuotationCreatePage() {
   const [applyTax, setApplyTax] = useState(true);
 
   // Queries & Mutations
-  const { data: servicesRes, isLoading: loadingServices } = useServices({ active_only: true });
-  const { data: packagesRes, isLoading: loadingPackages } = usePackages({ published_only: true });
+  const { data: servicesRes } = useServices({ active_only: true });
+  const { data: packagesRes } = usePackages({ published_only: true });
   const { data: existingQuotation, isLoading: loadingQuotation } = useQuotation(isEdit ? Number(id) : undefined);
 
   const [existingCustomers, setExistingCustomers] = useState<any[]>([]);
@@ -98,18 +102,6 @@ export default function QuotationCreatePage() {
     );
   }, [existingCustomers, customerSearchQuery]);
 
-  const applyCustomerMatch = (cust: any) => {
-    if (!cust) return;
-    if (cust.name) setCustomerName(cust.name);
-    if (cust.mobile) setCustomerMobile(cust.mobile);
-    if (cust.email) setCustomerEmail(cust.email);
-    if (cust.vehicle_reg_no) setVehicleNo(cust.vehicle_reg_no);
-    if (cust.vehicle_brand) setCarBrand(cust.vehicle_brand);
-    if (cust.vehicle_model) setCarModel(cust.vehicle_model);
-    if (cust.vehicle_category) handleSegmentChange(cust.vehicle_category);
-    toast.success(`Auto-filled details for ${cust.name}`);
-  };
-
   const handleSelectExistingCustomer = (key: string) => {
     setSelectedCustKey(key);
     if (!key) return;
@@ -118,139 +110,126 @@ export default function QuotationCreatePage() {
       return uniqueVal === key;
     });
     if (found) {
-      applyCustomerMatch(found);
+      if (found.name) setCustomerName(found.name);
+      if (found.mobile) setCustomerMobile(found.mobile);
+      if (found.email) setCustomerEmail(found.email);
+      if (found.vehicle_reg_no) setVehicleNo(found.vehicle_reg_no);
+      if (found.vehicle_brand) setCarBrand(found.vehicle_brand);
+      if (found.vehicle_model) setCarModel(found.vehicle_model);
+      if (found.vehicle_category) setCarSegment(found.vehicle_category);
+      toast.success(`Auto-filled details for ${found.name}`);
     }
   };
-
-  const { data: brandsRes } = useBrands();
-  const { data: modelsRes } = useModels(carBrand);
-
-  const liveBrands: string[] = brandsRes?.data || [];
-  const carBrandsList = liveBrands.length > 0 ? Array.from(new Set([...liveBrands, 'Others'])) : fallbackCarBrands;
-
-  const liveModels: string[] = modelsRes?.data || [];
-  const carModelsList = carBrand
-    ? (liveModels.length > 0 ? Array.from(new Set([...liveModels, 'Other'])) : getModelsForBrand(carBrand))
-    : [];
 
   const createMutation = useCreateQuotation();
   const updateMutation = useUpdateQuotation();
 
-  const servicesCatalog = servicesRes?.data || [];
-  const packagesCatalog = packagesRes?.data || [];
+  const { data: brandsRes } = useBrands();
+  const { data: modelsRes } = useModels(carBrand);
 
-  // Default valid until date (30 days from today)
+  const brandsList: string[] = brandsRes?.data || fallbackCarBrands;
+  const modelsList: string[] = modelsRes?.data?.map((m: any) => (typeof m === 'string' ? m : m.model)) || getModelsForBrand(carBrand);
+
+  const servicesCatalog: any[] = servicesRes?.data || [];
+  const packagesCatalog: any[] = packagesRes?.data || [];
+
   useEffect(() => {
-    if (!isEdit) {
-      const d = new Date();
-      d.setDate(d.getDate() + 30);
-      setValidUntil(d.toISOString().split('T')[0]);
-    }
-  }, [isEdit]);
+    if (existingQuotation?.data) {
+      const q = existingQuotation.data;
+      setCustomerName(q.customer_name || '');
+      setCustomerMobile(q.customer_mobile || '');
+      setCustomerEmail(q.customer_email || '');
+      setVehicleNo(q.vehicle_no || '');
+      setCarBrand(q.car_brand || '');
+      setCarModel(q.car_model || '');
+      setCarSegment(q.car_segment || 'sedan');
+      setValidUntil(q.valid_until ? q.valid_until.split('T')[0] : '');
+      setNotes(q.notes || '');
+      setStatus(q.status || 'draft');
 
-  // Populate form if editing
-  useEffect(() => {
-    if (isEdit && existingQuotation) {
-      setCustomerName(existingQuotation.customer_name || '');
-      setCustomerMobile(existingQuotation.customer_mobile || '');
-      setCustomerEmail(existingQuotation.customer_email || '');
-      setVehicleNo(existingQuotation.vehicle_no || '');
-      setCarBrand(existingQuotation.car_brand || '');
-      setCarModel(existingQuotation.car_model || '');
-      setCarSegment(existingQuotation.car_segment || 'sedan');
-      if (existingQuotation.valid_until) {
-        setValidUntil(new Date(existingQuotation.valid_until).toISOString().split('T')[0]);
-      }
-      setNotes(existingQuotation.notes || '');
-      setStatus(existingQuotation.status || 'draft');
-      setDiscountType(existingQuotation.discount_type || 'fixed');
-      setDiscountValue(Number(existingQuotation.discount_value || 0));
-      setTaxPercentage(Number(existingQuotation.tax_percentage || 0));
-      setApplyTax(Number(existingQuotation.tax_percentage || 0) > 0);
+      setDiscountType(q.discount_type || 'fixed');
+      setDiscountValue(Number(q.discount_value) || 0);
+      setTaxPercentage(Number(q.tax_percentage) || 18);
+      setApplyTax(Number(q.tax_percentage) > 0);
 
-      if (existingQuotation.items) {
-        setItems(existingQuotation.items.map((item: any) => ({
-          id: String(item.id),
-          item_type: item.item_type,
-          item_id: item.item_id,
-          name: item.name,
-          price: Number(item.price),
-          quantity: Number(item.quantity),
-          total: Number(item.total),
-          pricing_type: item.pricing_type || 'basic'
+      if (q.items && q.items.length > 0) {
+        setItems(q.items.map((it: any) => ({
+          id: String(Math.random()),
+          item_type: it.item_type || 'service',
+          item_id: it.item_id || null,
+          name: it.name || '',
+          price: Number(it.price) || 0,
+          quantity: Number(it.quantity) || 1,
+          total: Number(it.total) || 0,
+          pricing_type: it.pricing_type || 'basic'
         })));
       }
     }
-  }, [isEdit, existingQuotation]);
+  }, [existingQuotation]);
 
-  // Handle Car Segment Change: recalculate prices of catalog services and packages
-  const handleSegmentChange = (newSegment: string) => {
-    setCarSegment(newSegment);
-    
-    // Recalculate rates of existing items from catalog
-    setItems(prev => prev.map(item => {
-      if (item.item_type === 'custom') return item;
-      const rate = getPriceFromCatalog(item.item_type, item.item_id, newSegment, item.pricing_type || 'basic');
-      return {
-        ...item,
-        price: rate,
-        total: rate * item.quantity
-      };
-    }));
+  const handleBrandChange = (brand: string) => {
+    setCarBrand(brand);
+    setCarModel('');
   };
 
-  // Helper to extract segment-based price from catalogs
-  const getPriceFromCatalog = (type: 'service' | 'package', itemId: number | null, segmentVal: string, packageTier: 'basic' | 'premium' = 'basic'): number => {
-    if (!itemId) return 0;
-    const segment = CAR_SEGMENTS.find(s => s.value === segmentVal) || CAR_SEGMENTS[2];
+  const handleModelChange = (model: string) => {
+    setCarModel(model);
+    const cat = getCategoryForModel(carBrand, model);
+    if (cat) setCarSegment(cat);
+  };
 
+  const getPriceFromCatalog = (
+    type: 'service' | 'package',
+    itemId: number,
+    segment: string,
+    pricingTier: 'basic' | 'premium' = 'basic'
+  ): number => {
     if (type === 'service') {
-      const found = servicesCatalog.find((s: any) => s.id === itemId);
-      if (found) {
-        return Number(found[segment.serviceCol]) || 0;
-      }
-    } else if (type === 'package') {
-      const found = packagesCatalog.find((p: any) => p.id === itemId);
-      if (found) {
-        // Try v2 pricing matrix first
-        if (found.pricing && found.pricing.length > 0) {
-          const pricingRow = found.pricing.find((pr: any) => pr.car_type === segment.packageCarType && pr.pricing_type === packageTier);
-          if (pricingRow) return Number(pricingRow.price);
-        }
-        // Fall back to package base columns
-        return Number(found[segment.serviceCol]) || 0;
+      const svc = servicesCatalog.find((s: any) => s.id === itemId);
+      if (!svc) return 0;
+      const segObj = CAR_SEGMENTS.find(s => s.value === segment);
+      const col = segObj ? segObj.serviceCol : 'price_sedan';
+      return Number(svc[col] || svc.price || 0);
+    } else {
+      const pkg = packagesCatalog.find((p: any) => p.id === itemId);
+      if (!pkg) return 0;
+      if (pricingTier === 'premium') {
+        const segObj = CAR_SEGMENTS.find(s => s.value === segment);
+        const col = segObj ? `premium_${segObj.serviceCol}` : 'premium_price_sedan';
+        return Number(pkg[col] || pkg.price_sedan || 0);
+      } else {
+        const segObj = CAR_SEGMENTS.find(s => s.value === segment);
+        const col = segObj ? segObj.serviceCol : 'price_sedan';
+        return Number(pkg[col] || pkg.price_sedan || 0);
       }
     }
-    return 0;
   };
 
-  // Add Row
   const handleAddItemRow = () => {
-    const newItem: FormItem = {
-      id: crypto.randomUUID(),
-      item_type: 'service',
-      item_id: null,
-      name: '',
-      price: 0,
-      quantity: 1,
-      total: 0,
-      pricing_type: 'basic'
-    };
-    setItems(prev => [...prev, newItem]);
+    setItems(prev => [
+      ...prev,
+      {
+        id: String(Date.now() + Math.random()),
+        item_type: 'service',
+        item_id: null,
+        name: '',
+        price: 0,
+        quantity: 1,
+        total: 0,
+        pricing_type: 'basic'
+      }
+    ]);
   };
 
-  // Remove Row
   const handleRemoveItemRow = (tempId: string) => {
-    setItems(prev => prev.filter(item => item.id !== tempId));
+    setItems(prev => prev.filter(i => i.id !== tempId));
   };
 
-  // Update Row
   const handleUpdateItemRow = (tempId: string, updates: Partial<FormItem>) => {
     setItems(prev => prev.map(item => {
       if (item.id !== tempId) return item;
       const updated = { ...item, ...updates };
 
-      // If switching item type or item ID, pre-fill catalog rate
       if (updates.item_type !== undefined || updates.item_id !== undefined || updates.pricing_type !== undefined) {
         const itemType = updates.item_type ?? item.item_type;
         const itemId = updates.item_id ?? item.item_id;
@@ -272,13 +251,11 @@ export default function QuotationCreatePage() {
         }
       }
 
-      // Compute total
       updated.total = updated.price * updated.quantity;
       return updated;
     }));
   };
 
-  // Totals calculation
   const subtotal = items.reduce((sum, item) => sum + item.total, 0);
   
   let discount_amount = 0;
@@ -293,7 +270,6 @@ export default function QuotationCreatePage() {
   const tax_amount = applyTax ? afterDiscount * (taxPercentage / 100) : 0;
   const grand_total = afterDiscount + tax_amount;
 
-  // Submit Handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -358,9 +334,9 @@ export default function QuotationCreatePage() {
 
   if (isEdit && loadingQuotation) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
-        <Loader2 size={40} color="#D32F2F" style={{ animation: 'spin 1s linear infinite' }} />
-        <p style={{ marginTop: '16px', color: '#5f5e5e', fontWeight: 600 }}>Loading quotation details...</p>
+      <div className="flex flex-col items-center justify-center min-h-[50vh]">
+        <Loader2 size={36} className="animate-spin text-[#D32F2F]" />
+        <p className="mt-3 text-xs font-bold text-slate-500">Loading proposal details...</p>
       </div>
     );
   }
@@ -368,536 +344,490 @@ export default function QuotationCreatePage() {
   const isPending = createMutation.isPending || updateMutation.isPending;
 
   return (
-    <div style={{ fontFamily: "'Segoe UI', sans-serif", minHeight: '100vh', paddingBottom: '40px' }}>
-      {/* ─── Header ─── */}
-      <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <button
-          onClick={() => navigate('/admin/quotations')}
-          style={{ background: '#f6f3f2', border: 'none', borderRadius: '50%', padding: '10px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#1c1b1b' }}
-        >
-          <ArrowLeft size={18} />
-        </button>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#1c1b1b', margin: 0, letterSpacing: '-0.5px' }}>
-            {isEdit ? `Edit Quotation Estimate` : 'Create New Quotation'}
-          </h1>
-          <p style={{ color: '#5f5e5e', fontSize: '13px', marginTop: '2px' }}>
-            Draft a detailed service estimate with segment-matched pricing
-          </p>
-        </div>
+    <div className="space-y-6 pb-28 lg:pb-12 max-w-[1600px] mx-auto font-sans">
+      {/* Header Bar */}
+      <AdminHeaderBar
+        title={isEdit ? 'Edit Quotation Estimate' : 'Draft Service Proposal'}
+        subtitle="Draft a detailed service estimate with segment-matched workshop rates"
+        actions={
+          <button
+            onClick={() => navigate('/admin/quotations')}
+            className="px-4 py-2.5 rounded-2xl bg-white border border-slate-200/90 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-all flex items-center gap-1.5 shadow-xs active:scale-95"
+          >
+            <ArrowLeft size={15} />
+            <span>All Proposals</span>
+          </button>
+        }
+      />
+
+      {/* KPI Cards Row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <AdminMetricCard
+          label="Estimated Line Items"
+          value={items.length}
+          trend={{ text: 'Configured services', positive: true }}
+          icon={<ShoppingBag size={20} />}
+          accentColor="indigo"
+        />
+        <AdminMetricCard
+          label="Subtotal Estimation"
+          value={`₹${formatINR(subtotal)}`}
+          trend={{ text: 'Gross catalog rates', positive: true }}
+          icon={<IndianRupee size={20} />}
+          accentColor="sky"
+        />
+        <AdminMetricCard
+          label="GST Tax Component"
+          value={applyTax ? `₹${formatINR(tax_amount)}` : 'Exempt'}
+          trend={{ text: `${taxPercentage}% GST rate`, positive: true }}
+          icon={<ShieldCheck size={20} />}
+          accentColor="amber"
+        />
+        <AdminMetricCard
+          label="Estimated Grand Total"
+          value={`₹${formatINR(grand_total)}`}
+          trend={{ text: 'Final client proposal', positive: true }}
+          icon={<CheckCircle2 size={20} />}
+          accentColor="emerald"
+        />
       </div>
 
-      <form onSubmit={handleSubmit} className="quotation-form-grid" style={{ display: 'grid', gap: '20px', alignItems: 'start' }}>
-        
-        {/* Left Side Column */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          
-          {/* Card: Customer & Vehicle Details */}
-          <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #ede8e7', padding: '24px' }}>
-            <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1c1b1b', marginBottom: '18px', borderBottom: '1px solid #f5f0ef', paddingBottom: '10px' }}>
-              Customer & Vehicle Details
-            </h2>
-
-            {/* Auto-fill Customer Selector with Search */}
-            <div style={{ marginBottom: '16px', background: 'linear-gradient(to right, rgba(254,242,242,0.8), rgba(255,237,213,0.8))', padding: '14px', borderRadius: '12px', border: '1px solid #fca5a5', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <label style={{ fontSize: '11px', fontWeight: 800, color: '#b91c1c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  ⚡ Search & Select Saved Customer ({filteredCustomers.length} available)
-                </label>
-                {selectedCustKey && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedCustKey('');
-                      setCustomerSearchQuery('');
-                    }}
-                    style={{ fontSize: '11px', color: '#dc2626', fontWeight: 700, textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}
-                  >
-                    Clear Selection
-                  </button>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Column: Customer & Line Items */}
+          <div className="lg:col-span-8 space-y-6">
+            {/* Customer & Vehicle Information */}
+            <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-[0_4px_24px_rgba(0,0,0,0.03)] space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="font-bold text-slate-900 text-base">Client & Vehicle Information</h3>
+                {carBrand && (
+                  <VehicleBrandBadge
+                    brand={carBrand}
+                    model={carModel}
+                    regNo={vehicleNo}
+                    size="sm"
+                  />
                 )}
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <div style={{ position: 'relative', flex: 1 }}>
+
+              {/* Quick Search Saved Customers */}
+              <div className="p-4 rounded-2xl bg-red-50/50 border border-red-100 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#7f1d1d] uppercase tracking-wider">
+                    ⚡ Auto-Fill From Saved Directory ({filteredCustomers.length} clients)
+                  </span>
+                  {selectedCustKey && (
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedCustKey(''); setCustomerSearchQuery(''); }}
+                      className="text-[11px] text-[#D32F2F] hover:text-[#991b1b] font-bold underline cursor-pointer"
+                    >
+                      Clear Selection
+                    </button>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={customerSearchQuery}
+                      onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                      placeholder="Search client by name, phone or vehicle plate..."
+                      className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-red-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => refreshCustomerList(customerSearchQuery)}
+                    className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-all shadow-xs shrink-0"
+                  >
+                    Search
+                  </button>
+                </div>
+                <select
+                  value={selectedCustKey}
+                  onChange={(e) => handleSelectExistingCustomer(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-red-200 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500 bg-white shadow-xs"
+                >
+                  <option value="">-- Select Saved Client from Search --</option>
+                  {filteredCustomers.map((c: any, idx: number) => {
+                    const uniqueVal = c.id ? `user_${c.id}` : `bill_${c.mobile}_${c.name}_${idx}`;
+                    return (
+                      <option key={uniqueVal} value={uniqueVal}>
+                        {c.name} {c.mobile ? `(${c.mobile})` : ''} {c.vehicle_reg_no ? `— [${c.vehicle_reg_no}]` : ''} {c.vehicle_brand ? `(${c.vehicle_brand} ${c.vehicle_model || ''})` : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Customer Name *</label>
                   <input
-                    type="text"
-                    value={customerSearchQuery}
-                    onChange={(e) => setCustomerSearchQuery(e.target.value)}
-                    placeholder="Type name, mobile or vehicle reg no to search..."
-                    style={{ width: '100%', padding: '8px 12px 8px 30px', borderRadius: '8px', border: '1px solid #f87171', fontSize: '12px', fontWeight: 600, outline: 'none', background: 'white' }}
+                    required
+                    value={customerName}
+                    onChange={e => setCustomerName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200/90 text-xs sm:text-sm font-semibold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-[#D32F2F] outline-none"
+                    placeholder="e.g. Gaurav Kapoor"
                   />
-                  <Search size={14} style={{ position: 'absolute', left: '10px', top: '10px', color: '#9ca3af' }} />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Mobile Number *</label>
+                  <input
+                    required
+                    value={customerMobile}
+                    onChange={e => setCustomerMobile(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200/90 text-xs sm:text-sm font-semibold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-[#D32F2F] outline-none"
+                    placeholder="e.g. 9876543210"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Email Address</label>
+                  <input
+                    type="email"
+                    value={customerEmail}
+                    onChange={e => setCustomerEmail(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200/90 text-xs sm:text-sm font-semibold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-[#D32F2F] outline-none"
+                    placeholder="e.g. gaurav@example.com"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Registration Plate No</label>
+                  <input
+                    value={vehicleNo}
+                    onChange={e => setVehicleNo(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200/90 text-xs sm:text-sm font-bold uppercase bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-[#D32F2F] outline-none"
+                    placeholder="e.g. MH 02 CD 5678"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Vehicle Brand</label>
+                  <select
+                    value={carBrand}
+                    onChange={e => handleBrandChange(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs sm:text-sm font-semibold bg-slate-50 focus:bg-white"
+                  >
+                    <option value="">-- Choose Brand --</option>
+                    {brandsList.map((b: string) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Vehicle Model</label>
+                  <select
+                    value={carModel}
+                    disabled={!carBrand}
+                    onChange={e => handleModelChange(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs sm:text-sm font-semibold bg-slate-50 focus:bg-white disabled:bg-slate-100"
+                  >
+                    <option value="">{carBrand ? '-- Choose Model --' : 'Select brand first'}</option>
+                    {modelsList.map((m: string) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Vehicle Segment (Auto-sets catalog rates)</label>
+                  <select
+                    value={carSegment}
+                    onChange={e => setCarSegment(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs sm:text-sm font-bold bg-slate-50 focus:bg-white"
+                  >
+                    {CAR_SEGMENTS.map(s => (
+                      <option key={s.value} value={s.value}>{s.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {carBrand && carModel && (
+                  <div className="sm:col-span-2 p-3 bg-slate-50/80 rounded-2xl border border-slate-200/80">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                        Selected Vehicle Model
+                      </span>
+                      <span className="text-[11px] font-bold text-[#D32F2F]">
+                        {carBrand} {carModel}
+                      </span>
+                    </div>
+                    <CarImage
+                      brand={carBrand}
+                      model={carModel}
+                      containerClassName="h-32 w-full rounded-xl bg-white p-2 border border-slate-100"
+                      showShadow
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Line Items Builder */}
+            <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-[0_4px_24px_rgba(0,0,0,0.03)] space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Estimate Line Items</h3>
+                  <p className="text-[11px] text-slate-400 font-medium">Add services, packages or custom workshop lines</p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => refreshCustomerList(customerSearchQuery)}
-                  style={{ padding: '8px 14px', background: '#D32F2F', color: 'white', fontSize: '12px', fontWeight: 700, borderRadius: '8px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}
-                >
-                  <Search size={12} />
-                  Search
-                </button>
-              </div>
-              <select
-                value={selectedCustKey}
-                onChange={(e) => handleSelectExistingCustomer(e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #f87171', fontSize: '13px', fontWeight: 700, color: '#111827', background: 'white', outline: 'none' }}
-              >
-                <option value="">-- Select Saved Customer from Filtered List --</option>
-                {filteredCustomers.map((c: any, idx: number) => {
-                  const uniqueVal = c.id ? `user_${c.id}` : `bill_${c.mobile}_${c.name}_${idx}`;
-                  return (
-                    <option key={uniqueVal} value={uniqueVal}>
-                      {c.name} {c.mobile ? `(${c.mobile})` : ''} {c.vehicle_reg_no ? `— [${c.vehicle_reg_no}]` : ''} {c.vehicle_brand ? `(${c.vehicle_brand} ${c.vehicle_model || ''})` : ''}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-
-            <div className="quotation-fields-grid" style={{ display: 'grid', gap: '16px 20px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#5f5e5e', marginBottom: '6px' }}>Customer Name *</label>
-                <input
-                  value={customerName}
-                  onChange={e => setCustomerName(e.target.value)}
-                  placeholder="e.g. Gaurav Patel"
-                  required
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #ede8e7', fontSize: '13px', outline: 'none' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#5f5e5e', marginBottom: '6px' }}>Mobile Number *</label>
-                <input
-                  value={customerMobile}
-                  onChange={e => setCustomerMobile(e.target.value)}
-                  placeholder="e.g. 9876543210"
-                  required
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #ede8e7', fontSize: '13px', outline: 'none' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#5f5e5e', marginBottom: '6px' }}>Email Address</label>
-                <input
-                  type="email"
-                  value={customerEmail}
-                  onChange={e => setCustomerEmail(e.target.value)}
-                  placeholder="e.g. customer@example.com"
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #ede8e7', fontSize: '13px', outline: 'none' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#5f5e5e', marginBottom: '6px' }}>Vehicle Registration No.</label>
-                <input
-                  value={vehicleNo}
-                  onChange={e => setVehicleNo(e.target.value.toUpperCase())}
-                  placeholder="e.g. GJ06AB1234"
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #ede8e7', fontSize: '13px', outline: 'none' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#5f5e5e', marginBottom: '6px' }}>Car Brand</label>
-                <select
-                  value={carBrand}
-                  onChange={e => {
-                    const selectedB = e.target.value;
-                    setCarBrand(selectedB);
-                    setCarModel('');
-                  }}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #ede8e7', fontSize: '13px', outline: 'none', background: 'white', cursor: 'pointer' }}
-                >
-                  <option value="">Select brand...</option>
-                  {carBrandsList.map(b => (
-                    <option key={b} value={b}>{b}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#5f5e5e', marginBottom: '6px' }}>Car Model</label>
-                <select
-                  value={carModel}
-                  onChange={e => {
-                    const selectedM = e.target.value;
-                    setCarModel(selectedM);
-                    if (carBrand && selectedM && selectedM !== 'Other') {
-                      const autoCat = getCategoryForModel(carBrand, selectedM);
-                      if (autoCat) handleSegmentChange(autoCat);
-                    }
-                  }}
-                  disabled={!carBrand}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #ede8e7', fontSize: '13px', outline: 'none', background: 'white', cursor: 'pointer' }}
-                >
-                  <option value="">{carBrand ? 'Select model...' : 'Select brand first'}</option>
-                  {carModelsList.map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="quotation-segment-col">
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#D32F2F', marginBottom: '6px' }}>
-                  Vehicle Segment (Pricing Dictator) *
-                </label>
-                <select
-                  value={carSegment}
-                  onChange={e => handleSegmentChange(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #D32F2F', fontSize: '13px', fontWeight: 600, outline: 'none', background: 'white', cursor: 'pointer' }}
-                >
-                  {CAR_SEGMENTS.map(seg => (
-                    <option key={seg.value} value={seg.value}>{seg.label}</option>
-                  ))}
-                </select>
-                <p style={{ fontSize: '11px', color: '#9e9e9e', marginTop: '4px' }}>
-                  Changing the segment automatically updates the prices of added services and packages.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Card: Services & Packages Estimator */}
-          <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #ede8e7', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', borderBottom: '1px solid #f5f0ef', paddingBottom: '10px' }}>
-              <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1c1b1b', margin: 0 }}>
-                Quoted Services & Packages
-              </h2>
-              <button
-                type="button"
-                onClick={handleAddItemRow}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', background: '#D32F2F', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
-              >
-                <Plus size={13} /> Add Item
-              </button>
-            </div>
-
-            {items.length === 0 ? (
-              <div style={{ padding: '40px 20px', textAlign: 'center', border: '2px dashed #ede8e7', borderRadius: '8px' }}>
-                <ShoppingBag size={32} color="#bdbdbd" style={{ marginBottom: '8px' }} />
-                <p style={{ fontSize: '13px', color: '#9e9e9e', fontWeight: 600 }}>No items added yet</p>
-                <button
-                  type="button"
                   onClick={handleAddItemRow}
-                  style={{ marginTop: '8px', color: '#D32F2F', background: 'transparent', border: 'none', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}
+                  className="px-4 py-2 rounded-2xl bg-red-50 border border-red-200 text-[#D32F2F] hover:bg-[#D32F2F] hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs active:scale-95"
                 >
-                  Click here to add the first item
+                  <Plus size={14} />
+                  <span>Add Line Item</span>
                 </button>
               </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {items.map((item, idx) => (
-                  <div
-                    key={item.id}
-                    className="quotation-item-row"
-                    style={{
-                      display: 'grid',
-                      gap: '12px',
-                      alignItems: 'center',
-                      padding: '12px',
-                      background: '#f9f6f5',
-                      borderRadius: '10px',
-                      border: '1px solid #ede8e7'
-                    }}
+
+              {items.length === 0 ? (
+                <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                  <FileText size={28} className="text-slate-300 mx-auto mb-2" />
+                  <p className="text-xs text-slate-400 font-medium">No items added to this proposal yet.</p>
+                  <button
+                    type="button"
+                    onClick={handleAddItemRow}
+                    className="mt-3 text-xs font-bold text-[#D32F2F] hover:underline"
                   >
-                    {/* Item Type */}
-                    <select
-                      value={item.item_type}
-                      onChange={e => handleUpdateItemRow(item.id!, { item_type: e.target.value as any, item_id: null, name: '', price: 0 })}
-                      style={{ padding: '8px', border: '1px solid #ede8e7', borderRadius: '6px', fontSize: '12px', background: 'white', outline: 'none' }}
-                    >
-                      <option value="service">Service</option>
-                      <option value="package">Package</option>
-                      <option value="custom">Custom Item</option>
-                    </select>
+                    + Click here to add the first item
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {items.map((item) => (
+                    <div key={item.id} className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                        <div className="sm:col-span-3">
+                          <select
+                            value={item.item_type}
+                            onChange={e => handleUpdateItemRow(item.id!, { item_type: e.target.value as any })}
+                            className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800"
+                          >
+                            <option value="service">Service</option>
+                            <option value="package">Package</option>
+                            <option value="custom">Custom Line</option>
+                          </select>
+                        </div>
 
-                    {/* Item Selector / Custom Name */}
-                    {item.item_type === 'service' ? (
-                      <select
-                        value={item.item_id || ''}
-                        onChange={e => handleUpdateItemRow(item.id!, { item_id: Number(e.target.value) })}
-                        style={{ padding: '8px', border: '1px solid #ede8e7', borderRadius: '6px', fontSize: '12px', background: 'white', outline: 'none' }}
-                      >
-                        <option value="">-- Select Service --</option>
-                        {servicesCatalog.map((s: any) => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
-                        ))}
-                      </select>
-                    ) : item.item_type === 'package' ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <select
-                          value={item.item_id || ''}
-                          onChange={e => handleUpdateItemRow(item.id!, { item_id: Number(e.target.value) })}
-                          style={{ padding: '8px', border: '1px solid #ede8e7', borderRadius: '6px', fontSize: '12px', background: 'white', outline: 'none' }}
-                        >
-                          <option value="">-- Select Package --</option>
-                          {packagesCatalog.map((p: any) => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))}
-                        </select>
-                        {item.item_id && (
-                          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                            <label style={{ fontSize: '10px', color: '#5f5e5e', fontWeight: 700 }}>Tier:</label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', cursor: 'pointer' }}>
-                              <input
-                                type="radio"
-                                name={`tier-${item.id}`}
-                                checked={item.pricing_type === 'basic'}
-                                onChange={() => handleUpdateItemRow(item.id!, { pricing_type: 'basic' })}
-                              />
-                              Basic
-                            </label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', cursor: 'pointer' }}>
-                              <input
-                                type="radio"
-                                name={`tier-${item.id}`}
-                                checked={item.pricing_type === 'premium'}
-                                onChange={() => handleUpdateItemRow(item.id!, { pricing_type: 'premium' })}
-                              />
-                              Premium
-                            </label>
-                          </div>
-                        )}
+                        <div className="sm:col-span-4">
+                          {item.item_type === 'service' ? (
+                            <select
+                              value={item.item_id || ''}
+                              onChange={e => handleUpdateItemRow(item.id!, { item_id: Number(e.target.value) })}
+                              className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-900"
+                            >
+                              <option value="">-- Select Service --</option>
+                              {servicesCatalog.map((s: any) => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                              ))}
+                            </select>
+                          ) : item.item_type === 'package' ? (
+                            <select
+                              value={item.item_id || ''}
+                              onChange={e => handleUpdateItemRow(item.id!, { item_id: Number(e.target.value) })}
+                              className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-900"
+                            >
+                              <option value="">-- Select Package --</option>
+                              {packagesCatalog.map((p: any) => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              value={item.name}
+                              onChange={e => handleUpdateItemRow(item.id!, { name: e.target.value })}
+                              placeholder="Enter item description..."
+                              className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-medium"
+                            />
+                          )}
+                        </div>
+
+                        <div className="sm:col-span-2">
+                          <input
+                            type="number"
+                            value={item.price}
+                            onChange={e => handleUpdateItemRow(item.id!, { price: parseFloat(e.target.value) || 0 })}
+                            placeholder="Rate (₹)"
+                            className="w-full px-2 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-900"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-1">
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={e => handleUpdateItemRow(item.id!, { quantity: parseInt(e.target.value) || 1 })}
+                            className="w-full px-1.5 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-center text-slate-900"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-2 text-right flex items-center justify-end gap-2">
+                          <span className="font-extrabold text-slate-900 text-xs">
+                            ₹{formatINR(item.total)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItemRow(item.id!)}
+                            className="p-1 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
                       </div>
-                    ) : (
-                      <input
-                        value={item.name}
-                        onChange={e => handleUpdateItemRow(item.id!, { name: e.target.value })}
-                        placeholder="Enter item description..."
-                        style={{ padding: '8px', border: '1px solid #ede8e7', borderRadius: '6px', fontSize: '12px', background: 'white', outline: 'none' }}
-                      />
-                    )}
-
-                    {/* Rate (Pre-filled / Editable) */}
-                    <div>
-                      <input
-                        type="number"
-                        value={item.price}
-                        onChange={e => handleUpdateItemRow(item.id!, { price: parseFloat(e.target.value) || 0 })}
-                        placeholder="Rate"
-                        style={{ width: '100%', padding: '8px', border: '1px solid #ede8e7', borderRadius: '6px', fontSize: '12px', outline: 'none' }}
-                      />
                     </div>
-
-                    {/* Qty */}
-                    <div>
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={e => handleUpdateItemRow(item.id!, { quantity: parseInt(e.target.value) || 1 })}
-                        style={{ width: '100%', padding: '8px', border: '1px solid #ede8e7', borderRadius: '6px', fontSize: '12px', outline: 'none', textAlign: 'center' }}
-                      />
-                    </div>
-
-                    {/* Total */}
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#1c1b1b', textAlign: 'right', paddingRight: '4px' }}>
-                      ₹{formatINR(item.total)}
-                    </div>
-
-                    {/* Delete Icon */}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveItemRow(item.id!)}
-                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#9e9e9e', display: 'flex', justifyContent: 'center' }}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* Right Side Column (Calculations, Status, Submit) */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          
-          {/* Card: General Settings */}
-          <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #ede8e7', padding: '20px' }}>
-            <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1c1b1b', marginBottom: '14px' }}>Estimate Settings</h3>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {/* Right Column: Settings & Grand Total */}
+          <div className="lg:col-span-4 space-y-6">
+            {/* Estimate Parameters */}
+            <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-[0_4px_24px_rgba(0,0,0,0.03)] space-y-4">
+              <h3 className="font-bold text-slate-900 text-sm border-b border-slate-100 pb-3">Proposal Parameters</h3>
+              
               <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#5f5e5e', marginBottom: '4px' }}>Quotation Status</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1">Proposal Status</label>
                 <select
                   value={status}
                   onChange={e => setStatus(e.target.value as any)}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #ede8e7', fontSize: '12px', outline: 'none', background: 'white', cursor: 'pointer' }}
+                  className="w-full px-3 py-2 rounded-2xl border border-slate-200 text-xs font-bold bg-slate-50 focus:bg-white"
                 >
-                  <option value="draft">Draft</option>
-                  <option value="sent">Sent</option>
-                  <option value="accepted">Accepted</option>
+                  <option value="draft">Draft Proposal</option>
+                  <option value="sent">Sent to Client</option>
+                  <option value="accepted">Accepted by Client</option>
                   <option value="declined">Declined</option>
                 </select>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#5f5e5e', marginBottom: '4px' }}>Valid Until Date</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1">Valid Until Date</label>
                 <input
                   type="date"
                   value={validUntil}
                   onChange={e => setValidUntil(e.target.value)}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #ede8e7', fontSize: '12px', outline: 'none' }}
+                  className="w-full px-3 py-2 rounded-2xl border border-slate-200 text-xs font-medium bg-slate-50 focus:bg-white"
                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#5f5e5e', marginBottom: '4px' }}>Quotation / Notes</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1">Proposal Remarks & Terms</label>
                 <textarea
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
-                  placeholder="Terms, specific notes, car condition details..."
+                  placeholder="Terms, vehicle pre-inspection notes, warranty conditions..."
                   rows={3}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #ede8e7', fontSize: '12px', outline: 'none', resize: 'vertical' }}
+                  className="w-full px-3 py-2 rounded-2xl border border-slate-200 text-xs font-medium bg-slate-50 focus:bg-white resize-none"
                 />
               </div>
             </div>
-          </div>
 
-          {/* Card: Quotation Summary Card */}
-          <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #ede8e7', padding: '20px' }}>
-            <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1c1b1b', marginBottom: '14px' }}>Summary</h3>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px', color: '#5f5e5e' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Subtotal ({items.length} items)</span>
-                <span style={{ fontWeight: 600, color: '#1c1b1b' }}>₹{formatINR(subtotal)}</span>
+            {/* Dark Luxury Grand Total Checkout Card */}
+            <div className="rounded-3xl bg-slate-950 text-white p-6 sm:p-7 border border-slate-800 shadow-[0_12px_40px_rgba(0,0,0,0.12)] space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-400">Financial Summary</h3>
+                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#D32F2F]/20 text-red-300 border border-red-500/30">
+                  {items.length} Line Items
+                </span>
               </div>
 
-              {/* Discount inputs */}
-              <div style={{ borderTop: '1px solid #f5f0ef', borderBottom: '1px solid #f5f0ef', padding: '10px 0' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <span>Discount</span>
-                  <div style={{ display: 'flex', gap: '4px' }}>
-                    <button
-                      type="button"
-                      onClick={() => setDiscountType('fixed')}
-                      style={{ border: '1px solid #ede8e7', padding: '2px 6px', fontSize: '10px', fontWeight: 700, background: discountType === 'fixed' ? '#1c1b1b' : 'white', color: discountType === 'fixed' ? 'white' : '#5f5e5e', borderRadius: '4px', cursor: 'pointer' }}
-                    >
-                      ₹ Fixed
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDiscountType('percentage')}
-                      style={{ border: '1px solid #ede8e7', padding: '2px 6px', fontSize: '10px', fontWeight: 700, background: discountType === 'percentage' ? '#1c1b1b' : 'white', color: discountType === 'percentage' ? 'white' : '#5f5e5e', borderRadius: '4px', cursor: 'pointer' }}
-                    >
-                      % Percent
-                    </button>
-                  </div>
+              <div className="space-y-3 text-xs sm:text-sm text-slate-300">
+                <div className="flex justify-between">
+                  <span>Gross Subtotal</span>
+                  <span className="font-bold text-white">₹{formatINR(subtotal)}</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+
+                {/* Discount options */}
+                <div className="p-3 bg-slate-900 rounded-2xl border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Discount Override</span>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setDiscountType('fixed')}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${discountType === 'fixed' ? 'bg-[#D32F2F] text-white' : 'bg-slate-800 text-slate-400'}`}
+                      >
+                        ₹ Fixed
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDiscountType('percentage')}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${discountType === 'percentage' ? 'bg-[#D32F2F] text-white' : 'bg-slate-800 text-slate-400'}`}
+                      >
+                        % Off
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="number"
                     value={discountValue}
                     min="0"
                     onChange={e => setDiscountValue(Math.max(0, parseFloat(e.target.value) || 0))}
-                    style={{ width: '100%', padding: '6px', border: '1px solid #ede8e7', borderRadius: '6px', fontSize: '12px', outline: 'none' }}
+                    className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-2.5 py-1 text-xs font-bold text-right"
+                    placeholder="0"
                   />
-                  <span style={{ fontSize: '11px', color: '#9e9e9e', whiteSpace: 'nowrap' }}>
-                    (- ₹{formatINR(discount_amount)})
-                  </span>
-                </div>
-              </div>
-
-              {/* GST options */}
-              <div style={{ borderBottom: '1px solid #f5f0ef', paddingBottom: '10px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={applyTax}
-                      onChange={e => setApplyTax(e.target.checked)}
-                    />
-                    <span>Apply GST (Tax)</span>
-                  </label>
-                  {applyTax && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <input
-                        type="number"
-                        value={taxPercentage}
-                        onChange={e => setTaxPercentage(Math.max(0, parseFloat(e.target.value) || 0))}
-                        style={{ width: '45px', padding: '2px 4px', border: '1px solid #ede8e7', borderRadius: '4px', fontSize: '11px', outline: 'none', textAlign: 'center' }}
-                      />
-                      <span>%</span>
+                  {discount_amount > 0 && (
+                    <div className="flex justify-between text-xs text-emerald-400 font-semibold pt-1">
+                      <span>Discount Amount</span>
+                      <span>- ₹{formatINR(discount_amount)}</span>
                     </div>
                   )}
                 </div>
-                {applyTax && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#9e9e9e' }}>
-                    <span>GST Amount</span>
-                    <span>₹{formatINR(tax_amount)}</span>
+
+                {/* GST Tax Toggle */}
+                <div className="p-3 bg-slate-900 rounded-2xl border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={applyTax}
+                        onChange={e => setApplyTax(e.target.checked)}
+                        className="rounded accent-[#D32F2F]"
+                      />
+                      <span>Apply GST Tax</span>
+                    </label>
+                    {applyTax && (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          value={taxPercentage}
+                          onChange={e => setTaxPercentage(Math.max(0, parseFloat(e.target.value) || 0))}
+                          className="w-12 bg-slate-950 border border-slate-700 text-white rounded-lg px-1.5 py-0.5 text-center text-xs font-bold"
+                        />
+                        <span className="text-xs text-slate-400">%</span>
+                      </div>
+                    )}
                   </div>
-                )}
+                  {applyTax && (
+                    <div className="flex justify-between text-xs text-slate-400 pt-1">
+                      <span>Calculated GST</span>
+                      <span className="font-bold text-white">₹{formatINR(tax_amount)}</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Grand Total */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 800, color: '#D32F2F', marginTop: '6px', borderTop: '2px double #ede8e7', paddingTop: '10px' }}>
-                <span>Grand Total</span>
-                <span>₹{formatINR(grand_total)}</span>
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-slate-400 block uppercase tracking-wider">Estimated Grand Total</span>
+                  <span className="text-2xl sm:text-3xl font-black text-white">₹{formatINR(grand_total)}</span>
+                </div>
               </div>
-            </div>
 
-            {/* Action Buttons */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px' }}>
               <button
                 type="submit"
-                disabled={isPending}
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  background: '#D32F2F',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '10px',
-                  padding: '12px',
-                  fontWeight: 700,
-                  fontSize: '14px',
-                  cursor: isPending ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 2px 8px rgba(211,47,47,0.25)',
-                  transition: 'background 0.1s'
-                }}
-                onMouseEnter={e => { if(!isPending) e.currentTarget.style.background = '#C62828'; }}
-                onMouseLeave={e => { if(!isPending) e.currentTarget.style.background = '#D32F2F'; }}
+                disabled={isPending || items.length === 0}
+                className="w-full py-3.5 px-5 rounded-2xl bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs sm:text-sm font-bold shadow-lg shadow-red-500/30 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
               >
-                {isPending ? (
-                  <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                ) : (
-                  <Save size={16} />
-                )}
-                {isEdit ? 'Save Changes' : 'Create Quotation'}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => navigate('/admin/quotations')}
-                style={{ width: '100%', background: 'transparent', color: '#5f5e5e', border: '1px solid #ede8e7', borderRadius: '10px', padding: '10px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}
-              >
-                Cancel
+                {isPending ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                <span>{isEdit ? 'Save Changes' : 'Publish Quotation'}</span>
               </button>
             </div>
           </div>
-
         </div>
-
       </form>
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .quotation-form-grid { grid-template-columns: 1fr 340px; }
-        .quotation-fields-grid { grid-template-columns: 1fr 1fr; }
-        .quotation-segment-col { grid-column: span 2; }
-        .quotation-item-row { grid-template-columns: 120px 1fr 100px 70px 100px 30px; }
-        @media (max-width: 768px) {
-          .quotation-form-grid { grid-template-columns: 1fr !important; }
-          .quotation-fields-grid { grid-template-columns: 1fr !important; }
-          .quotation-segment-col { grid-column: span 1; }
-          .quotation-item-row { grid-template-columns: 1fr 1fr !important; }
-        }
-      `}</style>
     </div>
   );
 }

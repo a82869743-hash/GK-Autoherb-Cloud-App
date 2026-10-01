@@ -438,12 +438,45 @@ exports.updatePhase = async (req, res) => {
 exports.getPhase = async (req, res) => {
   try {
     const { id } = req.params;
-    const [rows] = await pool.query(
+    let [rows] = await pool.query(
       "SELECT id, current_phase, phase_updated_at, wash_status FROM bookings WHERE id = ? AND job_type = 'quick_wash'",
       [id]
     );
+
     if (!rows.length) {
-      return res.status(404).json({ success: false, error: 'Quick wash booking not found' });
+      // Check if ID corresponds to a job_cart
+      const [jcRows] = await pool.query(
+        "SELECT id, status, booking_id, updated_at FROM job_carts WHERE id = ?",
+        [id]
+      );
+      if (jcRows.length) {
+        const jc = jcRows[0];
+        if (jc.booking_id) {
+          const [bRows] = await pool.query(
+            "SELECT id, current_phase, phase_updated_at, wash_status FROM bookings WHERE id = ?",
+            [jc.booking_id]
+          );
+          if (bRows.length) rows = bRows;
+        }
+        if (!rows.length) {
+          const phaseMap = {
+            draft: 'pre_wash',
+            open: 'interior_clean',
+            complete: 'complete',
+            cancelled: 'complete',
+          };
+          rows = [{
+            id: jc.id,
+            current_phase: phaseMap[jc.status] || 'pre_wash',
+            phase_updated_at: jc.updated_at || new Date().toISOString(),
+            wash_status: jc.status === 'complete' ? 'completed' : (jc.status === 'draft' ? 'pending' : 'washing')
+          }];
+        }
+      }
+    }
+
+    if (!rows.length) {
+      return res.status(404).json({ success: false, error: 'Tracking details not found' });
     }
     res.json({ success: true, data: rows[0] });
   } catch (err) {

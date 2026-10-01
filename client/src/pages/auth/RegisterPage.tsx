@@ -8,6 +8,7 @@ import { useRegister } from '../../api/hooks/useAuth';
 import { useAuthStore } from '../../store/authStore';
 import { carBrands as fallbackCarBrands, getModelsForBrand } from '../../utils/carData';
 import { useBrands, useModels } from '../../api/hooks/useVehicles';
+import CarImage from '../../components/shared/CarImage';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -50,6 +51,8 @@ export default function RegisterPage() {
 
   const isOtherBrand = selectedBrand === 'Others';
   const isOtherModel = selectedModel === 'Other';
+  const previewBrand = isOtherBrand ? customBrand : selectedBrand;
+  const previewModel = isOtherModel ? customModel : selectedModel;
 
   const { register, handleSubmit, formState: { errors } } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
@@ -74,7 +77,7 @@ export default function RegisterPage() {
         onSuccess: (result) => {
           login(result.token, result.user);
           toast.success(`Welcome, ${result.user.name}!`);
-          navigate('/customer/services');
+          navigate('/customer');
         },
         onError: (err: any) => {
           const message = err.response?.data?.error || 'Registration failed. Please try again.';
@@ -266,6 +269,25 @@ export default function RegisterPage() {
               <div>
                 <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#5f5e5e] mb-2">Model Name</label>
                 <input type="text" value={customModel} onChange={(e) => setCustomModel(e.target.value)} placeholder="Enter model name" className="w-full px-4 py-4 bg-[#f6f3f2] border border-transparent rounded-lg text-[#1c1b1b] font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white focus:border-[#D32F2F]/30 placeholder:text-[#8f6f6c]/60 transition-all duration-200" />
+              </div>
+            )}
+
+            {previewBrand && previewModel && (
+              <div className="p-3 bg-[#f6f3f2] rounded-xl border border-slate-200/80 shadow-2xs">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#5f5e5e]">
+                    Vehicle Preview
+                  </span>
+                  <span className="text-[11px] font-bold text-[#D32F2F]">
+                    {previewBrand} {previewModel}
+                  </span>
+                </div>
+                <CarImage
+                  brand={previewBrand}
+                  model={previewModel}
+                  containerClassName="h-32 w-full rounded-lg bg-white p-2 border border-slate-200/70"
+                  showShadow
+                />
               </div>
             )}
 

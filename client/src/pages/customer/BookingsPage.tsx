@@ -12,6 +12,7 @@ import { formatTime } from '../../utils/formatters';
 import api from '../../api/axiosInstance';
 import { useAuthStore } from '../../store/authStore';
 import QrPaymentModal from '../../components/shared/QrPaymentModal';
+import PaymentSandboxModal from '../../components/shared/PaymentSandboxModal';
 import Modal from '../../components/ui/Modal';
 
 function BookingCountdown({ expiresAt, onExpire }: { expiresAt: string; onExpire: () => void }) {
@@ -64,6 +65,17 @@ export default function BookingsPage() {
   const [qrAmount, setQrAmount] = useState(0);
   const [activeBookingId, setActiveBookingId] = useState<number | null>(null);
   const [submittingOnline, setSubmittingOnline] = useState(false);
+
+  // Sandbox payment modal state
+  const [sandboxModal, setSandboxModal] = useState<{
+    isOpen: boolean;
+    orderId: string;
+    amount: number;
+    itemName: string;
+    handler: (resp: any) => Promise<void>;
+    onDismiss: () => void;
+    loading?: boolean;
+  } | null>(null);
 
   const loadRazorpayScript = () => {
     return new Promise((resolve) => {
@@ -132,18 +144,14 @@ export default function BookingsPage() {
       };
 
       if (orderData.id.startsWith('order_mock_')) {
-        const confirmSimulate = window.confirm(
-          "RAZORPAY SANDBOX MODE (Keys Missing)\n\nWould you like to simulate a successful online payment?"
-        );
-        if (confirmSimulate) {
-          await options.handler({
-            razorpay_order_id: orderData.id,
-            razorpay_payment_id: 'pay_mock_' + Date.now(),
-            razorpay_signature: 'sig_mock_' + Date.now()
-          });
-        } else {
-          options.modal.ondismiss();
-        }
+        setSandboxModal({
+          isOpen: true,
+          orderId: orderData.id,
+          amount: advanceAmt,
+          itemName: 'Booking Advance Deposit',
+          handler: options.handler,
+          onDismiss: options.modal.ondismiss,
+        });
         return;
       }
 
@@ -510,6 +518,40 @@ export default function BookingsPage() {
           </div>
         </Modal>
       )}
+
+      <PaymentSandboxModal
+        isOpen={!!sandboxModal?.isOpen}
+        orderId={sandboxModal?.orderId || ''}
+        amount={sandboxModal?.amount || 0}
+        itemName={sandboxModal?.itemName || 'Booking Advance Deposit'}
+        isLoading={!!sandboxModal?.loading}
+        onSimulateSuccess={async () => {
+          if (!sandboxModal) return;
+          try {
+            setSandboxModal(prev => prev ? { ...prev, loading: true } : null);
+            await sandboxModal.handler({
+              razorpay_order_id: sandboxModal.orderId,
+              razorpay_payment_id: 'pay_mock_' + Date.now(),
+              razorpay_signature: 'sig_mock_' + Date.now(),
+            });
+            setSandboxModal(null);
+          } catch (e: any) {
+            setSandboxModal(prev => prev ? { ...prev, loading: false } : null);
+          }
+        }}
+        onSimulateFailure={() => {
+          if (sandboxModal) {
+            sandboxModal.onDismiss();
+            setSandboxModal(null);
+          }
+        }}
+        onClose={() => {
+          if (sandboxModal) {
+            sandboxModal.onDismiss();
+            setSandboxModal(null);
+          }
+        }}
+      />
     </>
   );
 }

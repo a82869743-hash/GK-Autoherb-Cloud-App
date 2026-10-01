@@ -369,6 +369,40 @@ exports.update = async (req, res) => {
   }
 };
 
+// ─── UPDATE STATUS (open, in_progress, complete, etc.) ─────
+exports.updateStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    const validStatuses = ['draft', 'open', 'in_progress', 'delayed', 'ready', 'complete', 'delivered', 'cancelled'];
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, error: 'Valid status is required' });
+    }
+
+    const [cart] = await pool.query('SELECT status, completed_at, visit_date FROM job_carts WHERE id = ?', [id]);
+    if (!cart.length) return res.status(404).json({ success: false, error: 'Job cart not found' });
+
+    if (req.user.role === 'staff' && !checkStaffModifyPermission(req.user, cart[0])) {
+      return res.status(403).json({ success: false, error: 'Staff can only modify today\'s job carts' });
+    }
+
+    let completedAt = null;
+    if (status === 'complete' || status === 'delivered') {
+      completedAt = new Date();
+    }
+
+    await pool.query(
+      'UPDATE job_carts SET status = ?, completed_at = COALESCE(?, completed_at) WHERE id = ?',
+      [status, completedAt, id]
+    );
+
+    res.json({ success: true, message: `Status updated to ${status}` });
+  } catch (err) {
+    console.error('Update status error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
 // ─── SUBMIT (draft → open) ──────────────────
 exports.submit = async (req, res) => {
   try {

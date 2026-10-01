@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ShoppingBag, CreditCard, CheckCircle, Clock, AlertTriangle, ArrowRight, Star, ThumbsUp, Check, Truck, ShieldCheck, ShoppingCart, RefreshCw, X, QrCode, Search } from 'lucide-react';
 import api from '../../api/axiosInstance';
 import { useUIStore } from '../../store/uiStore';
 import { useCartStore } from '../../store/useCartStore';
 import ProductsCartDrawer from '../../components/shared/ProductsCartDrawer';
+import PaymentSandboxModal from '../../components/shared/PaymentSandboxModal';
 
 function resolveImageUrl(url: string | undefined): string {
   if (!url) return '';
@@ -315,7 +317,22 @@ export default function ProductsPage() {
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [qrTransactionId, setQrTransactionId] = useState('');
   const [submittingQr, setSubmittingQr] = useState(false);
-  const [activeTab, setActiveTab] = useState<'shop' | 'orders'>('shop');
+
+  // Tab state synced with URL search params
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') === 'orders' ? 'orders' : 'shop';
+  const handleTabChange = (tab: 'shop' | 'orders') => {
+    setSearchParams({ tab });
+  };
+
+  // Sandbox payment modal state
+  const [sandboxModal, setSandboxModal] = useState<{
+    isOpen: boolean;
+    orderId: string;
+    amount: number;
+    itemName: string;
+    loading?: boolean;
+  } | null>(null);
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
@@ -604,25 +621,14 @@ export default function ProductsPage() {
           }
         };
 
-        // If mock order
+        // If mock order (Sandbox mode)
         if (orderData.id.startsWith('order_mock_')) {
-          const confirmSim = window.confirm(
-            "RAZORPAY SANDBOX MODE (Keys Missing)\n\nWould you like to simulate a successful online payment for this product?"
-          );
-          if (confirmSim) {
-            try {
-              await api.post('/products/order/verify', {
-                razorpay_order_id: orderData.id,
-                razorpay_payment_id: 'pay_mock_' + Date.now(),
-                razorpay_signature: 'sig_mock_' + Date.now()
-              });
-              toast('success', 'Order placed successfully! (Simulated)');
-              setSelectedProduct(null);
-              loadData();
-            } catch (err: any) {
-              toast('error', err.response?.data?.error || 'Verification failed.');
-            }
-          }
+          setSandboxModal({
+            isOpen: true,
+            orderId: orderData.id,
+            amount: selectedProduct.dbPrice * quantity,
+            itemName: selectedProduct.displayName,
+          });
           return;
         }
 
@@ -636,6 +642,25 @@ export default function ProductsPage() {
     } catch (err: any) {
       console.error('Purchase error:', err);
       toast('error', err.response?.data?.error || 'Failed to place order.');
+    }
+  };
+
+  const handleConfirmSandboxPayment = async () => {
+    if (!sandboxModal) return;
+    try {
+      setSandboxModal(prev => prev ? { ...prev, loading: true } : null);
+      await api.post('/products/order/verify', {
+        razorpay_order_id: sandboxModal.orderId,
+        razorpay_payment_id: 'pay_mock_' + Date.now(),
+        razorpay_signature: 'sig_mock_' + Date.now()
+      });
+      toast('success', 'Order placed successfully! (Simulated)');
+      setSelectedProduct(null);
+      setSandboxModal(null);
+      loadData();
+    } catch (err: any) {
+      toast('error', err.response?.data?.error || 'Verification failed.');
+      setSandboxModal(prev => prev ? { ...prev, loading: false } : null);
     }
   };
 
@@ -658,7 +683,7 @@ export default function ProductsPage() {
       setQrModalOpen(false);
       setSelectedProduct(null);
       setQrTransactionId('');
-      setActiveTab('orders');
+      handleTabChange('orders');
       loadData();
     } catch (err: any) {
       toast('error', err.response?.data?.error || 'Failed to submit QR payment.');
@@ -688,7 +713,7 @@ export default function ProductsPage() {
       {/* Tabs */}
       <div className="flex gap-2 border-b border-gray-200">
         <button
-          onClick={() => setActiveTab('shop')}
+          onClick={() => handleTabChange('shop')}
           className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
             activeTab === 'shop'
               ? 'border-[#D32F2F] text-[#D32F2F]'
@@ -699,7 +724,7 @@ export default function ProductsPage() {
           Shop Accessories
         </button>
         <button
-          onClick={() => setActiveTab('orders')}
+          onClick={() => handleTabChange('orders')}
           className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 relative ${
             activeTab === 'orders'
               ? 'border-[#D32F2F] text-[#D32F2F]'
@@ -955,7 +980,7 @@ export default function ProductsPage() {
                 Explore our premium accessories store tab to upgrade your car with original detailing cloths, seat covers, and damping sheets.
               </p>
               <button
-                onClick={() => setActiveTab('shop')}
+                onClick={() => handleTabChange('shop')}
                 className="px-5 py-2.5 bg-[#111111] hover:bg-[#D32F2F] text-white text-xs font-bold rounded-xl transition-colors"
               >
                 Go to Shop
@@ -1327,6 +1352,18 @@ export default function ProductsPage() {
         onClose={() => setProductsDrawerOpen(false)}
         onOrderSuccess={() => loadData()}
       />
+
+      {/* Payment Sandbox Simulation Modal */}
+      {sandboxModal && (
+        <PaymentSandboxModal
+          isOpen={sandboxModal.isOpen}
+          onClose={() => setSandboxModal(null)}
+          onConfirm={handleConfirmSandboxPayment}
+          itemName={sandboxModal.itemName}
+          amount={sandboxModal.amount}
+          loading={sandboxModal.loading}
+        />
+      )}
     </div>
   );
 }

@@ -19,7 +19,7 @@ exports.getLastAddress = async (req, res) => {
 // ─── CREATE PICKUP REQUEST ────────────────────────────────────────────────
 exports.create = async (req, res) => {
   try {
-    const { booking_id, address, scheduled_time, notes, request_type } = req.body;
+    const { booking_id, address, scheduled_time, notes, request_type, latitude, longitude, distance_km } = req.body;
 
     if (!booking_id || !address) {
       return res.status(400).json({ success: false, error: 'Booking ID and address are required' });
@@ -40,9 +40,9 @@ exports.create = async (req, res) => {
     }
 
     const [result] = await pool.query(
-      `INSERT INTO v2_pickup_requests (booking_id, customer_id, address, scheduled_time, notes, pickup_charges, status, request_type)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
-      [booking_id, customerId, address, scheduled_time || null, notes || null, pickupCharges, resolvedRequestType]
+      `INSERT INTO v2_pickup_requests (booking_id, customer_id, address, scheduled_time, notes, pickup_charges, status, request_type, latitude, longitude, distance_km)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
+      [booking_id, customerId, address, scheduled_time || null, notes || null, pickupCharges, resolvedRequestType, latitude || null, longitude || null, distance_km || null]
     );
 
     res.status(201).json({

@@ -16,6 +16,7 @@ router.get('/:id',      auth, role(['admin', 'customer', 'staff']), ctrl.getOne)
 router.put('/:id',      auth, role(['admin', 'staff']), ctrl.update);
 
 // Status transitions
+router.patch('/:id/status',   auth, role(['admin', 'staff']), ctrl.updateStatus);
 router.patch('/:id/submit',   auth, role(['admin', 'staff']), ctrl.submit);
 router.patch('/:id/complete', auth, role(['admin']), ctrl.complete);
 
