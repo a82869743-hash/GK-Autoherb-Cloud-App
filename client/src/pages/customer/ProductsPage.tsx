@@ -695,16 +695,16 @@ export default function ProductsPage() {
   return (
     <div className="space-y-6">
       {/* Top Banner */}
-      <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-[#111111] via-[#1a1a1a] to-[#222] border border-white/5 p-6 sm:p-8 shadow-xl">
+      <div className="relative rounded-xl overflow-hidden bg-gradient-to-r from-[#111111] via-[#1a1a1a] to-[#222] border border-white/5 p-5 sm:p-6 shadow-sm">
         <div className="absolute top-0 right-0 w-64 h-64 bg-red-600/10 rounded-full blur-3xl" />
-        <div className="relative z-10 max-w-xl space-y-3">
-          <span className="px-3 py-1 bg-red-500/10 border border-red-500/20 text-red-500 rounded-full text-xs font-bold uppercase tracking-wider">
+        <div className="relative z-10 max-w-xl space-y-2">
+          <span className="px-2.5 py-0.5 bg-red-500/10 border border-red-500/20 text-red-500 rounded-full text-[11px] font-semibold uppercase tracking-wider">
             Premium Studio Accessories
           </span>
-          <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight leading-tight">
+          <h2 className="text-xl sm:text-2xl font-semibold text-white tracking-tight leading-tight">
             GK AutoHerb Store
           </h2>
-          <p className="text-sm text-gray-400">
+          <p className="text-xs sm:text-sm text-gray-400 font-normal leading-relaxed">
             Professional grade detailing cloths, premium damping sheets, memory foam cushions, and car utilities designed to maintain and upgrade your ride.
           </p>
         </div>
@@ -714,13 +714,13 @@ export default function ProductsPage() {
       <div className="flex gap-2 border-b border-gray-200">
         <button
           onClick={() => handleTabChange('shop')}
-          className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+          className={`px-4 py-2 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
             activeTab === 'shop'
               ? 'border-[#D32F2F] text-[#D32F2F]'
               : 'border-transparent text-gray-500 hover:text-gray-800'
           }`}
         >
-          <ShoppingCart size={16} />
+          <ShoppingCart size={15} />
           Shop Accessories
         </button>
         <button

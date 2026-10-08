@@ -160,34 +160,34 @@ export default function LoyaltyPage() {
             <span className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]">Loyalty Account Summary</span>
           </div>
           
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-5">
             {pointsEnabled && (
               <div className="opacity-0 animate-fade-in-up" style={{ animationDelay: '0.05s', animationFillMode: 'forwards' }}>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Points Balance</p>
-                <p className="text-2xl sm:text-3xl font-black text-amber-400 tracking-tight">{points}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Points Balance</p>
+                <p className="text-xl sm:text-[22px] font-semibold text-amber-400 tracking-tight">{points}</p>
                 <p className="text-[10px] text-gray-400 mt-1">Worth {formatINR(points * pointValue)}</p>
-                <div className="w-12 h-1 bg-amber-400 rounded-full mt-2" />
+                <div className="w-10 h-0.5 bg-amber-400 rounded-full mt-2" />
               </div>
             )}
             <div className="opacity-0 animate-fade-in-up" style={{ animationDelay: '0.1s', animationFillMode: 'forwards' }}>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Reward Points</p>
-              <p className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                {Math.round(loyalty?.credits || 0)} <span className="text-sm font-bold text-gray-400">Pts</span>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Reward Points</p>
+              <p className="text-xl sm:text-[22px] font-semibold text-white tracking-tight">
+                {Math.round(loyalty?.credits || 0)} <span className="text-xs font-medium text-gray-400">Pts</span>
               </p>
               <p className="text-[10px] text-gray-400 mt-1">Points Balance</p>
-              <div className="w-12 h-1 bg-[#D32F2F] rounded-full mt-2" />
+              <div className="w-10 h-0.5 bg-[#D32F2F] rounded-full mt-2" />
             </div>
             <div className="opacity-0 animate-fade-in-up" style={{ animationDelay: '0.2s', animationFillMode: 'forwards' }}>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Free Washes</p>
-              <p className="text-2xl sm:text-3xl font-black text-white tracking-tight">{loyalty?.free_washes || 0}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Free Washes</p>
+              <p className="text-xl sm:text-[22px] font-semibold text-white tracking-tight">{loyalty?.free_washes || 0}</p>
               <p className="text-[10px] text-gray-400 mt-1">Available</p>
-              <div className="w-12 h-1 bg-blue-500 rounded-full mt-2" />
+              <div className="w-10 h-0.5 bg-blue-500 rounded-full mt-2" />
             </div>
             <div className="opacity-0 animate-fade-in-up" style={{ animationDelay: '0.3s', animationFillMode: 'forwards' }}>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Wax Treatments</p>
-              <p className="text-2xl sm:text-3xl font-black text-white tracking-tight">{loyalty?.wax_count || 0}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Wax Treatments</p>
+              <p className="text-xl sm:text-[22px] font-semibold text-white tracking-tight">{loyalty?.wax_count || 0}</p>
               <p className="text-[10px] text-gray-400 mt-1">Accrued</p>
-              <div className="w-12 h-1 bg-purple-500 rounded-full mt-2" />
+              <div className="w-10 h-0.5 bg-purple-500 rounded-full mt-2" />
             </div>
           </div>
         </div>

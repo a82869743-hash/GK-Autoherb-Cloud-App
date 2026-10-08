@@ -13,19 +13,19 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses: Record<Variant, string> = {
   primary:
-    'bg-gradient-to-br from-[#af101a] to-[#D32F2F] text-white shadow-lg shadow-[#D32F2F]/20 hover:shadow-xl hover:shadow-[#D32F2F]/30 hover:-translate-y-0.5',
+    'bg-gradient-to-br from-[#af101a] to-[#D32F2F] text-white shadow-sm shadow-[#D32F2F]/20 hover:shadow-md hover:shadow-[#D32F2F]/30 hover:-translate-y-0.5',
   secondary:
-    'bg-[#e5e2e1] text-[#1c1b1b] hover:bg-[#dcd9d9] border border-transparent hover:border-gray-300',
+    'bg-[#f0ece9] text-[#1c1b1b] hover:bg-[#e4dfdc] border border-gray-200/60',
   danger:
     'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 hover:border-red-300',
   ghost:
-    'bg-transparent text-[#5f5e5e] hover:bg-gray-100 hover:text-[#1c1b1b] relative after:absolute after:bottom-0 after:left-1/2 after:-translate-x-1/2 after:w-0 after:h-[2px] after:bg-[#D32F2F] hover:after:w-3/4 after:transition-all after:duration-300',
+    'bg-transparent text-[#5f5e5e] hover:bg-gray-100/80 hover:text-[#1c1b1b]',
 };
 
 const sizeClasses: Record<Size, string> = {
-  sm: 'px-3 py-1.5 text-xs gap-1.5',
-  md: 'px-4 py-2.5 text-sm gap-2',
-  lg: 'px-6 py-3 text-sm gap-2',
+  sm: 'h-8 px-2.5 text-xs gap-1.5',
+  md: 'h-9 px-3.5 text-sm gap-2',
+  lg: 'h-10 px-4 text-sm gap-2',
 };
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -34,10 +34,10 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         disabled={disabled || loading}
-        className={`inline-flex items-center justify-center font-bold rounded uppercase tracking-wider transition-all duration-200 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+        className={`inline-flex items-center justify-center font-medium rounded-lg transition-all duration-150 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
         {...props}
       >
-        {loading ? <Loader2 size={16} className="animate-spin" /> : icon}
+        {loading ? <Loader2 size={15} className="animate-spin" /> : icon}
         {children}
       </button>
     );

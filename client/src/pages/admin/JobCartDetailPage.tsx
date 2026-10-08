@@ -630,8 +630,8 @@ export default function JobCartDetailPage() {
             {!isStaff && cart.total_amount !== undefined && (
               <div className="text-left sm:text-right shrink-0 space-y-1.5">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e]">Total Amount</p>
-                  <p className="text-3xl font-black text-[#1c1b1b] tracking-tight">{formatINR(cart.total_amount)}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[#5f5e5e]">Total Amount</p>
+                  <p className="text-xl sm:text-2xl font-semibold text-[#1c1b1b] tracking-tight">{formatINR(cart.total_amount)}</p>
                   {(cart as any).pickup_charge > 0 && (
                     <p className="text-[10px] text-gray-500 font-medium mt-0.5">
                       Includes ₹{(cart as any).pickup_charge} Pickup & Drop ({(cart as any).pickup_type})

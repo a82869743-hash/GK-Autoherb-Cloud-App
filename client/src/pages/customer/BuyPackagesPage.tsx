@@ -506,33 +506,33 @@ export default function BuyPackagesPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 font-sans">
+    <div className="max-w-7xl mx-auto py-5 px-4 sm:px-6 lg:px-8 font-sans">
       {/* Header */}
-      <div className="mb-8 text-center">
-        <div className="inline-flex items-center gap-2 bg-red-50 text-red-700 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider mb-3">
-          <PackageOpen className="w-4 h-4" />
+      <div className="mb-5 text-center">
+        <div className="inline-flex items-center gap-1.5 bg-red-50 text-red-700 px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider mb-2">
+          <PackageOpen className="w-3.5 h-3.5" />
           Almost 45% Discount
         </div>
-        <h1 className="text-3xl font-extrabold text-gray-900">
+        <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 tracking-tight">
           Annual Car Care Packages
         </h1>
-        <p className="mt-2 text-gray-600 text-sm">
+        <p className="mt-1 text-gray-500 text-xs sm:text-sm">
           Select your vehicle to see personalized pricing for our exclusive car care packages.
         </p>
       </div>
 
       {vehicles.length === 0 ? (
-        <div className="text-center bg-white p-10 rounded-2xl shadow-sm border border-red-100">
-          <Car className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-bold text-gray-900">No Vehicles Found</h3>
-          <p className="text-gray-500 mt-2">You need to add a vehicle to your profile before purchasing packages.</p>
+        <div className="text-center bg-white p-8 rounded-xl shadow-2xs border border-red-100">
+          <Car className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+          <h3 className="text-base font-semibold text-gray-900">No Vehicles Found</h3>
+          <p className="text-gray-500 text-xs mt-1">You need to add a vehicle to your profile before purchasing packages.</p>
         </div>
       ) : (
-        <div className="mb-10 max-w-xl mx-auto space-y-4">
+        <div className="mb-6 max-w-xl mx-auto space-y-3">
           <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">Select Vehicle</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Select Vehicle</label>
             <select
-              className="w-full bg-white border-2 border-red-100 focus:border-red-500 focus:ring-0 rounded-xl py-3 px-4 shadow-sm text-gray-900 font-medium transition-colors"
+              className="w-full bg-white border border-slate-200 focus:border-[#D32F2F] focus:ring-0 rounded-lg h-9 px-3 text-sm text-gray-900 font-normal transition-colors cursor-pointer"
               value={selectedVehicle?.id || ''}
               onChange={(e) => setSelectedVehicle(vehicles.find(v => v.id === Number(e.target.value)) || null)}
             >

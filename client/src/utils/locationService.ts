@@ -35,13 +35,32 @@ export interface StudioInfo {
 export const OWNER_STUDIO_LOCATION: StudioInfo = {
   name: 'GK AutoHerb Detailing Studio',
   address: 'Gotri - Vasna - Bhayli Main Road, Vadodara, Gujarat 391410',
-  area: 'Gotri - Vasna - Bhayli',
+  area: 'Gotri - Vasna - Bhayli Road',
   city: 'Vadodara',
   state: 'Gujarat',
   pincode: '391410',
   lat: 22.3134,
   lng: 73.1342,
 };
+
+/**
+ * Dynamically resolves studio location using real-time settings values from DB
+ */
+export function resolveStudioLocation(settings?: Record<string, string> | null): StudioInfo {
+  if (!settings) return OWNER_STUDIO_LOCATION;
+  const lat = parseFloat(settings.studio_lat || '') || OWNER_STUDIO_LOCATION.lat;
+  const lng = parseFloat(settings.studio_lng || '') || OWNER_STUDIO_LOCATION.lng;
+  return {
+    name: settings.studio_name || OWNER_STUDIO_LOCATION.name,
+    address: settings.studio_address || OWNER_STUDIO_LOCATION.address,
+    area: settings.studio_area || OWNER_STUDIO_LOCATION.area,
+    city: 'Vadodara',
+    state: 'Gujarat',
+    pincode: '391410',
+    lat,
+    lng,
+  };
+}
 
 /**
  * Calculates distance between two coordinates using the Haversine formula (km)
@@ -172,8 +191,15 @@ export async function reverseGeocodeCoords(lat: number, lng: number): Promise<Ge
 /**
  * Generates Google Maps Directions URL from Customer Location to Studio
  */
-export function getRouteUrlToStudio(customerLat: number, customerLng: number): string {
-  return `https://www.google.com/maps/dir/?api=1&origin=${customerLat},${customerLng}&destination=${OWNER_STUDIO_LOCATION.lat},${OWNER_STUDIO_LOCATION.lng}&travelmode=driving`;
+export function getRouteUrlToStudio(
+  customerLat: number,
+  customerLng: number,
+  studioLat?: number,
+  studioLng?: number
+): string {
+  const sLat = studioLat ?? OWNER_STUDIO_LOCATION.lat;
+  const sLng = studioLng ?? OWNER_STUDIO_LOCATION.lng;
+  return `https://www.google.com/maps/dir/?api=1&origin=${customerLat},${customerLng}&destination=${sLat},${sLng}&travelmode=driving`;
 }
 
 /**

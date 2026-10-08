@@ -46,14 +46,14 @@ export default function StaffInventoryPage() {
 
   return (
     <div>
-      <div className="mb-8" style={{ borderImage: 'linear-gradient(to bottom, #af101a, #D32F2F) 1' }}>
-        <div className="border-l-4 pl-6" style={{ borderImage: 'linear-gradient(to bottom, #af101a, #D32F2F) 1' }}>
-          <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#1c1b1b] uppercase">Inventory</h2>
-          <p className="text-sm text-[#5f5e5e] mt-1">{data?.pagination?.total || 0} products</p>
+      <div className="mb-5">
+        <div className="border-l-2 border-[#D32F2F] pl-3">
+          <h2 className="text-xl sm:text-[22px] font-semibold tracking-tight text-[#1c1b1b]">Inventory</h2>
+          <p className="text-xs text-[#5f5e5e] mt-0.5">{data?.pagination?.total || 0} products</p>
         </div>
       </div>
 
-      <div className="mb-6">
+      <div className="mb-4">
         <SearchInput
           value={search}
           onChange={(v) => { setSearch(v); setPage(1); }}

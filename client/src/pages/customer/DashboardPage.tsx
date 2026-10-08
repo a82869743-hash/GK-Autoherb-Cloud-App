@@ -1,18 +1,30 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   Calendar, Clock, Car, Sparkles, Gift, ArrowRight, ChevronRight,
   Shield, CalendarCheck, Wrench, Plus, Package, ChevronLeft,
-  CheckCircle2, Award, Zap, Truck, Navigation, Bot, ArrowUpDown
+  CheckCircle2, Award, Zap, Truck, Navigation, Bot, ArrowUpDown,
+  Droplets, Layers, MapPin, RotateCw, ExternalLink, Crosshair
 } from 'lucide-react';
 import { useCustomerDashboard } from '../../api/hooks/useDashboard';
+import { useServices } from '../../api/hooks/useServices';
+import { usePublicSettings } from '../../api/hooks/useSettings';
+import { matchesServiceCategory } from './ServicesPage';
 import { useAuthStore } from '../../store/authStore';
 import ErrorState from '../../components/shared/ErrorState';
 import { formatDate, formatTime, formatINR } from '../../utils/formatters';
 import AddCarModal from '../../components/shared/AddCarModal';
 import { useCarImage, getSafeCarImage, getStudioFallback, markCarImageFailed } from '../../utils/carImageService';
 import { getCategoryForModel } from '../../utils/carData';
-import { OWNER_STUDIO_LOCATION } from '../../utils/locationService';
+import { 
+  getDeviceLiveLocation, 
+  reverseGeocodeCoords, 
+  calculateHaversineDistance, 
+  estimateDriveMinutes, 
+  getRouteUrlToStudio, 
+  resolveStudioLocation, 
+  LocationCoordinates 
+} from '../../utils/locationService';
 
 function computeJobTimeline(status?: string) {
   const s = (status || '').toLowerCase();
@@ -66,7 +78,82 @@ export default function CustomerDashboardPage() {
   const recentJobs = data?.recent_jobs || [];
   const totalVisits = data?.total_visits || 0;
   const activePackage = data?.active_package || null;
-  const activePackages = data?.active_packages || (activePackage ? [activePackage] : []);
+  const rawActivePackages = data?.active_packages || (activePackage ? [activePackage] : []);
+
+  const { data: servicesRes } = useServices({ active_only: true });
+  const servicesList: any[] = servicesRes?.data || [];
+
+  const allCount = servicesList.length;
+  const washCount = servicesList.filter((s: any) => matchesServiceCategory(s, 'washing')).length;
+  const ppfCount = servicesList.filter((s: any) => matchesServiceCategory(s, 'coating_ppf')).length;
+  const generalCount = servicesList.filter((s: any) => matchesServiceCategory(s, 'general')).length;
+  
+  // Deduplicate active packages so identical memberships are never shown multiple times
+  const activePackages = useMemo(() => {
+    const seen = new Set();
+    const result: any[] = [];
+    for (const p of rawActivePackages) {
+      const key = `${p.package_id || p.id}_${p.package_name || ''}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(p);
+      }
+    }
+    return result;
+  }, [rawActivePackages]);
+
+  const [selectedActivePkgIndex, setSelectedActivePkgIndex] = useState(0);
+  const currentActivePkg = activePackages[selectedActivePkgIndex] || activePackages[0] || null;
+
+  // Dynamic Studio Location from settings (not hardcoded)
+  const { data: publicSettingsRes } = usePublicSettings();
+  const studioInfo = useMemo(() => resolveStudioLocation(publicSettingsRes?.data), [publicSettingsRes]);
+
+  // Dynamic Live GPS Detection for Customer
+  const [customerCoords, setCustomerCoords] = useState<LocationCoordinates | null>(null);
+  const [customerArea, setCustomerArea] = useState<string>('');
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsStatus, setGpsStatus] = useState<'idle' | 'locating' | 'success' | 'denied'>('idle');
+
+  const fetchLiveGps = async () => {
+    setGpsLoading(true);
+    setGpsStatus('locating');
+    try {
+      const coords = await getDeviceLiveLocation();
+      setCustomerCoords(coords);
+      setGpsStatus('success');
+      try {
+        const geo = await reverseGeocodeCoords(coords.lat, coords.lng);
+        setCustomerArea(geo.area || geo.street || geo.city || 'Vadodara Area');
+      } catch {
+        setCustomerArea('Live GPS Location');
+      }
+    } catch (err: any) {
+      console.warn('Live location error:', err);
+      setGpsStatus(err?.message?.includes('denied') ? 'denied' : 'idle');
+    } finally {
+      setGpsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLiveGps();
+  }, []);
+
+  const liveDistanceKm = useMemo(() => {
+    if (!customerCoords) return null;
+    return calculateHaversineDistance(
+      customerCoords.lat,
+      customerCoords.lng,
+      studioInfo.lat,
+      studioInfo.lng
+    );
+  }, [customerCoords, studioInfo]);
+
+  const liveDriveMinutes = useMemo(() => {
+    if (liveDistanceKm === null) return null;
+    return estimateDriveMinutes(liveDistanceKm);
+  }, [liveDistanceKm]);
 
   // Showcase vehicles (user's vehicles or curated studio cars)
   const displayCars = vehicles.length > 0 ? vehicles : [
@@ -141,28 +228,102 @@ export default function CustomerDashboardPage() {
 
   return (
     <div className="space-y-6 pt-1 text-slate-900">
-      {/* ── Sub-header / Studio Status Bar ───────────── */}
-      <div className="flex items-center justify-between text-xs px-1">
-        <a 
-          href={`https://www.google.com/maps?q=${OWNER_STUDIO_LOCATION.lat},${OWNER_STUDIO_LOCATION.lng}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 hover:opacity-85 transition-opacity group"
-          title="Open Studio Location in Google Maps"
-        >
-          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-          <span className="text-slate-600 font-semibold tracking-wide flex items-center gap-1">
-            Studio Live • <span className="font-bold text-slate-800">Gotri - Vasna - Bhayli Road</span>
-            <span className="text-[10px] text-red-600 font-bold bg-red-50 group-hover:bg-red-100 px-1.5 py-0.5 rounded transition-colors">Vadodara 📍</span>
-          </span>
-        </a>
-        <Link 
-          to="/customer/vehicles" 
-          className="text-slate-500 hover:text-slate-900 flex items-center gap-1 font-bold text-[11px] transition-colors"
-        >
-          <span>Your Garage ({vehicles.length})</span>
-          <ChevronRight size={12} className="text-red-500" />
-        </Link>
+      {/* ── Sub-header / Dynamic Live Location & Studio Status Deck ───────────── */}
+      <div className="bg-white/90 backdrop-blur-md border border-slate-200/80 rounded-2xl p-2.5 sm:p-3 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+        
+        {/* Left: Dynamic Live Location Status */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Status Pulse Indicator */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className={`w-2.5 h-2.5 rounded-full ${gpsStatus === 'success' ? 'bg-emerald-500 animate-pulse' : gpsLoading ? 'bg-amber-400 animate-ping' : 'bg-slate-400'}`} />
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+              {gpsStatus === 'success' ? 'Live GPS Active' : gpsLoading ? 'Locating...' : 'Location'}
+            </span>
+          </div>
+
+          <div className="h-3 w-px bg-slate-200 hidden sm:block" />
+
+          {/* User Location / Distance or Studio Info */}
+          {customerCoords && liveDistanceKm !== null ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-bold text-slate-800 flex items-center gap-1">
+                <MapPin size={12} className="text-[#D32F2F]" />
+                <span>{customerArea || 'Your Location'}</span>
+              </span>
+              <span className="text-slate-400">•</span>
+              <span className="px-2 py-0.5 rounded-full bg-red-50 text-[#D32F2F] font-bold text-[11px] border border-red-100 flex items-center gap-1">
+                <span>{liveDistanceKm} km from Studio</span>
+                {liveDriveMinutes ? <span className="text-slate-500 font-medium">({liveDriveMinutes}m drive)</span> : null}
+              </span>
+              <a
+                href={getRouteUrlToStudio(customerCoords.lat, customerCoords.lng, studioInfo.lat, studioInfo.lng)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-0.5 ml-1"
+                title="Get driving directions in Google Maps"
+              >
+                <span>Directions</span>
+                <Navigation size={10} />
+              </a>
+            </div>
+          ) : gpsLoading ? (
+            <span className="text-slate-500 font-medium flex items-center gap-1">
+              <RotateCw size={11} className="animate-spin text-[#D32F2F]" />
+              Detecting device live GPS...
+            </span>
+          ) : (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-slate-600 font-medium">
+                Studio: <span className="font-bold text-slate-800">{studioInfo.area || 'Gotri - Vasna - Bhayli Road'}</span>
+              </span>
+              <button
+                type="button"
+                onClick={fetchLiveGps}
+                className="text-[11px] font-bold text-[#D32F2F] hover:text-[#b71c1c] bg-red-50 hover:bg-red-100 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1"
+              >
+                <Crosshair size={11} />
+                <span>Fetch Live Location</span>
+              </button>
+            </div>
+          )}
+
+          {/* Refresh GPS Button */}
+          {customerCoords && (
+            <button
+              type="button"
+              onClick={fetchLiveGps}
+              disabled={gpsLoading}
+              title="Refresh live device coordinates"
+              className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100 transition-colors"
+            >
+              <RotateCw size={11} className={gpsLoading ? 'animate-spin text-[#D32F2F]' : ''} />
+            </button>
+          )}
+        </div>
+
+        {/* Right: Studio Pin & Garage Link */}
+        <div className="flex items-center gap-3 self-end sm:self-auto shrink-0">
+          <a
+            href={`https://www.google.com/maps?q=${studioInfo.lat},${studioInfo.lng}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] font-bold text-slate-500 hover:text-slate-900 transition-colors flex items-center gap-1"
+            title="Open Studio Location in Google Maps"
+          >
+            <span>GK Studio ({studioInfo.city})</span>
+            <ExternalLink size={10} className="text-slate-400" />
+          </a>
+
+          <div className="h-3 w-px bg-slate-200" />
+
+          <Link 
+            to="/customer/vehicles" 
+            className="text-slate-600 hover:text-slate-900 flex items-center gap-1 font-bold text-[11px] transition-colors"
+          >
+            <span>Garage ({vehicles.length})</span>
+            <ChevronRight size={12} className="text-red-500" />
+          </Link>
+        </div>
       </div>
 
       {/* ── 50% OFF First Wash Promo Ribbon ─────────── */}
@@ -317,56 +478,33 @@ export default function CustomerDashboardPage() {
         </div>
       ) : null}
 
-      {/* ── GK AI Workshop Concierge Interactive Banner ─────────── */}
-      <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-[#121212] via-[#1a1818] to-[#221f1f] p-5 sm:p-6 text-white border border-white/10 shadow-xl">
-        <div className="absolute top-0 right-0 w-60 h-60 bg-red-600/15 rounded-full blur-3xl pointer-events-none" />
-        
-        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#D32F2F] to-[#af101a] text-white flex items-center justify-center shadow-lg shadow-red-600/30 shrink-0">
-              <Bot size={24} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-black text-white">Ask GK Studio AI Concierge</h3>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold inline-flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  Live Assistant
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 mt-1 max-w-lg leading-relaxed">
-                Need instant pricing for your car, package comparisons, live car tracking, or genuine accessories? Click any question below to chat live.
-              </p>
-            </div>
+      {/* ── GK Studio AI Concierge Compact Quick-Launcher ── */}
+      <div className="bg-gradient-to-r from-red-50/70 via-white to-white rounded-2xl p-3.5 sm:p-4 border border-red-100 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#af101a] to-[#D32F2F] text-white flex items-center justify-center shrink-0 shadow-sm shadow-red-500/20">
+            <Bot size={20} />
           </div>
-
-          <button
-            onClick={() => window.dispatchEvent(new CustomEvent('gk-open-chatbot'))}
-            className="px-4 py-2.5 bg-gradient-to-r from-[#D32F2F] to-[#b71c1c] hover:from-[#b71c1c] hover:to-[#8b0000] text-white text-xs font-bold rounded-2xl shadow-md transition-all flex items-center gap-2 shrink-0 active:scale-95"
-          >
-            <Sparkles size={15} />
-            <span>Open AI Chat</span>
-          </button>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight">GK Studio AI Concierge</h4>
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
+                24/7 Live AI
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+              Ask about rates, vehicle bay tracking, ceramic coating, or packages
+            </p>
+          </div>
         </div>
 
-        {/* Quick Question Trigger Chips */}
-        <div className="relative z-10 mt-4 pt-3.5 border-t border-white/10 flex flex-wrap gap-2">
-          {[
-            { label: '🏎️ Track My Car Progress', prompt: 'Where is my car and what is the job status?' },
-            { label: '💎 Which Package Saves Most?', prompt: 'What are the membership packages and savings?' },
-            { label: '🛡️ Ceramic vs PPF Difference', prompt: 'What is the difference between ceramic coating and PPF?' },
-            { label: '🛍️ Check Store Accessories', prompt: 'What genuine car accessories do you have in stock?' },
-            { label: '📞 Studio Helpline & Valet', prompt: 'Please give me the studio phone number, location, and doorstep pickup details' },
-          ].map((item, i) => (
-            <button
-              key={i}
-              onClick={() => window.dispatchEvent(new CustomEvent('gk-open-chatbot', { detail: { prompt: item.prompt } }))}
-              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/10 hover:border-red-500/40 text-slate-200 hover:text-white rounded-xl text-[11px] font-medium transition-all active:scale-95 text-left"
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent('gk-open-chatbot'))}
+          className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-[#D32F2F] text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer shrink-0"
+        >
+          <Sparkles size={13} className="text-amber-400" />
+          <span>Ask AI Concierge</span>
+        </button>
       </div>
 
       {/* ── Vehicle Hero Showcase Carousel (Clean Light Studio Mode) ── */}
@@ -375,17 +513,17 @@ export default function CustomerDashboardPage() {
         <div className="flex items-start justify-between relative z-10">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-red-600">Active Vehicle</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-red-600">Active Vehicle</span>
               {currentCar?.car_year && (
-                <span className="px-2 py-0.5 bg-slate-100 rounded-md text-[10px] font-bold text-slate-600">
+                <span className="px-2 py-0.5 bg-slate-100 rounded-md text-[11px] font-medium text-slate-600">
                   {currentCar.car_year}
                 </span>
               )}
             </div>
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1">
+            <h2 className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight mt-0.5">
               {currentCar?.model || 'Studio Vehicle'}
             </h2>
-            <p className="text-xs text-slate-500 font-semibold tracking-wide mt-0.5">
+            <p className="text-xs text-slate-500 font-medium tracking-normal mt-0.5">
               {currentCar?.brand || 'Luxury Automotive'} {currentCar?.registration_no ? `• ${currentCar.registration_no}` : ''}
             </p>
           </div>
@@ -471,170 +609,192 @@ export default function CustomerDashboardPage() {
         </div>
       </div>
 
-      {/* ── GK Club Pass & Loyalty Bento Card ── */}
+      {/* ── GK Detailing Services Bento Cards (All Services, Wash Services, PPF & Coating, General Services) ── */}
       <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-[0_10px_30px_rgba(0,0,0,0.04)] relative overflow-hidden group">
-        {/* Pass Header */}
+        {/* Services Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 relative z-10">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600 flex items-center gap-1">
-                <Sparkles size={11} className="text-amber-500" />
-                GK Club Pass
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#D32F2F] flex items-center gap-1">
+                <Sparkles size={11} className="text-[#D32F2F]" />
+                GK Detailing Menu
               </span>
-              <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-900 text-[9px] font-black uppercase tracking-wider rounded-md">
-                Gold Tier
+              <span className="px-2 py-0.5 bg-red-50 border border-red-200 text-red-900 text-[9px] font-black uppercase tracking-wider rounded-md">
+                Certified Quality
               </span>
             </div>
             <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight mt-0.5">
-              Rewards & Member Privileges
+              Studio Detailing Services
             </h3>
           </div>
           <Link
-            to="/customer/loyalty"
+            to="/customer/services?category=all"
             className="text-xs font-black text-red-600 hover:text-red-700 flex items-center gap-1 px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 border border-red-100 transition-all"
           >
-            <span>Redeem Pass</span>
+            <span>All Services</span>
             <ChevronRight size={14} className="text-red-500" />
           </Link>
         </div>
 
-        {/* 4 Bento Metrics */}
+        {/* 4 Bento Service Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4 relative z-10">
-          {/* Reward Points */}
-          <div className="bg-gradient-to-br from-amber-500/[0.04] via-transparent to-transparent rounded-2xl p-4 border border-amber-200/60 hover:border-amber-300 shadow-2xs transition-all flex flex-col justify-between group/metric">
+          {/* Card 1: All Services */}
+          <Link
+            to="/customer/services?category=all"
+            className="bg-gradient-to-br from-red-500/[0.04] via-transparent to-transparent rounded-xl p-3.5 sm:p-4 border border-red-200/60 hover:border-red-400 shadow-2xs hover:shadow-sm hover:-translate-y-0.5 transition-all flex flex-col justify-between group/metric cursor-pointer"
+          >
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800">Points Balance</span>
-                <div className="w-7 h-7 rounded-xl bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center shadow-2xs">
-                  <Award size={15} />
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-red-800">All Services</span>
+                <div className="w-7 h-7 rounded-lg bg-red-100 border border-red-200 text-[#D32F2F] flex items-center justify-center shadow-2xs group-hover/metric:scale-105 transition-transform">
+                  <Layers size={14} />
                 </div>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight tabular-nums">
-                  {loyalty.credits || 0}
+                <span className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight tabular-nums">
+                  {allCount || 18}
                 </span>
-                <span className="text-xs text-amber-700 font-extrabold uppercase">Pts</span>
+                <span className="text-[11px] text-red-700 font-medium uppercase">Available</span>
               </div>
             </div>
             
-            <div className="mt-3">
-              <div className="w-full bg-amber-100/70 h-1.5 rounded-full overflow-hidden">
+            <div className="mt-2.5">
+              <div className="w-full bg-red-100/70 h-1.5 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-full transition-all duration-500" 
-                  style={{ width: `${Math.min(100, Math.max(8, ((loyalty.credits || 0) % 500) / 5))}%` }} 
+                  className="h-full bg-gradient-to-r from-[#af101a] to-[#D32F2F] rounded-full transition-all duration-500" 
+                  style={{ width: '100%' }} 
                 />
               </div>
-              <p className="text-[10px] text-slate-500 font-semibold mt-1.5 flex items-center justify-between">
-                <span>Instant Cash Off</span>
-                <span className="text-amber-700 font-bold">1 Pt = ₹1</span>
+              <p className="text-[10px] text-slate-500 font-medium mt-1.5 flex items-center justify-between">
+                <span>Complete Catalog</span>
+                <span className="text-[#D32F2F] font-semibold group-hover/metric:translate-x-0.5 transition-transform flex items-center">
+                  Explore <ChevronRight size={10} className="inline ml-0.5" />
+                </span>
               </p>
             </div>
-          </div>
+          </Link>
 
-          {/* Free Washes */}
-          <div className="bg-gradient-to-br from-sky-500/[0.04] via-transparent to-transparent rounded-2xl p-4 border border-sky-200/60 hover:border-sky-300 shadow-2xs transition-all flex flex-col justify-between group/metric">
+          {/* Card 2: Washing Services */}
+          <Link
+            to="/customer/services?category=washing"
+            className="bg-gradient-to-br from-sky-500/[0.04] via-transparent to-transparent rounded-xl p-3.5 sm:p-4 border border-sky-200/60 hover:border-sky-400 shadow-2xs hover:shadow-sm hover:-translate-y-0.5 transition-all flex flex-col justify-between group/metric cursor-pointer"
+          >
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-sky-800">Free Washes</span>
-                <div className="w-7 h-7 rounded-xl bg-sky-100 border border-sky-200 text-sky-700 flex items-center justify-center shadow-2xs">
-                  <Zap size={15} />
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-sky-800">Wash Services</span>
+                <div className="w-7 h-7 rounded-lg bg-sky-100 border border-sky-200 text-sky-700 flex items-center justify-center shadow-2xs group-hover/metric:scale-105 transition-transform">
+                  <Droplets size={14} />
                 </div>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight tabular-nums">
-                  {loyalty.free_washes || 0}
+                <span className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight tabular-nums">
+                  {washCount || 6}
                 </span>
-                <span className="text-xs text-sky-700 font-extrabold uppercase">Available</span>
+                <span className="text-[11px] text-sky-700 font-medium uppercase">Washes</span>
               </div>
             </div>
 
-            <div className="mt-3">
+            <div className="mt-2.5">
               <div className="w-full bg-sky-100/70 h-1.5 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-sky-500 rounded-full transition-all duration-500" 
-                  style={{ width: `${(loyalty.free_washes || 0) > 0 ? 100 : 0}%` }} 
+                  style={{ width: '100%' }} 
                 />
               </div>
-              <p className="text-[10px] text-slate-500 font-semibold mt-1.5 flex items-center justify-between">
-                <span>100% Free Detailing</span>
-                {(loyalty.free_washes || 0) > 0 && <span className="text-emerald-600 font-black">Ready!</span>}
+              <p className="text-[10px] text-slate-500 font-medium mt-1.5 flex items-center justify-between">
+                <span>Foam & Underbody</span>
+                <span className="text-sky-700 font-semibold group-hover/metric:translate-x-0.5 transition-transform flex items-center">
+                  Book Wash <ChevronRight size={10} className="inline ml-0.5" />
+                </span>
               </p>
             </div>
-          </div>
+          </Link>
 
-          {/* Wax Treatments */}
-          <div className="bg-gradient-to-br from-purple-500/[0.04] via-transparent to-transparent rounded-2xl p-4 border border-purple-200/60 hover:border-purple-300 shadow-2xs transition-all flex flex-col justify-between group/metric">
+          {/* Card 3: Coating & PPF Services */}
+          <Link
+            to="/customer/services?category=coating_ppf"
+            className="bg-gradient-to-br from-purple-500/[0.04] via-transparent to-transparent rounded-xl p-3.5 sm:p-4 border border-purple-200/60 hover:border-purple-400 shadow-2xs hover:shadow-sm hover:-translate-y-0.5 transition-all flex flex-col justify-between group/metric cursor-pointer"
+          >
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-800">Wax Treatments</span>
-                <div className="w-7 h-7 rounded-xl bg-purple-100 border border-purple-200 text-purple-700 flex items-center justify-center shadow-2xs">
-                  <Sparkles size={15} />
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-purple-800">PPF & Coating</span>
+                <div className="w-7 h-7 rounded-lg bg-purple-100 border border-purple-200 text-purple-700 flex items-center justify-center shadow-2xs group-hover/metric:scale-105 transition-transform">
+                  <Shield size={14} />
                 </div>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight tabular-nums">
-                  {loyalty.wax_count || 0}
+                <span className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight tabular-nums">
+                  {ppfCount || 4}
                 </span>
-                <span className="text-xs text-purple-700 font-extrabold uppercase">Passes Left</span>
+                <span className="text-[11px] text-purple-700 font-medium uppercase">Shields</span>
               </div>
             </div>
 
-            <div className="mt-3">
+            <div className="mt-2.5">
               <div className="w-full bg-purple-100/70 h-1.5 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-purple-500 rounded-full transition-all duration-500" 
-                  style={{ width: `${(loyalty.wax_count || 0) > 0 ? 100 : 0}%` }} 
+                  style={{ width: '100%' }} 
                 />
               </div>
-              <p className="text-[10px] text-slate-500 font-semibold mt-1.5">
-                <span>Carnauba Mirror Shine</span>
+              <p className="text-[10px] text-slate-500 font-medium mt-1.5 flex items-center justify-between">
+                <span>9H & Self-Healing</span>
+                <span className="text-purple-700 font-semibold group-hover/metric:translate-x-0.5 transition-transform flex items-center">
+                  Explore <ChevronRight size={10} className="inline ml-0.5" />
+                </span>
               </p>
             </div>
-          </div>
+          </Link>
 
-          {/* Total Visits */}
-          <div className="bg-gradient-to-br from-emerald-500/[0.04] via-transparent to-transparent rounded-2xl p-4 border border-emerald-200/60 hover:border-emerald-300 shadow-2xs transition-all flex flex-col justify-between group/metric">
+          {/* Card 4: General Services */}
+          <Link
+            to="/customer/services?category=general"
+            className="bg-gradient-to-br from-emerald-500/[0.04] via-transparent to-transparent rounded-xl p-3.5 sm:p-4 border border-emerald-200/60 hover:border-emerald-400 shadow-2xs hover:shadow-sm hover:-translate-y-0.5 transition-all flex flex-col justify-between group/metric cursor-pointer"
+          >
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-800">Studio Visits</span>
-                <div className="w-7 h-7 rounded-xl bg-emerald-100 border border-emerald-200 text-emerald-700 flex items-center justify-center shadow-2xs">
-                  <CheckCircle2 size={15} />
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-800">General Services</span>
+                <div className="w-7 h-7 rounded-lg bg-emerald-100 border border-emerald-200 text-emerald-700 flex items-center justify-center shadow-2xs group-hover/metric:scale-105 transition-transform">
+                  <Wrench size={14} />
                 </div>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight tabular-nums">
-                  {totalVisits}
+                <span className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight tabular-nums">
+                  {generalCount || 8}
                 </span>
-                <span className="text-xs text-emerald-700 font-extrabold uppercase">Completed</span>
+                <span className="text-[11px] text-emerald-700 font-medium uppercase">Treatments</span>
               </div>
             </div>
 
-            <div className="mt-3">
+            <div className="mt-2.5">
               <div className="w-full bg-emerald-100/70 h-1.5 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-emerald-500 rounded-full transition-all duration-500" 
-                  style={{ width: `${Math.min(100, Math.max(10, totalVisits * 20))}%` }} 
+                  style={{ width: '100%' }} 
                 />
               </div>
-              <p className="text-[10px] text-slate-500 font-semibold mt-1.5 flex items-center justify-between">
-                <span>VIP Priority Bay</span>
-                <span className="text-emerald-700 font-bold">Active</span>
+              <p className="text-[10px] text-slate-500 font-medium mt-1.5 flex items-center justify-between">
+                <span>Interior Spa & Care</span>
+                <span className="text-emerald-700 font-semibold group-hover/metric:translate-x-0.5 transition-transform flex items-center">
+                  Book Care <ChevronRight size={10} className="inline ml-0.5" />
+                </span>
               </p>
             </div>
-          </div>
+          </Link>
         </div>
       </div>
 
-      {/* ── Active Membership Package & Expiry Tracker ────────── */}
-      {activePackages.length > 0 && (
-        <div className="space-y-3">
-          {activePackages.map((pkg: any, idx: number) => {
+      {/* ── Active Membership Package & Expiry Tracker (Rendered Strictly Once) ────────── */}
+      {currentActivePkg && (
+        <div className="bg-gradient-to-br from-purple-50/70 via-white to-white rounded-3xl p-5 sm:p-6 border border-purple-200/80 shadow-[0_10px_30px_rgba(0,0,0,0.04)] relative overflow-hidden">
+          {(() => {
+            const pkg = currentActivePkg;
             const daysLeft = pkg.end_date ? Math.ceil((new Date(pkg.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
             const isExpired = daysLeft !== null && daysLeft <= 0;
             const isExpiringSoon = daysLeft !== null && daysLeft <= 30 && daysLeft > 0;
 
             return (
-              <div key={pkg.id || idx} className="bg-gradient-to-br from-purple-50/70 via-white to-white rounded-3xl p-5 sm:p-6 border border-purple-200/80 shadow-[0_10px_30px_rgba(0,0,0,0.04)] relative overflow-hidden">
+              <>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-purple-100">
                   <div className="flex items-center gap-3">
                     <div className="w-11 h-11 rounded-2xl bg-purple-100 border border-purple-200 text-purple-700 flex items-center justify-center shrink-0 shadow-sm">
@@ -652,14 +812,37 @@ export default function CustomerDashboardPage() {
                         ) : (
                           <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase rounded-md">Active</span>
                         )}
+                        {activePackages.length > 1 && (
+                          <span className="text-[10px] text-purple-600 font-bold bg-purple-100/60 px-1.5 py-0.5 rounded">
+                            {selectedActivePkgIndex + 1} of {activePackages.length}
+                          </span>
+                        )}
                       </div>
-                      <h3 className="text-base sm:text-lg font-extrabold text-slate-900 mt-0.5">{pkg.package_name}</h3>
+
+                      {/* Package Name or Selector if multiple packages */}
+                      {activePackages.length > 1 ? (
+                        <div className="flex items-center gap-2 mt-1">
+                          <select
+                            value={selectedActivePkgIndex}
+                            onChange={(e) => setSelectedActivePkgIndex(Number(e.target.value))}
+                            className="text-base font-extrabold text-slate-900 bg-transparent border-b border-purple-300 focus:outline-none cursor-pointer pr-4"
+                          >
+                            {activePackages.map((p: any, i: number) => (
+                              <option key={i} value={i}>
+                                {p.package_name} {p.vehicle_reg_no ? `(${p.vehicle_reg_no})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : (
+                        <h3 className="text-base sm:text-lg font-extrabold text-slate-900 mt-0.5">{pkg.package_name}</h3>
+                      )}
                     </div>
                   </div>
 
                   <button
                     onClick={() => navigate(`/customer/bookings/new?from_package=1&vehicle_id=${pkg.vehicle_id || ''}`)}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all self-start sm:self-auto"
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all self-start sm:self-auto cursor-pointer"
                   >
                     Book from Package
                   </button>
@@ -683,9 +866,9 @@ export default function CustomerDashboardPage() {
                     ))}
                   </div>
                 )}
-              </div>
+              </>
             );
-          })}
+          })()}
         </div>
       )}
 

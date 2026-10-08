@@ -30,6 +30,7 @@ import BookingsPage from './pages/customer/BookingsPage';
 
 // Services, Packages & Loyalty pages
 import ServicesPage from './pages/admin/ServicesPage';
+import CustomerServicesPage from './pages/customer/ServicesPage';
 import PackagesPage from './pages/admin/PackagesPage';
 import LoyaltyAwardPage from './pages/admin/LoyaltyAwardPage';
 import LoyaltyPage from './pages/customer/LoyaltyPage';
@@ -356,7 +357,7 @@ export default function App() {
         <ProtectedRoute><RoleRoute allowedRoles={['customer']}><CustomerLayout /></RoleRoute></ProtectedRoute>
       }>
         <Route index element={<CustomerDashboardPage />} />
-        <Route path="services" element={<Navigate to="/customer/bookings/new" replace />} />
+        <Route path="services" element={<CustomerServicesPage />} />
         <Route path="job-carts" element={<CustomerJobCartsPage />} />
         <Route path="bookings" element={<BookingsPage />} />
         <Route path="bookings/new" element={<BookingPage />} />

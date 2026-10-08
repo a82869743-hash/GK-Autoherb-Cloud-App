@@ -43,20 +43,20 @@ export default function CustomerNavbar() {
   return (
     <>
       {/* ── Top App Bar (Clean Light Glassmorphic) ─────────── */}
-      <header className="fixed top-0 left-0 right-0 h-16 z-40 bg-white/90 backdrop-blur-xl border-b border-slate-200/80 px-4 sm:px-6 flex items-center justify-between shadow-[0_1px_4px_rgba(0,0,0,0.03)]">
-        <div className="flex items-center gap-3">
-          <Link to="/customer" className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#af101a] via-[#D32F2F] to-[#ff4d4d] p-[1px] shadow-sm flex items-center justify-center">
-              <div className="w-full h-full bg-white rounded-[11px] flex items-center justify-center">
-                <img src="/assets/logo.png" alt="GK AutoHerb" className="w-5 h-5 object-contain group-hover:scale-110 transition-transform" />
+      <header className="fixed top-0 left-0 right-0 h-14 z-40 bg-white/90 backdrop-blur-xl border-b border-slate-200/80 px-4 sm:px-6 flex items-center justify-between shadow-[0_1px_4px_rgba(0,0,0,0.03)]">
+        <div className="flex items-center gap-2.5">
+          <Link to="/customer" className="flex items-center gap-2 group">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#af101a] via-[#D32F2F] to-[#ff4d4d] p-[1px] shadow-sm flex items-center justify-center">
+              <div className="w-full h-full bg-white rounded-[10px] flex items-center justify-center">
+                <img src="/assets/logo.png" alt="GK AutoHerb" className="w-4 h-4 object-contain group-hover:scale-105 transition-transform" />
               </div>
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="text-sm font-black text-slate-900 tracking-tight leading-none">GK AutoHerb</span>
+                <span className="text-sm font-bold text-slate-900 tracking-tight leading-none">GK AutoHerb</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-[#D32F2F] animate-pulse" />
               </div>
-              <p className="text-[9px] text-slate-400 font-semibold tracking-wider uppercase mt-0.5">Detail Studio</p>
+              <p className="text-[9px] text-slate-400 font-medium tracking-wide mt-0.5">Detail Studio</p>
             </div>
           </Link>
         </div>
@@ -66,11 +66,11 @@ export default function CustomerNavbar() {
           {/* Garage Quick Switch Pill */}
           <Link
             to="/customer/vehicles"
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200/70 border border-slate-200 text-xs font-semibold text-slate-700 transition-all hover:border-red-400/50"
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200/70 border border-slate-200 text-xs font-medium text-slate-700 transition-all hover:border-red-400/50"
           >
             <Car size={13} className="text-[#D32F2F]" />
             <span>Garage</span>
-            <span className="px-1.5 py-0.2 bg-red-100 text-red-700 text-[10px] font-bold rounded-full">
+            <span className="px-1.5 py-0.2 bg-red-100 text-red-700 text-[10px] font-semibold rounded-full">
               {vehicles.length}
             </span>
           </Link>
@@ -156,23 +156,23 @@ export default function CustomerNavbar() {
 
       {/* ── Floating Bottom App Dock (Clean Light Theme) ─── */}
       <nav className="fixed bottom-4 sm:bottom-6 left-3 right-3 max-w-lg mx-auto z-40">
-        <div className="bg-white/95 backdrop-blur-2xl border border-slate-200/90 shadow-[0_12px_40px_rgba(0,0,0,0.1)] rounded-full px-3 py-1.5 flex items-center justify-between relative">
+        <div className="bg-white/95 backdrop-blur-2xl border border-slate-200/90 shadow-[0_8px_30px_rgba(0,0,0,0.08)] rounded-full px-3 py-1.5 flex items-center justify-between relative">
           
           {/* Tab 1: Home */}
           <NavLink
             to="/customer"
             end
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center gap-1 w-14 py-1 rounded-2xl transition-all duration-300 relative ${
-                isActive ? 'text-[#D32F2F] font-black' : 'text-slate-400 hover:text-slate-700'
+              `flex flex-col items-center justify-center gap-0.5 w-14 py-1 rounded-2xl transition-all duration-200 relative ${
+                isActive ? 'text-[#D32F2F] font-semibold' : 'text-slate-400 hover:text-slate-700'
               }`
             }
           >
             {({ isActive }) => (
               <>
-                <LayoutDashboard size={20} strokeWidth={isActive ? 2.5 : 1.8} className={isActive ? 'scale-110' : ''} />
-                <span className="text-[9px] font-bold tracking-tight">Home</span>
-                {isActive && <div className="absolute -bottom-0.5 w-3 h-1 bg-[#D32F2F] rounded-full" />}
+                <LayoutDashboard size={19} strokeWidth={isActive ? 2.2 : 1.6} />
+                <span className="text-[10px] tracking-tight">Home</span>
+                {isActive && <div className="absolute -bottom-0.5 w-3 h-0.5 bg-[#D32F2F] rounded-full" />}
               </>
             )}
           </NavLink>
@@ -181,48 +181,48 @@ export default function CustomerNavbar() {
           <NavLink
             to="/customer/bookings/new"
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center gap-1 w-14 py-1 rounded-2xl transition-all duration-300 relative ${
-                isActive ? 'text-[#D32F2F] font-black' : 'text-slate-400 hover:text-slate-700'
+              `flex flex-col items-center justify-center gap-0.5 w-14 py-1 rounded-2xl transition-all duration-200 relative ${
+                isActive ? 'text-[#D32F2F] font-semibold' : 'text-slate-400 hover:text-slate-700'
               }`
             }
           >
             {({ isActive }) => (
               <>
-                <Wrench size={20} strokeWidth={isActive ? 2.5 : 1.8} className={isActive ? 'scale-110' : ''} />
-                <span className="text-[9px] font-bold tracking-tight">Services</span>
-                {isActive && <div className="absolute -bottom-0.5 w-3 h-1 bg-[#D32F2F] rounded-full" />}
+                <Wrench size={19} strokeWidth={isActive ? 2.2 : 1.6} />
+                <span className="text-[10px] tracking-tight">Services</span>
+                {isActive && <div className="absolute -bottom-0.5 w-3 h-0.5 bg-[#D32F2F] rounded-full" />}
               </>
             )}
           </NavLink>
 
           {/* Center Elevated FAB: Quick Book */}
-          <div className="relative -top-5 flex flex-col items-center">
+          <div className="relative -top-4 flex flex-col items-center">
             <Link
               to="/customer/bookings/new"
-              className="w-13 h-13 sm:w-14 sm:h-14 rounded-full bg-gradient-to-tr from-[#af101a] via-[#D32F2F] to-[#ff5252] p-[2px] shadow-[0_8px_25px_rgba(211,47,47,0.4)] hover:scale-110 active:scale-95 transition-all duration-300 flex items-center justify-center group"
+              className="w-12 h-12 rounded-full bg-gradient-to-tr from-[#af101a] via-[#D32F2F] to-[#ff5252] p-[1.5px] shadow-[0_6px_20px_rgba(211,47,47,0.35)] hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center group"
               aria-label="Book Slot"
             >
               <div className="w-full h-full rounded-full bg-gradient-to-br from-[#D32F2F] to-[#9b0e17] flex items-center justify-center text-white border border-white/30">
-                <CalendarPlus size={22} className="group-hover:rotate-12 transition-transform duration-300" />
+                <CalendarPlus size={20} className="group-hover:rotate-6 transition-transform duration-200" />
               </div>
             </Link>
-            <span className="text-[9px] font-extrabold text-slate-800 uppercase tracking-wider mt-0.5">Book</span>
+            <span className="text-[9px] font-semibold text-slate-800 uppercase tracking-wider mt-0.5">Book</span>
           </div>
 
           {/* Tab 4: Bookings / Appointments */}
           <NavLink
             to="/customer/bookings"
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center gap-1 w-14 py-1 rounded-2xl transition-all duration-300 relative ${
-                isActive ? 'text-[#D32F2F] font-black' : 'text-slate-400 hover:text-slate-700'
+              `flex flex-col items-center justify-center gap-0.5 w-14 py-1 rounded-2xl transition-all duration-200 relative ${
+                isActive ? 'text-[#D32F2F] font-semibold' : 'text-slate-400 hover:text-slate-700'
               }`
             }
           >
             {({ isActive }) => (
               <>
-                <Calendar size={20} strokeWidth={isActive ? 2.5 : 1.8} className={isActive ? 'scale-110' : ''} />
-                <span className="text-[9px] font-bold tracking-tight">Bookings</span>
-                {isActive && <div className="absolute -bottom-0.5 w-3 h-1 bg-[#D32F2F] rounded-full" />}
+                <Calendar size={19} strokeWidth={isActive ? 2.2 : 1.6} />
+                <span className="text-[10px] tracking-tight">Bookings</span>
+                {isActive && <div className="absolute -bottom-0.5 w-3 h-0.5 bg-[#D32F2F] rounded-full" />}
               </>
             )}
           </NavLink>
@@ -230,12 +230,12 @@ export default function CustomerNavbar() {
           {/* Tab 5: More Menu Trigger */}
           <button
             onClick={() => setIsMoreOpen(true)}
-            className={`flex flex-col items-center justify-center gap-1 w-14 py-1 rounded-2xl transition-all duration-300 ${
-              isMoreOpen ? 'text-[#D32F2F] font-black' : 'text-slate-400 hover:text-slate-700'
+            className={`flex flex-col items-center justify-center gap-0.5 w-14 py-1 rounded-2xl transition-all duration-200 ${
+              isMoreOpen ? 'text-[#D32F2F] font-semibold' : 'text-slate-400 hover:text-slate-700'
             }`}
           >
-            <MoreHorizontal size={20} strokeWidth={isMoreOpen ? 2.5 : 1.8} className={isMoreOpen ? 'scale-110' : ''} />
-            <span className="text-[9px] font-bold tracking-tight">Menu</span>
+            <MoreHorizontal size={19} strokeWidth={isMoreOpen ? 2.2 : 1.6} />
+            <span className="text-[10px] tracking-tight">Menu</span>
           </button>
         </div>
       </nav>

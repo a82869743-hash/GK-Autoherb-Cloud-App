@@ -1,11 +1,19 @@
 import { useState, useEffect } from 'react';
-import { X, Car, ChevronDown } from 'lucide-react';
+import { X, Car, ChevronDown, Lock, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { carBrands as fallbackCarBrands, getModelsForBrand, getCategoryForModel } from '../../utils/carData';
 import { useBrands, useModels } from '../../api/hooks/useVehicles';
 import api from '../../api/axiosInstance';
 import { useQueryClient } from '@tanstack/react-query';
 import CarImage from './CarImage';
+
+const CATEGORY_LABELS: Record<string, string> = {
+  hatchback: 'Hatchback',
+  medium_hatchback: 'Medium Hatchback',
+  sedan: 'Sedan',
+  premium_sedan: 'Premium Sedan',
+  suv: 'SUV',
+};
 
 interface AddCarModalProps {
   isOpen: boolean;
@@ -52,6 +60,8 @@ export default function AddCarModal({ isOpen, onClose, editVehicle }: AddCarModa
 
   const finalBrand = isOtherBrand ? customBrand : brand;
   const finalModel = isOtherModel ? customModel : model;
+
+  const isAutoClassified = Boolean(brand && model && !isOtherBrand && !isOtherModel);
 
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: currentYear - 1989 }, (_, i) => currentYear - i);
@@ -194,16 +204,47 @@ export default function AddCarModal({ isOpen, onClose, editVehicle }: AddCarModa
           {/* Vehicle Category */}
           <div>
             <label className={labelCls}>Vehicle Category</label>
-            <div className="relative">
-              <select value={category} onChange={(e) => setCategory(e.target.value)} className={selectCls}>
-                <option value="hatchback">Hatchback</option>
-                <option value="medium_hatchback">Medium Hatchback</option>
-                <option value="sedan">Sedan</option>
-                <option value="premium_sedan">Premium Sedan</option>
-                <option value="suv">SUV</option>
-              </select>
-              <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            </div>
+            {isAutoClassified ? (
+              <div className="w-full px-4 py-3 bg-slate-50 border border-slate-200/90 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-extrabold text-[#1c1b1b] tracking-wide">
+                    {CATEGORY_LABELS[category] || category.toUpperCase().replace('_', ' ')}
+                  </span>
+                </div>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <CheckCircle2 size={12} className="text-emerald-600" />
+                  Auto-Classified
+                </span>
+              </div>
+            ) : !finalBrand || !finalModel ? (
+              <div className="w-full px-4 py-3 bg-[#f6f3f2] border border-dashed border-gray-200 rounded-xl text-xs text-gray-400 font-medium flex items-center justify-between">
+                <span>Select Brand and Model first</span>
+                <span className="text-[10px] uppercase font-bold text-gray-400 flex items-center gap-1">
+                  <Lock size={12} />
+                  Auto-detected
+                </span>
+              </div>
+            ) : (
+              <div className="relative">
+                <select value={category} onChange={(e) => setCategory(e.target.value)} className={selectCls}>
+                  <option value="hatchback">Hatchback</option>
+                  <option value="medium_hatchback">Medium Hatchback</option>
+                  <option value="sedan">Sedan</option>
+                  <option value="premium_sedan">Premium Sedan</option>
+                  <option value="suv">SUV</option>
+                </select>
+                <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
+            )}
+            {isAutoClassified ? (
+              <p className="text-[10px] text-slate-500 font-medium mt-1">
+                Category automatically locked based on {brand} {model} specifications.
+              </p>
+            ) : isOtherBrand || isOtherModel ? (
+              <p className="text-[10px] text-slate-500 font-medium mt-1">
+                Custom model selected. Please choose the appropriate vehicle category.
+              </p>
+            ) : null}
           </div>
 
           {/* Live Real Car Photo Preview */}

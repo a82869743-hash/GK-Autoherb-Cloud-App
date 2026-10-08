@@ -673,17 +673,17 @@ export default function QuickBillingPage() {
                 )}
               </div>
 
-              <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
                 <div>
-                  <span className="text-xs font-bold text-slate-400 block uppercase tracking-wider">Net Amount Payable</span>
-                  <span className="text-2xl sm:text-3xl font-black text-white">{formatINR(total)}</span>
+                  <span className="text-xs font-semibold text-slate-400 block uppercase tracking-wider">Net Amount Payable</span>
+                  <span className="text-xl sm:text-2xl font-semibold text-white">{formatINR(total)}</span>
                 </div>
               </div>
 
               <button
                 type="submit"
                 disabled={submitting || watchedItems.length === 0}
-                className="w-full py-3.5 px-5 rounded-2xl bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs sm:text-sm font-bold shadow-lg shadow-red-500/30 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+                className="w-full h-10 px-4 rounded-xl bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs sm:text-sm font-medium shadow-sm transition-all flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50 cursor-pointer"
               >
                 {submitting ? 'Generating Invoice...' : 'Generate & Confirm Bill'}
               </button>

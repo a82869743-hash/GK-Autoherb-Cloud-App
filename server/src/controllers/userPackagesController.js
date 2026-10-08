@@ -983,7 +983,7 @@ exports.getDashboardPackageData = async (userId) => {
     } catch (e) { /* ignore */ }
   }
 
-  const [activePackages] = await pool.query(`
+  const [activePackagesRaw] = await pool.query(`
     SELECT up.id, up.package_id, up.start_date, up.end_date,
            up.package_status, up.price_paid, up.vehicle_id,
            p.name AS package_name, p.description,
@@ -995,6 +995,17 @@ exports.getDashboardPackageData = async (userId) => {
       AND (up.end_date IS NULL OR up.end_date > NOW())
     ORDER BY up.start_date DESC
   `, [userId]);
+
+  // Deduplicate: if multiple identical active package records exist for user, keep latest
+  const seenPackages = new Set();
+  const activePackages = [];
+  for (const p of activePackagesRaw) {
+    const key = `${p.package_id}_${p.package_name}`;
+    if (!seenPackages.has(key)) {
+      seenPackages.add(key);
+      activePackages.push(p);
+    }
+  }
 
   const processedPackages = [];
   for (const pkg of activePackages) {

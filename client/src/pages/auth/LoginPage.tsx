@@ -67,19 +67,19 @@ export default function LoginPage() {
           <div className="mb-6">
             <img src="/assets/logo.png" alt="GK Auto Herb" className="w-48 h-auto drop-shadow-lg" />
           </div>
-          <h1 className="text-4xl font-black text-white tracking-tight leading-tight">
+          <h1 className="text-2xl font-bold text-white tracking-tight leading-tight">
             GK AutoHerb
           </h1>
-          <div className="w-16 h-1 bg-gradient-to-r from-[#D32F2F] to-[#FF5252] mt-6 mb-6 rounded-full" />
-          <p className="text-gray-400 text-sm leading-relaxed font-medium">
+          <div className="w-12 h-1 bg-gradient-to-r from-[#D32F2F] to-[#FF5252] mt-4 mb-4 rounded-full" />
+          <p className="text-gray-400 text-sm leading-relaxed font-normal">
             Premium car detailing studio management. Track jobs, manage inventory,
             book appointments, and delight customers — all from one command center.
           </p>
-          <div className="mt-10 space-y-3">
+          <div className="mt-8 space-y-2.5">
             {['Track jobs & invoices in real-time', 'Manage inventory & staff efficiently', 'Delight customers with premium service'].map((item, i) => (
-              <div key={i} className="flex items-center gap-3 opacity-0 animate-fade-in-up" style={{ animationDelay: `${0.5 + i * 0.15}s`, animationFillMode: 'forwards' }}>
-                <div className="w-8 h-8 rounded-full bg-[#D32F2F]/20 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-4 h-4 text-[#D32F2F]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div key={i} className="flex items-center gap-2.5 opacity-0 animate-fade-in-up" style={{ animationDelay: `${0.5 + i * 0.15}s`, animationFillMode: 'forwards' }}>
+                <div className="w-7 h-7 rounded-full bg-[#D32F2F]/20 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-3.5 h-3.5 text-[#D32F2F]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
@@ -87,7 +87,7 @@ export default function LoginPage() {
               </div>
             ))}
           </div>
-          <p className="text-[10px] text-gray-600 uppercase tracking-[0.2em] mt-10 font-bold">
+          <p className="text-[10px] text-gray-500 uppercase tracking-wider mt-8 font-medium">
             Vadodara, Gujarat
           </p>
         </div>
@@ -99,23 +99,23 @@ export default function LoginPage() {
       </div>
 
       {/* Right — login form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-8">
         <div className="w-full max-w-md animate-fade-in-up">
           {/* Mobile brand header */}
-          <div className="lg:hidden text-center mb-8">
-            <img src="/assets/logo.png" alt="GK Auto Herb" className="w-36 h-auto mx-auto mb-3" />
-            <h1 className="text-3xl font-black text-[#1c1b1b] tracking-tight">GK AutoHerb</h1>
-            <div className="w-12 h-1 bg-[#D32F2F] mx-auto mt-3 rounded-full" />
+          <div className="lg:hidden text-center mb-6">
+            <img src="/assets/logo.png" alt="GK Auto Herb" className="w-32 h-auto mx-auto mb-2" />
+            <h1 className="text-2xl font-bold text-[#1c1b1b] tracking-tight">GK AutoHerb</h1>
+            <div className="w-10 h-0.5 bg-[#D32F2F] mx-auto mt-2 rounded-full" />
           </div>
 
-          <div className="mb-6">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#D32F2F] mb-2">
+          <div className="mb-5">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#D32F2F] mb-1">
               Welcome Back
             </p>
-            <h2 className="text-3xl font-extrabold text-[#1c1b1b] tracking-tight">
+            <h2 className="text-xl sm:text-2xl font-semibold text-[#1c1b1b] tracking-tight">
               Sign In
             </h2>
-            <p className="text-sm text-[#5f5e5e] mt-1 font-medium">
+            <p className="text-xs sm:text-sm text-[#5f5e5e] mt-0.5 font-normal">
               Enter your credentials to access your dashboard
             </p>
           </div>

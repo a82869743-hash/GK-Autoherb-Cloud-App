@@ -35,51 +35,49 @@ export default function PremiumStatCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
-      whileHover={{ y: -4, boxShadow: `0 12px 32px ${color}15, 0 4px 12px rgba(0,0,0,0.06)` }}
-      className="relative bg-white rounded-2xl border border-gray-100 p-5 overflow-hidden group cursor-default"
+      transition={{ delay, duration: 0.25, ease: 'easeOut' }}
+      whileHover={{ y: -2, boxShadow: `0 8px 24px ${color}12, 0 2px 8px rgba(0,0,0,0.04)` }}
+      className="relative bg-white rounded-xl border border-gray-100 p-3.5 sm:p-4 overflow-hidden group cursor-default"
     >
       {/* Background gradient accent */}
-      <div className={`absolute inset-0 bg-gradient-to-br ${gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
+      <div className={`absolute inset-0 bg-gradient-to-br ${gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
 
       {/* Content */}
       <div className="relative z-10">
-        <div className="flex items-start justify-between mb-3">
-          <motion.div
-            whileHover={{ rotate: 10, scale: 1.1 }}
-            transition={{ type: 'spring', stiffness: 300 }}
-            className="w-10 h-10 rounded-xl flex items-center justify-center"
+        <div className="flex items-center justify-between mb-2.5">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
             style={{ backgroundColor: `${color}12` }}
           >
-            <Icon size={20} style={{ color }} />
-          </motion.div>
+            <Icon size={17} strokeWidth={1.75} style={{ color }} />
+          </div>
 
           {trend !== undefined && (
-            <div className={`flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
+            <div className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md ${
               isPositive ? 'text-emerald-600 bg-emerald-50' :
               isNegative ? 'text-red-600 bg-red-50' :
               'text-gray-500 bg-gray-100'
             }`}>
-              {isPositive ? <TrendingUp size={12} /> : isNegative ? <TrendingDown size={12} /> : <Minus size={12} />}
+              {isPositive ? <TrendingUp size={11} /> : isNegative ? <TrendingDown size={11} /> : <Minus size={11} />}
               {Math.abs(trend)}%
             </div>
           )}
         </div>
 
-        <p className="text-xs font-medium text-[#5f5e5e] uppercase tracking-wider mb-1">{title}</p>
+        <p className="text-xs font-medium text-[#5f5e5e] mb-0.5 truncate">{title}</p>
 
         <div className="flex items-baseline gap-1">
-          <span className="text-2xl font-bold text-[#1c1b1b]">
+          <span className="text-xl sm:text-[22px] font-semibold text-[#1c1b1b] tracking-tight">
             {prefix}
-            <CountUp end={value} duration={1.5} delay={delay} separator="," decimals={decimals} />
+            <CountUp end={value} duration={1.2} delay={delay} separator="," decimals={decimals} />
             {suffix}
           </span>
         </div>
 
         {trendLabel && (
-          <p className="text-[11px] text-[#8f6f6c] mt-1">{trendLabel}</p>
+          <p className="text-[11px] text-[#8f6f6c] mt-0.5">{trendLabel}</p>
         )}
       </div>
 

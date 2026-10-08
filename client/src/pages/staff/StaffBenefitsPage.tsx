@@ -31,23 +31,23 @@ export default function StaffBenefitsPage() {
       ) : (
         <>
           {/* Premium pending card */}
-          <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm mb-6 flex items-center gap-5 card-premium relative overflow-hidden">
+          <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-2xs mb-4 flex items-center gap-3.5 card-premium relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-green-500 via-green-400 to-green-500/20" />
-            <div className="w-14 h-14 bg-gradient-to-br from-green-100 to-green-50 text-green-600 rounded-2xl flex items-center justify-center shadow-sm">
-              <IndianRupee size={28} />
+            <div className="w-9 h-9 bg-gradient-to-br from-green-100 to-green-50 text-green-600 rounded-lg flex items-center justify-center shrink-0">
+              <IndianRupee size={18} />
             </div>
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-1 flex items-center gap-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-0.5 flex items-center gap-1">
                 <TrendingUp size={12} /> Pending Clearance
               </p>
-              <h2 className="text-3xl font-black text-[#1c1b1b] tracking-tight">₹{pendingAmount.toLocaleString('en-IN')}</h2>
+              <h2 className="text-xl sm:text-[22px] font-semibold text-[#1c1b1b] tracking-tight">₹{pendingAmount.toLocaleString('en-IN')}</h2>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-             <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center gap-2">
-               <History size={18} className="text-[#D32F2F]"/>
-               <h2 className="font-bold text-[#1c1b1b]">Payout History</h2>
+          <div className="bg-white rounded-xl shadow-2xs border border-gray-100 overflow-hidden">
+             <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/50 flex items-center gap-2">
+               <History size={16} className="text-[#D32F2F]"/>
+               <h2 className="text-sm font-semibold text-[#1c1b1b]">Payout History</h2>
              </div>
              
              {!benefits.length ? (
@@ -57,16 +57,16 @@ export default function StaffBenefitsPage() {
                  {benefits.map((b: any, idx: number) => (
                    <div
                      key={b.id}
-                     className="p-4 flex items-center justify-between hover:bg-[#faf7f5] transition-colors opacity-0 animate-fade-in-up"
+                     className="p-3.5 flex items-center justify-between hover:bg-[#faf7f5] transition-colors opacity-0 animate-fade-in-up"
                      style={{ animationDelay: `${idx * 0.05}s`, animationFillMode: 'forwards' }}
                    >
                      <div>
-                       <h4 className="font-bold text-[#1c1b1b]">{b.purpose}</h4>
-                       <p className="text-xs text-gray-600 mt-1">{formatDate(b.payment_date || b.created_at)}</p>
+                       <h4 className="text-sm font-medium text-[#1c1b1b]">{b.purpose}</h4>
+                       <p className="text-xs text-gray-500 mt-0.5">{formatDate(b.payment_date || b.created_at)}</p>
                      </div>
                      <div className="text-right">
-                       <p className="font-black text-lg text-[#1c1b1b]">₹{Number(b.amount).toLocaleString('en-IN')}</p>
-                       <span className={`text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-lg border ${b.status === 'paid' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
+                       <p className="font-semibold text-sm text-[#1c1b1b]">₹{Number(b.amount).toLocaleString('en-IN')}</p>
+                       <span className={`text-[10px] uppercase font-semibold tracking-wider px-2 py-0.5 rounded-md border ${b.status === 'paid' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
                          {b.status}
                        </span>
                      </div>

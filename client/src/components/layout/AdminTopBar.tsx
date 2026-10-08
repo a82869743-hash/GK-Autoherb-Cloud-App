@@ -38,45 +38,45 @@ export default function AdminTopBar({
 
   return (
     <motion.header 
-      initial={{ opacity: 0, y: -8 }}
+      initial={{ opacity: 0, y: -6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="mb-5 sm:mb-8"
+      transition={{ duration: 0.2 }}
+      className="mb-4 sm:mb-5"
     >
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3.5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         
         {/* Left: Back button + Title & Badges */}
-        <div className="flex items-start sm:items-center gap-3">
+        <div className="flex items-start sm:items-center gap-2.5">
           {showBackButton && (
             <button
               onClick={handleBack}
-              className="mt-0.5 sm:mt-0 w-9 h-9 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 shadow-2xs flex items-center justify-center text-slate-700 hover:text-slate-900 transition-all active:scale-95 shrink-0"
+              className="mt-0.5 sm:mt-0 w-8 h-8 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 shadow-2xs flex items-center justify-center text-slate-700 hover:text-slate-900 transition-all active:scale-95 shrink-0"
               aria-label="Go Back"
             >
-              <ArrowLeft size={18} />
+              <ArrowLeft size={16} />
             </button>
           )}
 
           <div>
             <div className="flex flex-wrap items-center gap-2 mb-0.5">
               {category && (
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[#D32F2F]">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-[#D32F2F]">
                   {category}
                 </span>
               )}
               {badge && (
-                <span className="text-[9px] font-bold bg-[#D32F2F] text-white px-2 py-0.5 rounded-full uppercase tracking-wider shadow-2xs">
+                <span className="text-[9px] font-medium bg-[#D32F2F] text-white px-2 py-0.5 rounded-full">
                   {badge}
                 </span>
               )}
             </div>
 
-            <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 tracking-tight leading-tight">
+            <h1 className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight leading-tight">
               {title}
             </h1>
 
             {subtitle && (
-              <p className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
+              <p className="text-xs text-slate-500 font-normal mt-0.5">
                 {subtitle}
               </p>
             )}

@@ -3,16 +3,25 @@ import {
   FileText, Clock, Wrench, AlertTriangle, TrendingUp, TrendingDown,
   CalendarCheck, Bell, Settings, ChevronDown, ChevronRight, ChevronLeft,
   Search, Plus, ExternalLink, Car, Sparkles, Box, Send, Users, ShieldCheck,
-  Droplets, DollarSign, CheckCircle2, ArrowRight
+  Droplets, DollarSign, CheckCircle2, ArrowRight, MapPin, Navigation, Crosshair,
+  RotateCw, Building2, Truck
 } from 'lucide-react';
 import { useDashboardStats } from '../../api/hooks/useDashboard';
 import { useJobCarts } from '../../api/hooks/useJobCarts';
+import { useSettings } from '../../api/hooks/useSettings';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../../api/axiosInstance';
 import { formatINR, formatDate } from '../../utils/formatters';
 import toast from 'react-hot-toast';
 import { getPreloadedCarImage } from '../../utils/carImageService';
 import VehicleBrandBadge from '../../components/admin/VehicleBrandBadge';
+import { 
+  getDeviceLiveLocation, 
+  reverseGeocodeCoords, 
+  calculateHaversineDistance, 
+  resolveStudioLocation, 
+  LocationCoordinates 
+} from '../../utils/locationService';
 
 // ─── Status Badge Styler for GK AutoHerb Job Cards ──────────
 function JobStatusBadge({ status }: { status?: string }) {
@@ -75,8 +84,53 @@ export default function DashboardPage() {
   // AI Insights Index
   const [insightIndex, setInsightIndex] = useState(0);
 
+  // Dynamic Studio Location from settings (not hardcoded)
+  const { data: settingsData } = useSettings();
+  const studioInfo = useMemo(() => resolveStudioLocation(settingsData?.data), [settingsData]);
+
+  // Live Admin Device Location
+  const [adminCoords, setAdminCoords] = useState<LocationCoordinates | null>(null);
+  const [adminArea, setAdminArea] = useState<string>('');
+  const [adminGpsLoading, setAdminGpsLoading] = useState(false);
+  const [adminGpsStatus, setAdminGpsStatus] = useState<'idle' | 'locating' | 'success' | 'denied'>('idle');
+
+  const fetchAdminGps = async () => {
+    setAdminGpsLoading(true);
+    setAdminGpsStatus('locating');
+    try {
+      const coords = await getDeviceLiveLocation();
+      setAdminCoords(coords);
+      setAdminGpsStatus('success');
+      try {
+        const geo = await reverseGeocodeCoords(coords.lat, coords.lng);
+        setAdminArea(geo.area || geo.street || geo.city || 'Vadodara Base');
+      } catch {
+        setAdminArea('Live GPS Location');
+      }
+    } catch (err: any) {
+      console.warn('Admin live location notice:', err);
+      setAdminGpsStatus(err?.message?.includes('denied') ? 'denied' : 'idle');
+    } finally {
+      setAdminGpsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAdminGps();
+  }, []);
+
+  const adminDistanceToStudio = useMemo(() => {
+    if (!adminCoords) return null;
+    return calculateHaversineDistance(
+      adminCoords.lat,
+      adminCoords.lng,
+      studioInfo.lat,
+      studioInfo.lng
+    );
+  }, [adminCoords, studioInfo]);
+
   // Date Range state
-  const [dateRangeText, setDateRangeText] = useState('May 20 – May 27, 2026');
+  const [dateRangeText, setDateRangeText] = useState('This Month');
   const [showDateDropdown, setShowDateDropdown] = useState(false);
 
   // Active workshop stage filter tab for the bottom deck
@@ -396,10 +450,10 @@ export default function DashboardPage() {
     <div className="space-y-6 pb-28 lg:pb-12 max-w-[1600px] mx-auto font-sans">
       
       {/* ─── Top Header Bar ────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white px-6 py-4 rounded-3xl border border-slate-200/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white px-5 py-3.5 rounded-xl border border-slate-200/80 shadow-2xs">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Dashboard</h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
+          <h1 className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight">Dashboard</h1>
+          <p className="text-xs text-slate-500 font-normal mt-0.5">
             Real-time workshop activity, detailing queue & vehicle progress overview
           </p>
         </div>
@@ -420,7 +474,7 @@ export default function DashboardPage() {
 
             {showDateDropdown && (
               <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 z-50 text-xs font-semibold animate-in fade-in slide-in-from-top-2">
-                {['Today', 'Yesterday', 'May 20 – May 27, 2026', 'This Month', 'Last 30 Days'].map(d => (
+                {['Today', 'Yesterday', 'This Week', 'This Month', 'Last 30 Days'].map(d => (
                   <button
                     key={d}
                     onClick={() => {
@@ -457,84 +511,172 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* ─── Studio Live Operations & Geo-Location Command Bar ───────────────── */}
+      <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Left: Studio Physical Identity */}
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center text-[#D32F2F] shrink-0 font-bold shadow-xs">
+            <Building2 size={20} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-black text-sm text-slate-900">{studioInfo.name}</h3>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-extrabold border border-emerald-200/80 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                HQ Studio Live
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 font-medium mt-0.5 flex items-center gap-1.5 flex-wrap">
+              <span>{studioInfo.address}</span>
+              <a
+                href={`https://www.google.com/maps?q=${studioInfo.lat},${studioInfo.lng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-red-600 hover:text-red-700 font-bold hover:underline inline-flex items-center gap-0.5"
+                title="View Studio Pin on Google Maps"
+              >
+                <span>Maps Pin</span>
+                <ExternalLink size={10} />
+              </a>
+            </p>
+          </div>
+        </div>
+
+        {/* Right: Admin Device Live GPS Status */}
+        <div className="flex items-center gap-3 self-start md:self-auto bg-slate-50/80 border border-slate-200/80 rounded-2xl px-3.5 py-2">
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${adminGpsStatus === 'success' ? 'bg-emerald-500 animate-pulse' : adminGpsLoading ? 'bg-amber-400 animate-ping' : 'bg-slate-400'}`} />
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block leading-none">
+                {adminGpsStatus === 'success' ? 'Admin Live Device' : adminGpsLoading ? 'Locating...' : 'Live GPS'}
+              </span>
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1 mt-0.5">
+                {adminCoords && adminDistanceToStudio !== null ? (
+                  <>
+                    <MapPin size={12} className="text-[#D32F2F]" />
+                    <span>{adminArea || 'Admin Location'}</span>
+                    <span className="text-slate-400">•</span>
+                    <span className="text-red-700 font-bold">
+                      {adminDistanceToStudio < 0.2 ? 'At Studio Base' : `${adminDistanceToStudio} km from Studio`}
+                    </span>
+                  </>
+                ) : adminGpsLoading ? (
+                  <span className="text-slate-500 font-medium">Acquiring device GPS...</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={fetchAdminGps}
+                    className="text-red-600 hover:underline flex items-center gap-1"
+                  >
+                    <Crosshair size={11} />
+                    <span>Detect Device GPS</span>
+                  </button>
+                )}
+              </span>
+            </div>
+          </div>
+
+          {adminCoords && (
+            <button
+              type="button"
+              onClick={fetchAdminGps}
+              disabled={adminGpsLoading}
+              title="Refresh admin live location"
+              className="p-1.5 rounded-xl hover:bg-white text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              <RotateCw size={12} className={adminGpsLoading ? 'animate-spin text-[#D32F2F]' : ''} />
+            </button>
+          )}
+
+          <Link
+            to="/admin/pickups"
+            className="px-2.5 py-1.5 bg-[#D32F2F] hover:bg-[#b71c1c] text-white rounded-xl text-[11px] font-bold shadow-xs transition-all flex items-center gap-1 ml-1"
+            title="Track live concierge pickups and deliveries"
+          >
+            <Truck size={12} />
+            <span>Fleet Track</span>
+          </Link>
+        </div>
+      </div>
+
       {/* ─── Top 4 KPI Metrics Row ─────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         
         {/* Card 1: Total Job Cards */}
-        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/70 shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex flex-col justify-between hover:shadow-md transition-shadow group">
-          <div className="flex items-start justify-between mb-3">
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/70 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow group">
+          <div className="flex items-start justify-between mb-2.5">
             <div>
-              <p className="text-xs font-semibold text-slate-500">Total Job Cards</p>
-              <h3 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1">
+              <p className="text-xs font-medium text-slate-500">Total Job Cards</p>
+              <h3 className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight mt-0.5">
                 {(stats?.total_job_carts || 1284).toLocaleString()}
               </h3>
             </div>
-            <div className="w-10 h-10 rounded-2xl bg-[#EEF2FF] text-[#D32F2F] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <FileText size={18} />
+            <div className="w-8 h-8 rounded-lg bg-[#EEF2FF] text-[#D32F2F] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <FileText size={16} />
             </div>
           </div>
-          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
-            <TrendingUp size={13} />
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
+            <TrendingUp size={12} />
             <span>↑ 12.5%</span>
             <span className="text-slate-400 font-normal">vs last month</span>
           </div>
         </div>
 
         {/* Card 2: Pending Bookings / Appointments */}
-        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/70 shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex flex-col justify-between hover:shadow-md transition-shadow group">
-          <div className="flex items-start justify-between mb-3">
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/70 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow group">
+          <div className="flex items-start justify-between mb-2.5">
             <div>
-              <p className="text-xs font-semibold text-slate-500">Pending Bookings</p>
-              <h3 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1">
+              <p className="text-xs font-medium text-slate-500">Pending Bookings</p>
+              <h3 className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight mt-0.5">
                 {(todayBookings.length > 0 ? todayBookings.length : 124).toLocaleString()}
               </h3>
             </div>
-            <div className="w-10 h-10 rounded-2xl bg-[#EFF6FF] text-[#D32F2F] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <Clock size={18} />
+            <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] text-[#D32F2F] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <Clock size={16} />
             </div>
           </div>
-          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
-            <TrendingUp size={13} />
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
+            <TrendingUp size={12} />
             <span>↑ 8.4%</span>
             <span className="text-slate-400 font-normal">vs last month</span>
           </div>
         </div>
 
         {/* Card 3: Active Bay Work (In Detailing / Wash) */}
-        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/70 shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex flex-col justify-between hover:shadow-md transition-shadow group">
-          <div className="flex items-start justify-between mb-3">
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/70 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow group">
+          <div className="flex items-start justify-between mb-2.5">
             <div>
-              <p className="text-xs font-semibold text-slate-500">Active In Bay</p>
-              <h3 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1">
+              <p className="text-xs font-medium text-slate-500">Active In Bay</p>
+              <h3 className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight mt-0.5">
                 {(stats?.open_job_carts || 68).toLocaleString()}
               </h3>
             </div>
-            <div className="w-10 h-10 rounded-2xl bg-[#F5F3FF] text-[#7C3AED] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <Wrench size={18} />
+            <div className="w-8 h-8 rounded-lg bg-[#F5F3FF] text-[#7C3AED] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <Wrench size={16} />
             </div>
           </div>
-          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
-            <TrendingUp size={13} />
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
+            <TrendingUp size={12} />
             <span>↑ 2.7%</span>
             <span className="text-slate-400 font-normal">vs last month</span>
           </div>
         </div>
 
         {/* Card 4: Low Stock Chemical & Material Items */}
-        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/70 shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex flex-col justify-between hover:shadow-md transition-shadow group">
-          <div className="flex items-start justify-between mb-3">
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/70 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow group">
+          <div className="flex items-start justify-between mb-2.5">
             <div>
-              <p className="text-xs font-semibold text-slate-500">Low Stock Alerts</p>
-              <h3 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1">
+              <p className="text-xs font-medium text-slate-500">Low Stock Alerts</p>
+              <h3 className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight mt-0.5">
                 {(stats?.low_stock_items || 44).toLocaleString()}
               </h3>
             </div>
-            <div className="w-10 h-10 rounded-2xl bg-[#FFF1F2] text-[#E11D48] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <AlertTriangle size={18} />
+            <div className="w-8 h-8 rounded-lg bg-[#FFF1F2] text-[#E11D48] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <AlertTriangle size={16} />
             </div>
           </div>
-          <div className="flex items-center gap-1.5 text-xs font-bold text-rose-600">
-            <TrendingDown size={13} />
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-600">
+            <TrendingDown size={12} />
             <span>↓ 7.6%</span>
             <span className="text-slate-400 font-normal">vs last month</span>
           </div>
@@ -993,10 +1135,10 @@ export default function DashboardPage() {
               onChange={e => setActiveStageTab(e.target.value)}
               className="px-3.5 py-2 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs font-bold text-slate-700 outline-none hover:bg-slate-100 transition-all cursor-pointer"
             >
-              <option value="all">All Workshops ⌵</option>
-              <option value="main">Dehradun Main Studio</option>
-              <option value="express">Express Bay 1</option>
-              <option value="paint">Detailing & PPF Studio</option>
+              <option value="all">All Workshop Bays ⌵</option>
+              <option value="main">{studioInfo.name} ({studioInfo.city})</option>
+              <option value="express">Express Detailing Bay 1 (Gotri - Vasna)</option>
+              <option value="paint">PPF & Ceramic Bay (Bhayli Main Studio)</option>
             </select>
 
             <Link

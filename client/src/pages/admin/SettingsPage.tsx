@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Settings, Save, AlertCircle, Building2, Receipt, Truck, CalendarCheck, Gift, Check, ShieldCheck } from 'lucide-react';
+import { 
+  Settings, Save, AlertCircle, Building2, Receipt, Truck, 
+  CalendarCheck, Gift, Check, ShieldCheck, MapPin, Navigation, 
+  ExternalLink, Crosshair, RefreshCw
+} from 'lucide-react';
 import { useSettings, useUpdateSettings } from '../../api/hooks/useSettings';
 import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
 import { SkeletonCard } from '../../components/ui/SkeletonLoader';
 import { useUIStore } from '../../store/uiStore';
+import { getDeviceLiveLocation } from '../../utils/locationService';
 
 export default function SettingsPage() {
   const toast = useUIStore((s) => s.toast);
@@ -12,15 +17,45 @@ export default function SettingsPage() {
 
   const [form, setForm] = useState<Record<string, string>>({});
   const [activeSection, setActiveSection] = useState<'all' | 'studio' | 'billing' | 'concierge' | 'booking' | 'rewards'>('all');
+  const [detectingGps, setDetectingGps] = useState(false);
 
   useEffect(() => {
     if (data?.data) {
-      setForm(data.data);
+      setForm({
+        studio_name: 'GK AutoHerb Detailing Studio',
+        studio_address: 'Gotri - Vasna - Bhayli Main Road, Vadodara, Gujarat 391410',
+        studio_area: 'Gotri - Vasna - Bhayli Road, Vadodara',
+        studio_mobile: '9408424541',
+        studio_email: 'gaurav.itm2006@gmail.com',
+        studio_gst: '24AKUPK0446L1ZT',
+        invoice_prefix: 'GKA',
+        admin_whatsapp: '919408424541',
+        studio_lat: '22.3134',
+        studio_lng: '73.1342',
+        ...data.data,
+      });
     }
   }, [data]);
 
   const handleChange = (key: string, value: string) => {
     setForm(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleDetectStudioGps = async () => {
+    try {
+      setDetectingGps(true);
+      const coords = await getDeviceLiveLocation();
+      setForm(prev => ({
+        ...prev,
+        studio_lat: coords.lat.toFixed(6),
+        studio_lng: coords.lng.toFixed(6),
+      }));
+      toast('success', `Studio GPS coordinates captured: ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`);
+    } catch (err: any) {
+      toast('error', err.message || 'Failed to capture GPS coordinates');
+    } finally {
+      setDetectingGps(false);
+    }
   };
 
   const handleSave = async () => {
@@ -125,7 +160,7 @@ export default function SettingsPage() {
                   value={form.studio_name || ''}
                   onChange={e => handleChange('studio_name', e.target.value)}
                   className="w-full h-11 px-4 text-xs font-medium border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-[#D32F2F] transition-all"
-                  placeholder="e.g. GK AutoHerb Studio"
+                  placeholder="e.g. GK AutoHerb Detailing Studio"
                 />
               </div>
 
@@ -136,7 +171,7 @@ export default function SettingsPage() {
                   value={form.studio_gst || ''}
                   onChange={e => handleChange('studio_gst', e.target.value)}
                   className="w-full h-11 px-4 text-xs font-medium border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-[#D32F2F] transition-all font-mono uppercase"
-                  placeholder="e.g. 24AAAAA0000A1Z5"
+                  placeholder="e.g. 24AKUPK0446L1ZT"
                 />
               </div>
 
@@ -147,7 +182,7 @@ export default function SettingsPage() {
                   value={form.studio_mobile || ''}
                   onChange={e => handleChange('studio_mobile', e.target.value)}
                   className="w-full h-11 px-4 text-xs font-medium border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-[#D32F2F] transition-all"
-                  placeholder="e.g. +91 98765 43210"
+                  placeholder="e.g. 9408424541"
                 />
               </div>
 
@@ -158,7 +193,7 @@ export default function SettingsPage() {
                   value={form.studio_email || ''}
                   onChange={e => handleChange('studio_email', e.target.value)}
                   className="w-full h-11 px-4 text-xs font-medium border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-[#D32F2F] transition-all"
-                  placeholder="e.g. support@gkautoherb.com"
+                  placeholder="e.g. gaurav.itm2006@gmail.com"
                 />
               </div>
 
@@ -169,8 +204,79 @@ export default function SettingsPage() {
                   value={form.studio_address || ''}
                   onChange={e => handleChange('studio_address', e.target.value)}
                   className="w-full h-11 px-4 text-xs font-medium border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-[#D32F2F] transition-all"
-                  placeholder="Complete studio street address, City, State, PIN"
+                  placeholder="Gotri - Vasna - Bhayli Main Road, Vadodara, Gujarat 391410"
                 />
+              </div>
+
+              <div className="col-span-full">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Studio Corridor / Area Name</label>
+                <input
+                  type="text"
+                  value={form.studio_area || ''}
+                  onChange={e => handleChange('studio_area', e.target.value)}
+                  className="w-full h-11 px-4 text-xs font-medium border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-[#D32F2F] transition-all"
+                  placeholder="e.g. Gotri - Vasna - Bhayli Road, Vadodara"
+                />
+              </div>
+
+              {/* Live Geo Coordinates */}
+              <div className="col-span-full bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                  <div>
+                    <h4 className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
+                      <MapPin size={14} className="text-[#D32F2F]" />
+                      Studio Live GPS Coordinates (Distance & Concierge Origin)
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Used by customer dashboard and booking engine to dynamically calculate live driving distance and concierge pickup fees.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleDetectStudioGps}
+                      disabled={detectingGps}
+                      className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs active:scale-95"
+                    >
+                      <Crosshair size={13} className={detectingGps ? 'animate-spin text-[#D32F2F]' : 'text-slate-500'} />
+                      <span>{detectingGps ? 'Detecting...' : 'Detect Device GPS'}</span>
+                    </button>
+                    {form.studio_lat && form.studio_lng && (
+                      <a
+                        href={`https://www.google.com/maps?q=${form.studio_lat},${form.studio_lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-[#D32F2F] rounded-xl text-xs font-bold transition-all flex items-center gap-1"
+                      >
+                        <ExternalLink size={12} />
+                        <span>Maps Pin</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Latitude</label>
+                    <input
+                      type="text"
+                      value={form.studio_lat || ''}
+                      onChange={e => handleChange('studio_lat', e.target.value)}
+                      placeholder="22.3134"
+                      className="w-full h-10 px-3.5 text-xs font-mono font-medium border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-red-500/20 focus:border-[#D32F2F] transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Longitude</label>
+                    <input
+                      type="text"
+                      value={form.studio_lng || ''}
+                      onChange={e => handleChange('studio_lng', e.target.value)}
+                      placeholder="73.1342"
+                      className="w-full h-10 px-3.5 text-xs font-mono font-medium border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-red-500/20 focus:border-[#D32F2F] transition-all"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </section>

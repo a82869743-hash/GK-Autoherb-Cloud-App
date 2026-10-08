@@ -17,6 +17,42 @@ exports.getAll = async (req, res) => {
   }
 };
 
+// ─── GET PUBLIC STUDIO SETTINGS ───────────
+exports.getPublic = async (req, res) => {
+  try {
+    const publicKeys = [
+      'studio_name', 'studio_address', 'studio_area', 'studio_mobile',
+      'studio_email', 'studio_gst', 'studio_lat', 'studio_lng',
+      'pickup_charge', 'drop_charge', 'pickup_drop_charge',
+      'bookings_paused', 'bookings_paused_message',
+      'advance_type', 'advance_value', 'is_gst_applicable'
+    ];
+    const [rows] = await pool.query(
+      'SELECT key_name, value FROM settings WHERE key_name IN (?)',
+      [publicKeys]
+    );
+    const settingsMap = rows.reduce((acc, curr) => {
+      acc[curr.key_name] = curr.value;
+      return acc;
+    }, {});
+
+    // Reliable fallbacks for GK AutoHerb
+    if (!settingsMap.studio_name) settingsMap.studio_name = 'GK AutoHerb Detailing Studio';
+    if (!settingsMap.studio_address) settingsMap.studio_address = 'Gotri - Vasna - Bhayli Main Road, Vadodara, Gujarat 391410';
+    if (!settingsMap.studio_area) settingsMap.studio_area = 'Gotri - Vasna - Bhayli Road, Vadodara';
+    if (!settingsMap.studio_lat) settingsMap.studio_lat = '22.3134';
+    if (!settingsMap.studio_lng) settingsMap.studio_lng = '73.1342';
+    if (!settingsMap.studio_mobile) settingsMap.studio_mobile = '9408424541';
+    if (!settingsMap.studio_email) settingsMap.studio_email = 'gaurav.itm2006@gmail.com';
+    if (!settingsMap.studio_gst) settingsMap.studio_gst = '24AKUPK0446L1ZT';
+
+    res.json({ success: true, data: settingsMap });
+  } catch (err) {
+    console.error('Settings getPublic error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
 // ─── UPDATE MULTIPLE SETTINGS ─────────────
 exports.updateAll = async (req, res) => {
   const conn = await pool.getConnection();

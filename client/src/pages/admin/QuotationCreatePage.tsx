@@ -811,15 +811,15 @@ export default function QuotationCreatePage() {
 
               <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
                 <div>
-                  <span className="text-xs font-bold text-slate-400 block uppercase tracking-wider">Estimated Grand Total</span>
-                  <span className="text-2xl sm:text-3xl font-black text-white">₹{formatINR(grand_total)}</span>
+                  <span className="text-xs font-semibold text-slate-400 block uppercase tracking-wider">Estimated Grand Total</span>
+                  <span className="text-xl sm:text-2xl font-semibold text-white">₹{formatINR(grand_total)}</span>
                 </div>
               </div>
 
               <button
                 type="submit"
                 disabled={isPending || items.length === 0}
-                className="w-full py-3.5 px-5 rounded-2xl bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs sm:text-sm font-bold shadow-lg shadow-red-500/30 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+                className="w-full h-10 px-4 rounded-xl bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs sm:text-sm font-medium shadow-sm transition-all flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50 cursor-pointer"
               >
                 {isPending ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                 <span>{isEdit ? 'Save Changes' : 'Publish Quotation'}</span>

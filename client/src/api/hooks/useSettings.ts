@@ -10,6 +10,16 @@ export const useSettings = () =>
     },
   });
 
+export const usePublicSettings = () =>
+  useQuery({
+    queryKey: ['public-settings'],
+    queryFn: async () => {
+      const res = await api.get('/settings/public');
+      return res.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
 export const useUpdateSettings = () => {
   const qc = useQueryClient();
   return useMutation({
@@ -17,6 +27,9 @@ export const useUpdateSettings = () => {
       const res = await api.patch('/settings', payload);
       return res.data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['settings'] });
+      qc.invalidateQueries({ queryKey: ['public-settings'] });
+    },
   });
 };

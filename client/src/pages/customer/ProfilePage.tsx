@@ -46,19 +46,19 @@ export default function ProfilePage() {
       <AdminTopBar title="My Profile" subtitle="Manage your account details" />
       
       <div className="max-w-3xl">
-        <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
+        <div className="bg-white p-5 sm:p-6 rounded-xl shadow-2xs border border-gray-100 relative overflow-hidden">
           {/* Top accent */}
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#af101a] via-[#D32F2F] to-[#FF5252]/60" />
           
-          <div className="flex items-center gap-6 mb-8 pb-8 border-b border-gray-100">
-            <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-[#f6f3f2] to-[#ebe7e7] flex items-center justify-center text-[#D32F2F] text-3xl font-black shadow-inner relative overflow-hidden group">
+          <div className="flex items-center gap-4 mb-5 pb-5 border-b border-gray-100">
+            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-[#f6f3f2] to-[#ebe7e7] flex items-center justify-center text-[#D32F2F] text-xl font-semibold shadow-inner relative overflow-hidden group shrink-0">
               <div className="absolute inset-0 bg-gradient-to-br from-[#D32F2F]/0 to-[#D32F2F]/5 group-hover:from-[#D32F2F]/5 group-hover:to-[#D32F2F]/10 transition-all" />
               <span className="relative z-10">{form.name ? form.name.charAt(0).toUpperCase() : 'U'}</span>
             </div>
             <div>
-              <h2 className="text-2xl font-black text-[#1c1b1b] mb-1 tracking-tight">{form.name || 'User Profile'}</h2>
-              <p className="text-[#5f5e5e] font-medium">{form.mobile}</p>
-              <span className="inline-block mt-2 px-3 py-1 bg-gradient-to-r from-red-50 to-red-100 text-red-700 text-xs font-bold uppercase tracking-wider rounded-lg border border-red-200">Customer</span>
+              <h2 className="text-lg font-semibold text-[#1c1b1b] mb-0.5 tracking-tight">{form.name || 'User Profile'}</h2>
+              <p className="text-xs text-[#5f5e5e] font-normal">{form.mobile}</p>
+              <span className="inline-block mt-1.5 px-2 py-0.5 bg-red-50 text-red-700 text-[11px] font-medium uppercase tracking-wider rounded-md border border-red-200/80">Customer</span>
             </div>
           </div>
 

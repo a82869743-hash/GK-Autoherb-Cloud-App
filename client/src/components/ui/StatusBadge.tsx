@@ -40,7 +40,7 @@ export default function StatusBadge({ status, className = '' }: StatusBadgeProps
   const Icon = config.icon;
 
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${config.color} ${className}`}>
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium capitalize ${config.color} ${className}`}>
       <Icon size={12} />
       {config.label}
     </span>

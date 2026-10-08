@@ -141,14 +141,14 @@ export default function JobTrackingPage() {
         
         {/* GK Header */}
         <div className="text-center">
-          <h1 className="text-3xl font-black tracking-tight text-[#1c1b1b]">GK AUTOHERB</h1>
-          <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Car Studio Management</p>
+          <h1 className="text-xl sm:text-[22px] font-semibold tracking-tight text-[#1c1b1b]">GK AutoHerb</h1>
+          <p className="text-xs text-gray-500 font-medium tracking-normal mt-0.5">Car Studio Management</p>
         </div>
 
         {/* Live Card */}
-        <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100 card-premium">
+        <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm overflow-hidden border border-gray-100 card-premium">
           {/* Top Banner */}
-          <div className="bg-gradient-to-br from-[#1c1b1b] to-[#2c2b2b] p-6 text-center text-white relative">
+          <div className="bg-gradient-to-br from-[#1c1b1b] to-[#2c2b2b] p-5 text-center text-white relative">
             <div className="absolute top-2 right-2 flex items-center gap-1.5 bg-red-600/10 text-red-400 border border-red-500/20 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider animate-pulse">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
               Live Tracking

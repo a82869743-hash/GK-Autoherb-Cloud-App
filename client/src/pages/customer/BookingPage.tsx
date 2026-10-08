@@ -21,6 +21,7 @@ import QrPaymentModal from '../../components/shared/QrPaymentModal';
 import PaymentSandboxModal from '../../components/shared/PaymentSandboxModal';
 import Modal from '../../components/ui/Modal';
 import ServiceDetailsModal from '../../components/shared/ServiceDetailsModal';
+import { SERVICE_CATEGORIES, ServiceCategoryKey, matchesServiceCategory } from './ServicesPage';
 import { 
   getDeviceLiveLocation, 
   reverseGeocodeCoords, 
@@ -31,6 +32,14 @@ import {
   OWNER_STUDIO_LOCATION,
   LocationCoordinates 
 } from '../../utils/locationService';
+
+const CATEGORY_LABELS: Record<string, string> = {
+  hatchback: 'Hatchback',
+  medium_hatchback: 'Medium Hatchback',
+  sedan: 'Sedan',
+  premium_sedan: 'Premium Sedan',
+  suv: 'SUV',
+};
 
 const STEPS = ['Service & Vehicle', 'Date', 'Time', 'Confirm'];
 
@@ -65,11 +74,21 @@ function getServiceImage(name: string): string {
 export default function BookingPage() {
   const toast = useUIStore((s) => s.toast);
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const createMut = useCreateBooking();
 
   const [step, setStep] = useState(0);
   const [filter, setFilter] = useState('sedan');
+  const urlCategory = searchParams.get('category') as ServiceCategoryKey;
+  const initialCategory: ServiceCategoryKey = (urlCategory && ['all', 'general', 'washing', 'coating_ppf'].includes(urlCategory)) ? urlCategory : 'all';
+  const [serviceCategory, setServiceCategory] = useState<ServiceCategoryKey>(initialCategory);
+
+  useEffect(() => {
+    const cat = searchParams.get('category') as ServiceCategoryKey;
+    if (cat && ['all', 'general', 'washing', 'coating_ppf'].includes(cat)) {
+      setServiceCategory(cat);
+    }
+  }, [searchParams]);
   const [serviceSearch, setServiceSearch] = useState('');
   const [selectedDetailService, setSelectedDetailService] = useState<any | null>(null);
   const [loyalty, setLoyalty] = useState<{ credits: number; free_washes: number; wax_count: number }>({ credits: 0, free_washes: 0, wax_count: 0 });
@@ -757,8 +776,12 @@ export default function BookingPage() {
                     ]}
                     value={model}
                     onChange={(e) => {
-                      setModel(e.target.value);
+                      const val = e.target.value;
+                      setModel(val);
                       setCustomModel('');
+                      if (val && val !== 'Other' && brand && brand !== 'Others') {
+                        setFilter(getCategoryForModel(brand, val));
+                      }
                     }}
                     placeholder={brand ? "Select Model" : "Select brand first"}
                     disabled={!brand || brand === 'Others'}
@@ -798,17 +821,34 @@ export default function BookingPage() {
                   <Input label="Registration No (Optional)" placeholder="e.g. GJ01AB1234" value={regNo} onChange={(e) => setRegNo(e.target.value.toUpperCase())} />
                   <div>
                     <label className="block text-xs font-bold text-[#5f5e5e] mb-1.5 uppercase tracking-wide">Vehicle Category *</label>
-                    <select
-                      value={filter}
-                      onChange={(e) => setFilter(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#f6f3f2] border border-transparent rounded-lg text-sm font-bold text-[#1c1b1b] focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white focus:border-[#D32F2F]/30 transition-all duration-200 cursor-pointer"
-                    >
-                      <option value="hatchback">Hatchback</option>
-                      <option value="medium_hatchback">Medium Hatchback</option>
-                      <option value="sedan">Sedan</option>
-                      <option value="premium_sedan">Premium Sedan</option>
-                      <option value="suv">SUV</option>
-                    </select>
+                    {brand && brand !== 'Others' && model && model !== 'Other' ? (
+                      <div className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200/90 rounded-lg flex items-center justify-between">
+                        <span className="text-sm font-bold text-[#1c1b1b]">
+                          {CATEGORY_LABELS[filter] || filter.toUpperCase().replace('_', ' ')}
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <CheckCircle2 size={11} className="text-emerald-600" />
+                          Auto-Classified
+                        </span>
+                      </div>
+                    ) : !brand || !model ? (
+                      <div className="w-full px-3 py-2.5 bg-[#f6f3f2] border border-dashed border-gray-200 rounded-lg text-xs text-gray-400 font-medium flex items-center justify-between">
+                        <span>Select Brand & Model first</span>
+                        <span className="text-[10px] uppercase font-bold text-gray-400">Auto-detected</span>
+                      </div>
+                    ) : (
+                      <select
+                        value={filter}
+                        onChange={(e) => setFilter(e.target.value)}
+                        className="w-full px-3 py-2 bg-[#f6f3f2] border border-transparent rounded-lg text-sm font-bold text-[#1c1b1b] focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white focus:border-[#D32F2F]/30 transition-all duration-200 cursor-pointer"
+                      >
+                        <option value="hatchback">Hatchback</option>
+                        <option value="medium_hatchback">Medium Hatchback</option>
+                        <option value="sedan">Sedan</option>
+                        <option value="premium_sedan">Premium Sedan</option>
+                        <option value="suv">SUV</option>
+                      </select>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1033,10 +1073,37 @@ export default function BookingPage() {
                         </div>
                       </div>
 
+                      {/* 4 Service Category Filter Buttons */}
+                      <div className="flex gap-2 overflow-x-auto pb-1 mb-3.5 no-scrollbar">
+                        {SERVICE_CATEGORIES.map((cat) => {
+                          const isSelected = serviceCategory === cat.key;
+                          return (
+                            <button
+                              key={cat.key}
+                              type="button"
+                              onClick={() => {
+                                setServiceCategory(cat.key);
+                                const n = new URLSearchParams(searchParams);
+                                if (cat.key === 'all') n.delete('category');
+                                else n.set('category', cat.key);
+                                setSearchParams(n);
+                              }}
+                              className={`whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                                isSelected
+                                  ? 'bg-gradient-to-r from-[#D32F2F] to-[#b71c1c] text-white shadow-md shadow-red-600/25 scale-[1.02]'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                              }`}
+                            >
+                              {cat.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
                       {/* Filtered Services List */}
                       {(() => {
                         const activeList = sortServicesByPriority(
-                          services.filter(s => s.is_active && (!useFreeWash || (s.name && s.name.toLowerCase().includes('wash'))))
+                          services.filter(s => s.is_active && matchesServiceCategory(s, serviceCategory) && (!useFreeWash || (s.name && s.name.toLowerCase().includes('wash'))))
                         ).filter(s => {
                           if (!serviceSearch.trim()) return true;
                           const q = serviceSearch.toLowerCase().trim();

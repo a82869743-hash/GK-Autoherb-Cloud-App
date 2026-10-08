@@ -54,9 +54,9 @@ export default function ForgotPasswordPage() {
     finally { setIsPending(false); }
   };
 
-  const inputCls = 'w-full px-4 py-4 bg-[#f6f3f2] border border-transparent rounded-lg text-[#1c1b1b] font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white focus:border-[#D32F2F]/30 placeholder:text-[#8f6f6c]/60 transition-all duration-200';
-  const btnCls = 'w-full py-4 bg-gradient-to-br from-[#af101a] to-[#D32F2F] text-white font-bold rounded-lg shadow-lg shadow-[#D32F2F]/20 hover:shadow-xl hover:shadow-[#D32F2F]/30 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 uppercase tracking-wider text-sm';
-  const labelCls = 'block text-[10px] font-extrabold uppercase tracking-widest text-[#5f5e5e] mb-2';
+  const inputCls = 'w-full h-9 px-3 bg-[#f6f3f2] border border-slate-200/80 rounded-lg text-sm text-[#1c1b1b] font-normal focus:ring-1 focus:ring-[#D32F2F] focus:bg-white focus:border-[#D32F2F] placeholder:text-[#8f6f6c]/50 transition-all';
+  const btnCls = 'w-full h-10 bg-gradient-to-br from-[#af101a] to-[#D32F2F] text-white font-medium rounded-lg shadow-sm hover:shadow-md active:scale-[0.99] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2 cursor-pointer';
+  const labelCls = 'block text-xs font-medium text-[#5f5e5e] mb-1';
 
   const Spinner = () => (
     <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
@@ -75,7 +75,7 @@ export default function ForgotPasswordPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-[#D32F2F]/15 via-transparent to-[#D32F2F]/5 animate-gradient-shift" />
         <div className="relative z-10 px-16 max-w-md">
           <div className="mb-6"><img src="/assets/logo.png" alt="GK Auto Herb" className="w-48 h-auto drop-shadow-lg" /></div>
-          <h1 className="text-4xl font-black text-white tracking-tight leading-tight">GK AutoHerb</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight leading-tight">GK AutoHerb</h1>
           <div className="w-16 h-1 bg-gradient-to-r from-[#D32F2F] to-[#FF5252] mt-6 mb-6 rounded-full" />
           <p className="text-gray-400 text-sm leading-relaxed font-medium">Reset your password securely with OTP verification.</p>
           <div className="mt-10 space-y-3">
@@ -97,39 +97,39 @@ export default function ForgotPasswordPage() {
       {/* Right form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
         <div className="w-full max-w-md animate-fade-in-up">
-          <div className="lg:hidden text-center mb-10">
-            <img src="/assets/logo.png" alt="GK Auto Herb" className="w-36 h-auto mx-auto mb-3" />
-            <h1 className="text-3xl font-black text-[#1c1b1b] tracking-tight">GK AutoHerb</h1>
-            <div className="w-12 h-1 bg-[#D32F2F] mx-auto mt-3 rounded-full" />
+          <div className="lg:hidden text-center mb-6">
+            <img src="/assets/logo.png" alt="GK Auto Herb" className="w-28 h-auto mx-auto mb-2" />
+            <h1 className="text-xl font-bold text-[#1c1b1b] tracking-tight">GK AutoHerb</h1>
+            <div className="w-10 h-0.5 bg-[#D32F2F] mx-auto mt-2 rounded-full" />
           </div>
 
           {/* Step indicator mobile */}
-          <div className="flex items-center justify-center gap-2 mb-8 lg:hidden">
+          <div className="flex items-center justify-center gap-2 mb-6 lg:hidden">
             {steps.map((s, i) => (
               <div key={s.key} className="flex items-center gap-2">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${idx >= i ? 'bg-[#D32F2F] text-white' : 'bg-gray-200 text-gray-500'}`}>{idx > i ? '✓' : s.num}</div>
-                {i < steps.length - 1 && <div className={`w-8 h-0.5 ${idx > i ? 'bg-[#D32F2F]' : 'bg-gray-200'}`} />}
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${idx >= i ? 'bg-[#D32F2F] text-white' : 'bg-gray-200 text-gray-500'}`}>{idx > i ? '✓' : s.num}</div>
+                {i < steps.length - 1 && <div className={`w-6 h-0.5 ${idx > i ? 'bg-[#D32F2F]' : 'bg-gray-200'}`} />}
               </div>
             ))}
           </div>
 
-          <div className="mb-8">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#D32F2F] mb-2">Password Recovery</p>
-            <h2 className="text-3xl font-extrabold text-[#1c1b1b] tracking-tight">
+          <div className="mb-6">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#D32F2F] mb-1">Password Recovery</p>
+            <h2 className="text-xl sm:text-2xl font-semibold text-[#1c1b1b] tracking-tight">
               {step === 'mobile' ? 'Forgot Password' : step === 'otp' ? 'Verify OTP' : 'New Password'}
             </h2>
-            <p className="text-sm text-[#5f5e5e] mt-2 font-medium">
+            <p className="text-xs sm:text-sm text-[#5f5e5e] mt-1 font-normal">
               {step === 'mobile' ? 'Enter your registered mobile number' : step === 'otp' ? `We sent a code to +91 ${mobile}` : 'Choose a strong new password'}
             </p>
           </div>
 
           {step === 'mobile' && (
-            <form onSubmit={handleSendOtp} className="space-y-6">
+            <form onSubmit={handleSendOtp} className="space-y-4">
               <div>
                 <label className={labelCls}>Mobile Number</label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#5f5e5e] text-sm font-semibold">+91</span>
-                  <input type="tel" maxLength={10} value={mobile} onChange={(e) => setMobile(e.target.value.replace(/\D/g, ''))} placeholder="Enter 10-digit mobile" className={`${inputCls} pl-14`} autoFocus />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#5f5e5e] text-xs font-semibold">+91</span>
+                  <input type="tel" maxLength={10} value={mobile} onChange={(e) => setMobile(e.target.value.replace(/\D/g, ''))} placeholder="Enter 10-digit mobile" className={`${inputCls} pl-11`} autoFocus />
                 </div>
               </div>
               <button type="submit" disabled={isPending} className={btnCls}>
@@ -139,26 +139,26 @@ export default function ForgotPasswordPage() {
           )}
 
           {step === 'otp' && (
-            <form onSubmit={handleVerifyOtp} className="space-y-6">
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
               <div>
                 <label className={labelCls}>Verification Code</label>
-                <input type="text" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} placeholder="Enter 6-digit OTP" className={`${inputCls} text-center text-2xl tracking-[0.5em] placeholder:text-base placeholder:tracking-normal`} autoFocus />
+                <input type="text" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} placeholder="Enter 6-digit OTP" className={`${inputCls} text-center text-xl tracking-[0.4em] placeholder:text-sm placeholder:tracking-normal h-10`} autoFocus />
               </div>
               <button type="submit" disabled={isPending} className={btnCls}>
                 {isPending ? <span className="flex items-center justify-center gap-2"><Spinner />Verifying...</span> : 'Verify OTP'}
               </button>
               <div className="text-center">
-                <button type="button" onClick={() => { setStep('mobile'); setOtp(''); }} className="text-sm text-[#D32F2F] font-bold hover:underline">← Change mobile number</button>
+                <button type="button" onClick={() => { setStep('mobile'); setOtp(''); }} className="text-xs text-[#D32F2F] font-semibold hover:underline cursor-pointer">← Change mobile number</button>
               </div>
             </form>
           )}
 
           {step === 'reset' && (
-            <form onSubmit={handleResetPassword} className="space-y-5">
+            <form onSubmit={handleResetPassword} className="space-y-4">
               <div>
                 <label className={labelCls}>New Password</label>
                 <div className="relative">
-                  <input type={showPassword ? 'text' : 'password'} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Min. 6 characters" className={`${inputCls} pr-12`} autoFocus />
+                  <input type={showPassword ? 'text' : 'password'} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Min. 6 characters" className={`${inputCls} pr-10`} autoFocus />
                   <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#5f5e5e] hover:text-[#1c1b1b] transition-colors">
                     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       {showPassword ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M3 3l18 18" /> : <><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></>}
@@ -177,12 +177,12 @@ export default function ForgotPasswordPage() {
             </form>
           )}
 
-          <div className="mt-6 text-center">
-            <p className="text-sm text-[#5f5e5e] font-medium">
-              Remember your password?{' '}<Link to="/login" className="text-[#D32F2F] font-bold hover:underline">Sign In</Link>
+          <div className="mt-5 text-center">
+            <p className="text-xs text-[#5f5e5e] font-normal">
+              Remember your password?{' '}<Link to="/login" className="text-[#D32F2F] font-semibold hover:underline">Sign In</Link>
             </p>
           </div>
-          <div className="mt-8 text-center"><p className="text-[10px] text-[#5f5e5e] font-medium">GK AutoHerb v1.0 · Vadodara, Gujarat</p></div>
+          <div className="mt-6 text-center"><p className="text-[10px] text-[#5f5e5e] font-normal">GK AutoHerb v1.0 · Vadodara, Gujarat</p></div>
         </div>
       </div>
     </div>

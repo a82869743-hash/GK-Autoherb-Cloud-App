@@ -86,28 +86,28 @@ export default function AdminMobileDock({ onOpenLauncher, isLauncherOpen }: Admi
         )}
       </AnimatePresence>
 
-      {/* ── Floating Capsule Bottom Nav (Matches Provided Screenshot) ── */}
+      {/* ── Floating Capsule Bottom Nav ── */}
       <nav className="fixed bottom-4 inset-x-0 mx-auto w-fit z-[80] safe-bottom-dock px-3">
-        <div className="bg-white/95 backdrop-blur-2xl border border-slate-200/90 shadow-[0_12px_40px_rgba(0,0,0,0.14)] rounded-full px-5 py-2 flex items-center justify-between gap-3 sm:gap-7 relative">
+        <div className="bg-white/95 backdrop-blur-2xl border border-slate-200/90 shadow-[0_8px_30px_rgba(0,0,0,0.1)] rounded-full px-4 py-1.5 flex items-center justify-between gap-3 sm:gap-6 relative">
           
-          {/* Tab 1: Home (Red with indicator pill when active) */}
+          {/* Tab 1: Home */}
           <NavLink
             to="/admin"
             end
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center min-w-[56px] transition-all duration-200 ${
+              `flex flex-col items-center justify-center min-w-[50px] transition-all duration-150 ${
                 isActive ? 'text-[#D32F2F]' : 'text-slate-400 hover:text-slate-600'
               }`
             }
           >
             {({ isActive }) => (
               <>
-                <LayoutGrid size={22} strokeWidth={isActive ? 2.3 : 1.8} />
-                <span className={`text-[11px] mt-0.5 tracking-tight ${isActive ? 'font-black' : 'font-medium'}`}>
+                <LayoutGrid size={19} strokeWidth={isActive ? 2 : 1.6} />
+                <span className={`text-[10px] mt-0.5 tracking-tight ${isActive ? 'font-semibold' : 'font-normal'}`}>
                   Home
                 </span>
                 {isActive && (
-                  <div className="w-4 h-1 bg-[#D32F2F] rounded-full mt-0.5" />
+                  <div className="w-3.5 h-0.5 bg-[#D32F2F] rounded-full mt-0.5" />
                 )}
               </>
             )}
@@ -117,37 +117,37 @@ export default function AdminMobileDock({ onOpenLauncher, isLauncherOpen }: Admi
           <NavLink
             to="/admin/services"
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center min-w-[56px] transition-all duration-200 ${
+              `flex flex-col items-center justify-center min-w-[50px] transition-all duration-150 ${
                 isActive ? 'text-[#D32F2F]' : 'text-slate-400 hover:text-slate-600'
               }`
             }
           >
             {({ isActive }) => (
               <>
-                <Wrench size={22} strokeWidth={isActive ? 2.3 : 1.8} />
-                <span className={`text-[11px] mt-0.5 tracking-tight ${isActive ? 'font-black' : 'font-medium'}`}>
+                <Wrench size={19} strokeWidth={isActive ? 2 : 1.6} />
+                <span className={`text-[10px] mt-0.5 tracking-tight ${isActive ? 'font-semibold' : 'font-normal'}`}>
                   Services
                 </span>
                 {isActive && (
-                  <div className="w-4 h-1 bg-[#D32F2F] rounded-full mt-0.5" />
+                  <div className="w-3.5 h-0.5 bg-[#D32F2F] rounded-full mt-0.5" />
                 )}
               </>
             )}
           </NavLink>
 
-          {/* Center Elevated Action: BOOK (Popping out circle with red gradient + glow) */}
-          <div className="relative -top-5 flex flex-col items-center px-1">
+          {/* Center Elevated Action: BOOK */}
+          <div className="relative -top-4 flex flex-col items-center px-0.5">
             <button
               onClick={() => setQuickFabOpen(!quickFabOpen)}
-              className="w-14 h-14 rounded-full bg-gradient-to-b from-[#E53935] to-[#B71C1C] text-white flex items-center justify-center shadow-[0_8px_25px_rgba(211,47,47,0.45)] border-2 border-white active:scale-95 transition-all duration-300 group"
+              className="w-12 h-12 rounded-full bg-gradient-to-b from-[#E53935] to-[#B71C1C] text-white flex items-center justify-center shadow-[0_6px_20px_rgba(211,47,47,0.4)] border-2 border-white active:scale-95 transition-all duration-200 group"
               aria-label="Book Slot or Job Card"
             >
               <CalendarPlus 
-                size={23} 
-                className={`transition-transform duration-300 ${quickFabOpen ? 'rotate-45' : 'group-hover:scale-110'}`} 
+                size={20} 
+                className={`transition-transform duration-200 ${quickFabOpen ? 'rotate-45' : 'group-hover:scale-105'}`} 
               />
             </button>
-            <span className="text-[10px] font-black text-slate-800 uppercase tracking-wider mt-1 select-none">
+            <span className="text-[9px] font-semibold text-slate-800 uppercase tracking-wider mt-0.5 select-none">
               BOOK
             </span>
           </div>
@@ -156,19 +156,19 @@ export default function AdminMobileDock({ onOpenLauncher, isLauncherOpen }: Admi
           <NavLink
             to="/admin/customer-bookings"
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center min-w-[56px] transition-all duration-200 ${
+              `flex flex-col items-center justify-center min-w-[50px] transition-all duration-150 ${
                 isActive ? 'text-[#D32F2F]' : 'text-slate-400 hover:text-slate-600'
               }`
             }
           >
             {({ isActive }) => (
               <>
-                <Calendar size={22} strokeWidth={isActive ? 2.3 : 1.8} />
-                <span className={`text-[11px] mt-0.5 tracking-tight ${isActive ? 'font-black' : 'font-medium'}`}>
+                <Calendar size={19} strokeWidth={isActive ? 2 : 1.6} />
+                <span className={`text-[10px] mt-0.5 tracking-tight ${isActive ? 'font-semibold' : 'font-normal'}`}>
                   Bookings
                 </span>
                 {isActive && (
-                  <div className="w-4 h-1 bg-[#D32F2F] rounded-full mt-0.5" />
+                  <div className="w-3.5 h-0.5 bg-[#D32F2F] rounded-full mt-0.5" />
                 )}
               </>
             )}
@@ -177,16 +177,16 @@ export default function AdminMobileDock({ onOpenLauncher, isLauncherOpen }: Admi
           {/* Tab 5: Menu */}
           <button
             onClick={onOpenLauncher}
-            className={`flex flex-col items-center justify-center min-w-[56px] transition-all duration-200 ${
+            className={`flex flex-col items-center justify-center min-w-[50px] transition-all duration-150 ${
               isLauncherOpen ? 'text-[#D32F2F]' : 'text-slate-400 hover:text-slate-600'
             }`}
           >
-            <MoreHorizontal size={24} strokeWidth={isLauncherOpen ? 2.5 : 2} />
-            <span className={`text-[11px] mt-0.5 tracking-tight ${isLauncherOpen ? 'font-black' : 'font-medium'}`}>
+            <MoreHorizontal size={20} strokeWidth={isLauncherOpen ? 2.2 : 1.7} />
+            <span className={`text-[10px] mt-0.5 tracking-tight ${isLauncherOpen ? 'font-semibold' : 'font-normal'}`}>
               Menu
             </span>
             {isLauncherOpen && (
-              <div className="w-4 h-1 bg-[#D32F2F] rounded-full mt-0.5" />
+              <div className="w-3.5 h-0.5 bg-[#D32F2F] rounded-full mt-0.5" />
             )}
           </button>
 

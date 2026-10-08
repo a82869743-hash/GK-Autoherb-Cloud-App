@@ -182,13 +182,13 @@ export default function AdminAppLauncherDrawer({ isOpen, onClose }: AdminAppLaun
 
             {/* Live Search Field */}
             <div className="relative">
-              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search any page, bill, inventory, customer..."
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-100/80 hover:bg-slate-100 focus:bg-white border border-slate-200 focus:border-[#D32F2F] rounded-2xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#D32F2F]/20 transition-all text-slate-900 placeholder:text-slate-400"
+                className="w-full h-9 pl-8 pr-4 bg-slate-100/80 hover:bg-slate-100 focus:bg-white border border-slate-200 focus:border-[#D32F2F] rounded-lg text-xs sm:text-sm font-normal focus:outline-none focus:ring-1 focus:ring-[#D32F2F] transition-all text-slate-900 placeholder:text-slate-400"
                 autoFocus
               />
               {searchQuery && (
@@ -203,37 +203,37 @@ export default function AdminAppLauncherDrawer({ isOpen, onClose }: AdminAppLaun
           </div>
 
           {/* Scrollable Categories List */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 dark-scroll pb-24 sm:pb-8">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5 dark-scroll pb-24 sm:pb-8">
             {filteredCategories.length > 0 ? (
               filteredCategories.map((group) => (
-                <div key={group.category} className="space-y-2.5">
+                <div key={group.category} className="space-y-2">
                   <div className="flex items-center justify-between px-1">
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                       {group.category}
                     </span>
-                    <span className="text-[10px] font-semibold text-slate-400">
+                    <span className="text-[10px] font-normal text-slate-400">
                       {group.items.length} tools
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {group.items.map((item) => (
                       <button
                         key={item.to}
                         onClick={() => handleNavigate(item.to)}
-                        className="p-3 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-2xl flex items-start gap-3 transition-all hover:border-slate-300 text-left active:scale-[0.98] group relative shadow-2xs hover:shadow-sm"
+                        className="p-2.5 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-xl flex items-start gap-2.5 transition-all hover:border-slate-300 text-left active:scale-[0.98] group relative shadow-2xs hover:shadow-xs"
                       >
-                        <div className={`w-10 h-10 rounded-xl ${item.bgColor} flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform`}>
-                          <item.icon size={20} className={item.color} />
+                        <div className={`w-8 h-8 rounded-lg ${item.bgColor} flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform`}>
+                          <item.icon size={16} className={item.color} />
                         </div>
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-black text-slate-900 truncate group-hover:text-[#D32F2F] transition-colors">
+                            <span className="text-xs font-semibold text-slate-900 truncate group-hover:text-[#D32F2F] transition-colors">
                               {item.name}
                             </span>
                           </div>
-                          <p className="text-[10px] text-slate-500 font-medium truncate mt-0.5">
+                          <p className="text-[10px] text-slate-500 font-normal truncate mt-0.5">
                             {item.desc}
                           </p>
                         </div>

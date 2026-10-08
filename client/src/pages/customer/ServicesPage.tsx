@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Sparkles, CreditCard, Droplets, ArrowRight, Shield, Search, ArrowUpDown, X } from 'lucide-react';
 import { useServices } from '../../api/hooks/useServices';
 import { useLoyalty } from '../../api/hooks/useLoyalty';
@@ -8,6 +8,55 @@ import { SkeletonCard } from '../../components/ui/SkeletonLoader';
 import ErrorState from '../../components/shared/ErrorState';
 import { formatINR } from '../../utils/formatters';
 import ServiceDetailsModal from '../../components/shared/ServiceDetailsModal';
+
+export type ServiceCategoryKey = 'all' | 'general' | 'washing' | 'coating_ppf';
+
+export const SERVICE_CATEGORIES: { key: ServiceCategoryKey; label: string }[] = [
+  { key: 'all', label: 'All Services' },
+  { key: 'general', label: 'General Services' },
+  { key: 'washing', label: 'Washing Services' },
+  { key: 'coating_ppf', label: 'Coating & PPF Services' },
+];
+
+export function matchesServiceCategory(svc: any, cat: ServiceCategoryKey): boolean {
+  if (cat === 'all') return true;
+  const name = (svc.name || '').toLowerCase();
+  const desc = (svc.description || '').toLowerCase();
+  const catName = (svc.category_name || svc.category || '').toLowerCase();
+
+  const isCoatingOrPpf =
+    name.includes('coating') ||
+    name.includes('ppf') ||
+    name.includes('ceramic') ||
+    name.includes('graphene') ||
+    name.includes('film') ||
+    name.includes('paint protection') ||
+    desc.includes('coating') ||
+    desc.includes('ppf') ||
+    catName.includes('coating') ||
+    catName.includes('ppf');
+
+  if (cat === 'coating_ppf') {
+    return isCoatingOrPpf;
+  }
+
+  const isWash =
+    (name.includes('wash') ||
+     name.includes('foam') ||
+     name.includes('water') ||
+     catName.includes('wash')) &&
+    !isCoatingOrPpf;
+
+  if (cat === 'washing') {
+    return isWash;
+  }
+
+  if (cat === 'general') {
+    return !isCoatingOrPpf && !isWash;
+  }
+
+  return true;
+}
 
 const FILTERS = ['all', 'hatchback', 'medium_hatchback', 'sedan', 'premium_sedan', 'suv'] as const;
 type Filter = typeof FILTERS[number];
@@ -31,6 +80,17 @@ function sortServicesByPriority(services: any[]): any[] {
 
 export default function CustomerServicesPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlCategory = searchParams.get('category') as ServiceCategoryKey;
+  const initialCategory: ServiceCategoryKey = (urlCategory && ['all', 'general', 'washing', 'coating_ppf'].includes(urlCategory)) ? urlCategory : 'all';
+  const [categoryFilter, setCategoryFilter] = useState<ServiceCategoryKey>(initialCategory);
+
+  useEffect(() => {
+    const cat = searchParams.get('category') as ServiceCategoryKey;
+    if (cat && ['all', 'general', 'washing', 'coating_ppf'].includes(cat)) {
+      setCategoryFilter(cat);
+    }
+  }, [searchParams]);
   const [filter, setFilter] = useState<Filter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('priority');
@@ -42,8 +102,9 @@ export default function CustomerServicesPage() {
 
   const rawServices = svcData?.data || [];
 
-  // Filter services by search term
+  // Filter services by search term and category
   const filteredServices = rawServices.filter((svc: any) => {
+    if (!matchesServiceCategory(svc, categoryFilter)) return false;
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase().trim();
     return (
@@ -94,20 +155,20 @@ export default function CustomerServicesPage() {
   return (
     <div className="pt-4 pb-20 relative">
       {/* ── Hero Banner ──────────────────────────────────── */}
-      <div className="relative hero-bg rounded-2xl overflow-hidden mb-8 pattern-overlay">
-        <div className="relative z-10 px-6 sm:px-10 py-10 sm:py-14">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-2 h-2 rounded-full bg-[#D32F2F] animate-pulse-dot" />
-            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]">Premium Detail Studio</span>
+      <div className="relative hero-bg rounded-xl overflow-hidden mb-5 pattern-overlay">
+        <div className="relative z-10 px-5 sm:px-8 py-6 sm:py-8">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#D32F2F] animate-pulse-dot" />
+            <span className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider">Premium Detail Studio</span>
           </div>
-          <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight leading-tight mb-3">
+          <h1 className="text-xl sm:text-2xl font-semibold text-white tracking-tight leading-tight mb-1.5">
             Our Services
           </h1>
-          <p className="text-gray-400 text-sm sm:text-base max-w-lg font-medium leading-relaxed">
-            Elevate your vehicle with our premium detailing services. Tap any service card to view English details and features.
+          <p className="text-gray-400 text-xs sm:text-sm max-w-lg font-normal leading-relaxed">
+            Elevate your vehicle with our premium detailing services. Tap any service card to view details and features.
           </p>
-          <div className="flex gap-3 mt-6">
-            <Button onClick={() => navigate('/customer/bookings/new')} icon={<ArrowRight size={16} />}>
+          <div className="flex gap-2.5 mt-4">
+            <Button size="sm" onClick={() => navigate(categoryFilter && categoryFilter !== 'all' ? `/customer/bookings/new?category=${categoryFilter}` : '/customer/bookings/new')} icon={<ArrowRight size={14} />}>
               Book Now
             </Button>
           </div>
@@ -115,7 +176,7 @@ export default function CustomerServicesPage() {
       </div>
 
       {/* ── Search & Alphabetical Sorting Controls Bar ──────────────────── */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6 space-y-3">
+      <div className="bg-white p-3 rounded-xl shadow-2xs border border-gray-100 mb-5 space-y-2.5">
         <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
           {/* Search Input */}
           <div className="relative w-full sm:flex-1">
@@ -158,21 +219,49 @@ export default function CustomerServicesPage() {
           </div>
         </div>
 
-        {/* Vehicle Segment Filters */}
-        <div className="flex gap-2 overflow-x-auto pt-2 border-t border-gray-100 scrollbar-hide">
-          {FILTERS.map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`whitespace-nowrap px-3.5 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all duration-200 ${
-                filter === f
-                  ? 'bg-gradient-to-br from-[#af101a] to-[#D32F2F] text-white shadow-md shadow-[#D32F2F]/20'
-                  : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
-              }`}
-            >
-              {f === 'all' ? 'All Segments' : f === 'medium_hatchback' ? 'Med Hatch' : f === 'premium_sedan' ? 'Prem Sedan' : f.charAt(0).toUpperCase() + f.slice(1)}
-            </button>
-          ))}
+        {/* ── 4 Service Category Filter Buttons ── */}
+        <div className="flex items-center gap-2 overflow-x-auto pt-2 border-t border-gray-100 no-scrollbar">
+          {SERVICE_CATEGORIES.map((cat) => {
+            const isSelected = categoryFilter === cat.key;
+            return (
+              <button
+                key={cat.key}
+                onClick={() => {
+                  setCategoryFilter(cat.key);
+                  setSearchParams(cat.key === 'all' ? {} : { category: cat.key });
+                }}
+                className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                  isSelected
+                    ? 'bg-gradient-to-r from-[#af101a] to-[#D32F2F] text-white shadow-md shadow-[#D32F2F]/25 scale-[1.02]'
+                    : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200'
+                }`}
+              >
+                {cat.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Pricing Segment Filter */}
+        <div className="flex items-center gap-2 pt-2 border-t border-gray-100 text-xs">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider shrink-0">
+            Show Pricing:
+          </span>
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+            {FILTERS.map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`whitespace-nowrap px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                  filter === f
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-gray-100 text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                {f === 'all' ? 'All Segments' : f === 'medium_hatchback' ? 'Med Hatch' : f === 'premium_sedan' ? 'Prem Sedan' : f.charAt(0).toUpperCase() + f.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -262,7 +351,7 @@ export default function CustomerServicesPage() {
                       <Button
                         size="sm"
                         className="bg-[#D32F2F] hover:bg-[#b52626] text-white font-bold"
-                        onClick={() => navigate(`/customer/bookings/new?service_id=${svc.id}`)}
+                        onClick={() => navigate(`/customer/bookings/new?service_id=${svc.id}&category=${categoryFilter}`)}
                         icon={<ArrowRight size={14} />}
                       >
                         Book Now

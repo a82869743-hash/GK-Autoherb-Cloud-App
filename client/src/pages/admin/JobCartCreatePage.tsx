@@ -592,9 +592,9 @@ export default function JobCartCreatePage() {
 
         {/* ─── SECTION E: Grand Total ──────────────── */}
         {!isStaff && (
-          <div className="bg-slate-900 rounded-3xl p-6 sm:p-7 flex items-center justify-between border border-slate-800 shadow-sm">
-            <span className="text-slate-300 text-xs font-black uppercase tracking-widest">Grand Total</span>
-            <span className="text-3xl font-black text-white tracking-tight">
+          <div className="bg-slate-900 rounded-xl p-4 sm:p-5 flex items-center justify-between border border-slate-800 shadow-2xs">
+            <span className="text-slate-300 text-xs font-semibold uppercase tracking-wider">Grand Total</span>
+            <span className="text-xl sm:text-2xl font-semibold text-white tracking-tight">
               ₹{grandTotal.toLocaleString('en-IN')}
             </span>
           </div>

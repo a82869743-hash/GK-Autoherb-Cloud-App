@@ -40,36 +40,36 @@ export default function Modal({ open, onClose, title, children, size = 'md', foo
   const modalContent = (
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
     >
       <div
-        className={`bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full ${sizeClasses[size]} max-h-[92vh] sm:max-h-[88vh] flex flex-col animate-scale-in overflow-hidden border border-slate-200/80 relative`}
+        className={`bg-white rounded-xl sm:rounded-2xl shadow-xl w-full ${sizeClasses[size]} max-h-[90vh] flex flex-col animate-scale-in overflow-hidden border border-gray-200/80 relative`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Red accent line */}
-        <div className="h-[3px] bg-gradient-to-r from-[#af101a] via-[#D32F2F] to-[#FF5252] shrink-0" />
+        <div className="h-[2px] bg-gradient-to-r from-[#af101a] via-[#D32F2F] to-[#FF5252] shrink-0" />
         
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-gray-100 shrink-0 bg-white">
-            <h3 className="text-lg font-bold text-[#1c1b1b] tracking-tight">{title}</h3>
+          <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-gray-100 shrink-0 bg-white">
+            <h3 className="text-base sm:text-lg font-semibold text-[#1c1b1b] tracking-tight">{title}</h3>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
+              className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
               aria-label="Close modal"
             >
-              <X size={18} />
+              <X size={16} />
             </button>
           </div>
         )}
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5 overscroll-contain">{children}</div>
+        <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-3.5 sm:py-4 overscroll-contain text-sm">{children}</div>
 
         {/* Footer */}
         {footer && (
-          <div className="flex items-center justify-end gap-3 px-4 sm:px-6 py-3.5 sm:py-4 border-t border-gray-100 bg-gray-50/80 rounded-b-2xl sm:rounded-b-3xl shrink-0">
+          <div className="flex items-center justify-end gap-2.5 px-4 sm:px-5 py-3 border-t border-gray-100 bg-gray-50/70 shrink-0">
             {footer}
           </div>
         )}
