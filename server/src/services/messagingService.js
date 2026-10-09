@@ -3,7 +3,7 @@ const pool = require('../config/db');
 
 class MessagingService {
   constructor() {
-    this.apiKey = process.env.MSG91_AUTH_KEY;
+    this.apiKey = process.env.TWO_FACTOR_API_KEY || process.env.MSG91_AUTH_KEY;
     this.senderId = process.env.MSG91_SENDER_ID || 'GKAHER';
   }
 
