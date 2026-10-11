@@ -33,10 +33,17 @@ async function enrichPackage(pkg) {
 // Role-based filtering: Admin sees all, Customer/public sees only active + visible
 exports.list = async (req, res) => {
   try {
-    const { published_only } = req.query;
+    const { published_only, include_custom, custom_only } = req.query;
     const userRole = req.user?.role || null;
 
-    let where = 'is_custom = 0';
+    let where = '1=1';
+    if (custom_only === 'true') {
+      where += ' AND is_custom = 1';
+    } else if (include_custom === 'false') {
+      where += ' AND is_custom = 0';
+    } else if (userRole !== 'admin' && include_custom !== 'true') {
+      where += ' AND is_custom = 0';
+    }
 
     // Customer or unauthenticated: only show active + visible + published packages
     if (userRole !== 'admin') {
