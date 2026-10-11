@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import {
   BarChart3, FileText, Download, Calendar, ShieldAlert,
-  Clock, CheckCircle, Package, ArrowUpRight, ArrowDownRight, TrendingUp, Star, Filter, Sparkles
+  Clock, CheckCircle, Package, ArrowUpRight, ArrowDownRight, TrendingUp, Star, Filter, Sparkles, Layers, IndianRupee
 } from 'lucide-react';
-import { useSalesReport, useInventoryReport, useJobCardReport, useWelcomeRewardsReport, downloadReport } from '../../api/hooks/useReports';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { useSalesReport, useInventoryReport, useJobCardReport, useWelcomeRewardsReport, useServiceWiseReport, downloadReport } from '../../api/hooks/useReports';
 import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
 import AdminMetricCard from '../../components/admin/AdminMetricCard';
 import { PageTransition } from '../../components/ui/Animations';
 
-type TabType = 'sales' | 'inventory' | 'jobcards' | 'welcomerewards' | 'packagehistory';
+type TabType = 'sales' | 'inventory' | 'jobcards' | 'welcomerewards' | 'packagehistory' | 'servicewise';
 
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<TabType>('sales');
@@ -37,14 +38,18 @@ export default function ReportsPage() {
   });
 
   const { data: welcomeRewardsData, isLoading: welcomeRewardsLoading } = useWelcomeRewardsReport();
+  const { data: serviceWiseData, isLoading: serviceWiseLoading } = useServiceWiseReport({
+    from_date: dateRange.from,
+    to_date: dateRange.to
+  });
 
   const [downloading, setDownloading] = useState<string | null>(null);
 
-  const handleDownload = async (type: 'sales' | 'inventory' | 'job-cards' | 'package-history', format: 'xlsx' | 'pdf') => {
+  const handleDownload = async (type: 'sales' | 'inventory' | 'job-cards' | 'package-history' | 'service-wise', format: 'xlsx' | 'pdf') => {
     const key = `${type}-${format}`;
     setDownloading(key);
     try {
-      const params = type === 'inventory' || type === 'package-history' ? {} : {
+      const params = type === 'inventory' ? {} : {
         from_date: dateRange.from,
         to_date: dateRange.to,
         ...(type === 'job-cards' ? jobCardFilters : {})
@@ -59,6 +64,7 @@ export default function ReportsPage() {
 
   const tabs: { key: TabType; label: string; icon: React.ElementType }[] = [
     { key: 'sales', label: 'Financial Performance', icon: TrendingUp },
+    { key: 'servicewise', label: 'Service-wise Analytics', icon: BarChart3 },
     { key: 'jobcards', label: 'Job Cards & Throughput', icon: FileText },
     { key: 'inventory', label: 'Inventory & Consumption', icon: Package },
     { key: 'welcomerewards', label: 'Rewards Ledger', icon: Star },
@@ -74,9 +80,9 @@ export default function ReportsPage() {
         actions={
           <div className="flex items-center gap-2">
             <button
-              onClick={() => handleDownload(activeTab === 'sales' ? 'sales' : 'job-cards', 'xlsx')}
+              onClick={() => handleDownload(activeTab === 'sales' ? 'sales' : activeTab === 'servicewise' ? 'service-wise' : activeTab === 'packagehistory' ? 'package-history' : 'job-cards', 'xlsx')}
               disabled={!!downloading}
-              className="h-10 px-4 bg-white border border-slate-200 text-slate-700 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm"
+              className="h-10 px-4 bg-white border border-slate-200 text-slate-700 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm active:scale-95"
             >
               <Download size={14} />
               {downloading?.includes('xlsx') ? 'Exporting...' : 'Export Excel'}
@@ -108,7 +114,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Date & Dimension Filter Bar */}
-      {activeTab !== 'inventory' && activeTab !== 'welcomerewards' && activeTab !== 'packagehistory' && (
+      {activeTab !== 'inventory' && activeTab !== 'welcomerewards' && (
         <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-100 shadow-sm flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
@@ -275,6 +281,138 @@ export default function ReportsPage() {
           ) : (
             <div className="bg-rose-50 text-rose-700 p-5 rounded-3xl border border-rose-200 text-sm font-semibold">
               Failed to load sales analytics data.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* SERVICE-WISE ANALYTICS TAB (Update 29) */}
+      {activeTab === 'servicewise' && (
+        <div className="space-y-6">
+          {serviceWiseLoading ? (
+            <div className="space-y-4 animate-pulse">
+              <div className="h-28 bg-slate-100 rounded-3xl" />
+              <div className="h-80 bg-slate-100 rounded-3xl" />
+            </div>
+          ) : serviceWiseData?.success ? (
+            <>
+              {/* Summary KPIs */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <AdminMetricCard
+                  label="Total Service Turnover"
+                  value={`₹${(serviceWiseData.data.total_revenue || 0).toLocaleString('en-IN')}`}
+                  trend={{ text: 'Completed detailing jobs', positive: true }}
+                  icon={<IndianRupee size={20} />}
+                  accentColor="emerald"
+                />
+                <AdminMetricCard
+                  label="Completed Operations"
+                  value={`${serviceWiseData.data.total_bookings || 0} jobs`}
+                  trend={{ text: 'Service volume logged', positive: true }}
+                  icon={<CheckCircle size={20} />}
+                  accentColor="indigo"
+                />
+                <AdminMetricCard
+                  label="Star Catalog Service"
+                  value={serviceWiseData.data.services?.[0]?.service_name || 'None'}
+                  trend={{ text: serviceWiseData.data.services?.[0] ? `₹${serviceWiseData.data.services[0].total_revenue.toLocaleString('en-IN')}` : 'No revenue', positive: true }}
+                  icon={<Star size={20} />}
+                  accentColor="purple"
+                />
+                <AdminMetricCard
+                  label="Average Service Ticket"
+                  value={`₹${Math.round((serviceWiseData.data.total_revenue || 0) / (serviceWiseData.data.total_bookings || 1)).toLocaleString('en-IN')}`}
+                  trend={{ text: 'Average per job', positive: true }}
+                  icon={<TrendingUp size={20} />}
+                  accentColor="sky"
+                />
+              </div>
+
+              {/* Service Revenue Bar Chart */}
+              <div className="rounded-3xl border border-slate-100 bg-white p-6 sm:p-7 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                      <BarChart3 size={18} className="text-[#D32F2F]" />
+                      <span>Revenue Breakdown by Service Catalog</span>
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Comparative turnover generated across detailing and maintenance tiers</p>
+                  </div>
+                  <button
+                    onClick={() => handleDownload('service-wise', 'xlsx')}
+                    className="px-3.5 py-1.5 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition flex items-center gap-1.5 active:scale-95"
+                  >
+                    <Download size={13} />
+                    <span>Export Excel</span>
+                  </button>
+                </div>
+
+                {(serviceWiseData.data.services || []).length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={serviceWiseData.data.services.slice(0, 10)} margin={{ top: 20, right: 15, left: 10, bottom: 40 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                      <XAxis dataKey="service_name" angle={-25} textAnchor="end" tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} interval={0} height={50} />
+                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${Number(v) >= 1000 ? `${(Number(v) / 1000).toFixed(0)}k` : Number(v)}`} />
+                      <Tooltip 
+                        formatter={(val: any) => [`₹${Number(val).toLocaleString('en-IN')}`, 'Turnover']}
+                        contentStyle={{ borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}
+                      />
+                      <Bar dataKey="total_revenue" fill="#D32F2F" radius={[8, 8, 0, 0]} maxBarSize={45} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-xs font-medium text-slate-400 text-center py-12">No service completions recorded for this timeframe.</p>
+                )}
+              </div>
+
+              {/* Service Breakdown Table */}
+              <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 text-base">Service Contribution Ledger</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Individual catalog performance, volume counts, and percentage revenue share</p>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/80 border-b border-slate-100 text-slate-500 text-xs font-bold uppercase tracking-wider">
+                        <th className="p-4 pl-6">Service Name</th>
+                        <th className="p-4">Category</th>
+                        <th className="p-4 text-center">Completed Count</th>
+                        <th className="p-4 text-right">Total Revenue</th>
+                        <th className="p-4 pr-6 text-right">Revenue Share</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-sm">
+                      {(serviceWiseData.data.services || []).map((s: any, idx: number) => (
+                        <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="p-4 pl-6 font-bold text-slate-900">{s.service_name}</td>
+                          <td className="p-4">
+                            <span className="px-2.5 py-1 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700">
+                              {s.category}
+                            </span>
+                          </td>
+                          <td className="p-4 text-center font-bold text-slate-700">{s.booking_count}</td>
+                          <td className="p-4 text-right font-black text-slate-900">₹{s.total_revenue.toLocaleString('en-IN')}</td>
+                          <td className="p-4 pr-6 text-right font-extrabold text-emerald-700">{s.share_percentage}%</td>
+                        </tr>
+                      ))}
+                      {(!serviceWiseData.data.services?.length) && (
+                        <tr>
+                          <td colSpan={5} className="p-12 text-center text-slate-400">
+                            No service sales logged in this period
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="bg-rose-50 text-rose-700 p-5 rounded-3xl border border-rose-200 text-sm font-semibold">
+              Failed to load service analytics data.
             </div>
           )}
         </div>

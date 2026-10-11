@@ -44,3 +44,22 @@ export function useCreateExpense() {
     },
   });
 }
+
+export async function downloadBalanceSheet(params: { from?: string; to?: string; format: 'xlsx' | 'pdf' }) {
+  const res = await api.get('/balance-sheet/export', {
+    params,
+    responseType: 'blob'
+  });
+  const blob = new Blob([res.data], {
+    type: params.format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `BalanceSheet_${params.from || 'all'}_to_${params.to || 'all'}.${params.format}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+

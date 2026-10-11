@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ClipboardList, ChevronDown, ChevronUp, Download, Calendar, Car, Hash, Clock } from 'lucide-react';
+import { ClipboardList, ChevronDown, ChevronUp, Download, Calendar, Car, Hash, Clock, Share2 } from 'lucide-react';
 import { useJobCarts } from '../../api/hooks/useJobCarts';
 import { useAuthStore } from '../../store/authStore';
 import StatusBadge from '../../components/shared/StatusBadge';
@@ -118,12 +118,25 @@ export default function CustomerJobCartsPage() {
                           <span>Track Progress & Photos</span>
                         </Link>
                         {cart.status === 'complete' && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleDownloadInvoice(cart.id); }}
-                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-br from-[#af101a] to-[#D32F2F] text-white text-xs font-bold uppercase tracking-wider rounded-lg hover:shadow-glow-red transition-all hover:-translate-y-0.5"
-                          >
-                            <Download size={14} /> Download Invoice
-                          </button>
+                          <>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleDownloadInvoice(cart.id); }}
+                              className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-br from-[#af101a] to-[#D32F2F] text-white text-xs font-bold uppercase tracking-wider rounded-lg hover:shadow-glow-red transition-all hover:-translate-y-0.5"
+                            >
+                              <Download size={14} /> Download Invoice
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const shareText = encodeURIComponent(`GK AutoHerb Detailing Invoice for ${cart.registration_no} (${cart.brand} ${cart.model}):\nInvoice #${cart.invoice_number || cart.id} - Total ${formatINR(cart.total_amount)}\nTrack session & service: ${window.location.origin}/job/${cart.id}`);
+                                window.open(`https://api.whatsapp.com/send?text=${shareText}`, '_blank');
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-2.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-lg hover:bg-emerald-100 transition-all active:scale-95"
+                            >
+                              <Share2 size={13} />
+                              <span>Share on WhatsApp</span>
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>

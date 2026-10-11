@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
-import { Clock, Droplets, CheckCircle2, Car, Sparkles, Activity, Shield } from 'lucide-react';
+import { Clock, Droplets, CheckCircle2, Car, Sparkles, Activity, Shield, Share2 } from 'lucide-react';
 import api from '../../api/axiosInstance';
 
 const WASH_PHASE_LABELS = {
@@ -227,10 +227,22 @@ export default function JobTrackingPage() {
         {/* Before & After Photo Gallery */}
         {jobPhotos.length > 0 && (
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 space-y-4">
-            <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
-              <Sparkles size={16} className="text-[#D32F2F]" />
-              <span>Vehicle Before & After Inspection Photos</span>
-            </h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
+                <Sparkles size={16} className="text-[#D32F2F]" />
+                <span>Vehicle Before & After Inspection Photos</span>
+              </h3>
+              <button
+                onClick={() => {
+                  const shareText = encodeURIComponent(`GK AutoHerb Car Studio: Check out my vehicle detailing inspection photos & real-time progress: ${window.location.href}`);
+                  window.open(`https://api.whatsapp.com/send?text=${shareText}`, '_blank');
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-xl hover:bg-emerald-100 transition-all active:scale-95"
+              >
+                <Share2 size={13} />
+                <span>Share Photos</span>
+              </button>
+            </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>

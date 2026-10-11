@@ -250,6 +250,73 @@ exports.packageHistoryReport = async (req, res) => {
       return res.send(Buffer.from(buffer));
     }
 
+    if (format === 'pdf') {
+      const html = `
+      <html>
+      <head>
+        <style>
+          body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #1c1b1b; }
+          .header { border-bottom: 2px solid #D32F2F; padding-bottom: 20px; margin-bottom: 30px; }
+          .title { font-size: 22px; font-weight: bold; color: #D32F2F; margin: 0; }
+          .subtitle { font-size: 13px; color: #5f5e5e; margin-top: 5px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th { background: #f1f1f1; text-align: left; padding: 10px; font-size: 11px; text-transform: uppercase; }
+          td { padding: 9px 10px; border-bottom: 1px solid #e0e0e0; font-size: 12px; }
+          .badge { padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 10px; text-transform: uppercase; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="title">GK AUTO HERB STUDIO</div>
+          <div class="subtitle">CONSOLIDATED CUSTOMER PACKAGE AUDIT REPORT</div>
+          <div class="subtitle">Generated on ${new Date().toLocaleDateString('en-IN')}</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Customer</th>
+              <th>Mobile</th>
+              <th>Package</th>
+              <th>Price Paid</th>
+              <th>Purchase Date</th>
+              <th>Expiry Date</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr>
+                <td><strong>${r.customer_name}</strong></td>
+                <td>${r.customer_mobile || '—'}</td>
+                <td>${r.package_name}</td>
+                <td>₹${parseFloat(r.price_paid || 0).toLocaleString('en-IN')}</td>
+                <td>${new Date(r.created_at).toLocaleDateString('en-IN')}</td>
+                <td>${r.end_date ? new Date(r.end_date).toLocaleDateString('en-IN') : 'N/A'}</td>
+                <td><span style="color: ${r.package_status === 'active' ? '#2e7d32' : '#c62828'}; font-weight: bold;">${r.package_status || 'active'}</span></td>
+              </tr>
+            `).join('')}
+            ${rows.length === 0 ? '<tr><td colspan="7" style="text-align: center; color: #888;">No package records found</td></tr>' : ''}
+          </tbody>
+        </table>
+      </body>
+      </html>`;
+
+      const puppeteer = require('puppeteer');
+      const browser = await puppeteer.launch({
+        headless: 'new',
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      });
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: 'networkidle0' });
+      const pdf = await page.pdf({ format: 'A4', printBackground: true });
+      await browser.close();
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename=Package_History_Report.pdf');
+      return res.send(pdf);
+    }
+
     res.json({ success: true, data: rows });
   } catch (err) {
     console.error('packageHistoryReport error:', err);
@@ -473,3 +540,99 @@ exports.customerPackageHistoryReport = async (req, res) => {
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };
+
+// ─── SERVICE-WISE SALES REPORT (Update 29) ─────────
+exports.serviceWiseReport = async (req, res) => {
+  try {
+    const { from_date, to_date, format = 'json' } = req.query;
+    let query = `
+      SELECT 
+        COALESCE(s.name, js.service_name) as service_name,
+        COALESCE(s.category, 'General') as category,
+        COUNT(js.id) as booking_count,
+        COALESCE(SUM(js.service_price + js.labor_charges), 0) as total_revenue
+      FROM job_services js
+      JOIN job_carts jc ON js.job_cart_id = jc.id
+      LEFT JOIN services s ON js.service_id = s.id
+      WHERE jc.status = 'complete'
+    `;
+    const params = [];
+    if (from_date) {
+      query += ` AND DATE(jc.completed_at) >= ?`;
+      params.push(from_date);
+    }
+    if (to_date) {
+      query += ` AND DATE(jc.completed_at) <= ?`;
+      params.push(to_date);
+    }
+    query += `
+      GROUP BY service_name, category
+      ORDER BY total_revenue DESC
+    `;
+
+    const [rows] = await pool.query(query, params);
+
+    const totalRevenue = rows.reduce((sum, r) => sum + parseFloat(r.total_revenue || 0), 0);
+    const totalBookings = rows.reduce((sum, r) => sum + parseInt(r.booking_count || 0), 0);
+
+    const data = {
+      period: { from: from_date || 'All Time', to: to_date || 'Present' },
+      total_revenue: totalRevenue,
+      total_bookings: totalBookings,
+      services: rows.map(r => ({
+        service_name: r.service_name,
+        category: r.category,
+        booking_count: parseInt(r.booking_count || 0),
+        total_revenue: parseFloat(r.total_revenue || 0),
+        share_percentage: totalRevenue > 0 ? ((parseFloat(r.total_revenue || 0) / totalRevenue) * 100).toFixed(1) : 0
+      }))
+    };
+
+    if (format === 'xlsx') {
+      const ExcelJS = require('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'GK AutoHerb';
+      const sheet = workbook.addWorksheet('Service Revenue');
+
+      sheet.columns = [
+        { header: 'Service Name', key: 'service_name', width: 30 },
+        { header: 'Category', key: 'category', width: 20 },
+        { header: 'Completed Count', key: 'booking_count', width: 18 },
+        { header: 'Total Revenue (₹)', key: 'total_revenue', width: 20 },
+        { header: 'Revenue Share (%)', key: 'share_percentage', width: 18 },
+      ];
+      sheet.getRow(1).font = { bold: true };
+
+      data.services.forEach(s => {
+        sheet.addRow({
+          service_name: s.service_name,
+          category: s.category,
+          booking_count: s.booking_count,
+          total_revenue: s.total_revenue,
+          share_percentage: `${s.share_percentage}%`
+        });
+      });
+
+      sheet.addRow({});
+      const totalRow = sheet.addRow({
+        service_name: 'TOTAL REVENUE',
+        category: '',
+        booking_count: totalBookings,
+        total_revenue: totalRevenue,
+        share_percentage: '100%'
+      });
+      totalRow.font = { bold: true };
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=Service_Wise_Revenue_${from_date || 'all'}_to_${to_date || 'all'}.xlsx`);
+      return res.send(Buffer.from(buffer));
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('serviceWiseReport error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+

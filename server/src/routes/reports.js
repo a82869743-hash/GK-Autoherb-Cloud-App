@@ -9,5 +9,6 @@ router.get('/inventory', auth, role(['admin']), ctrl.inventoryReport);
 router.get('/job-cards', auth, role(['admin']), ctrl.jobCardReport);
 router.get('/welcome-rewards', auth, role(['admin']), ctrl.welcomeRewardsReport);
 router.get('/package-history', auth, role(['admin']), ctrl.packageHistoryReport);
+router.get('/service-wise',    auth, role(['admin']), ctrl.serviceWiseReport);
 
 module.exports = router;

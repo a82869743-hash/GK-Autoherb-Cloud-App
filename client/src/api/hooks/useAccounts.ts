@@ -95,3 +95,21 @@ export const useCreateReturn = () => {
     },
   });
 };
+
+export const downloadGstReport = async (month: number, year: number, format: 'csv' | 'xlsx') => {
+  const res = await api.get('/gst-reports', {
+    params: { month, year, format },
+    responseType: 'blob',
+  });
+  const mimeType = format === 'csv' ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  const blob = new Blob([res.data], { type: mimeType });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `GST_Report_${month}_${year}.${format}`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+};
+

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import api from '../../api/axiosInstance';
 import { IndianRupee, TrendingUp, TrendingDown, Clock, Download, Package, Calendar, Briefcase, RefreshCw, CheckCircle2, ChevronRight, BarChart3, Receipt, FileText, Plus, Trash2 } from 'lucide-react';
-import { useAccountSummary, useTransactions, useExportReport, useAccountKPIs, usePurchaseBills, useCreatePurchaseBill, useGstReport, useReturns, useCreateReturn } from '../../api/hooks/useAccounts';
+import { useAccountSummary, useTransactions, useExportReport, useAccountKPIs, usePurchaseBills, useCreatePurchaseBill, useGstReport, useReturns, useCreateReturn, downloadGstReport } from '../../api/hooks/useAccounts';
 import { useVendors } from '../../api/hooks/useVendors';
 import { useUIStore } from '../../store/uiStore';
 import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
@@ -259,9 +259,18 @@ export default function AccountsPage() {
     }
   };
 
-  const downloadGstCsv = () => {
-    const url = `${api.defaults.baseURL || ''}/api/gst-reports?month=${gstMonth}&year=${gstYear}&format=csv`;
-    window.open(url, '_blank');
+  const [downloadingGst, setDownloadingGst] = useState<'csv' | 'xlsx' | null>(null);
+
+  const handleDownloadGst = async (format: 'csv' | 'xlsx') => {
+    setDownloadingGst(format);
+    try {
+      await downloadGstReport(gstMonth, gstYear, format);
+      toast('success', `GSTR Compliance Report (${format.toUpperCase()}) exported successfully`);
+    } catch (err) {
+      toast('error', 'Failed to export GST report');
+    } finally {
+      setDownloadingGst(null);
+    }
   };
 
   return (
@@ -914,10 +923,18 @@ export default function AccountsPage() {
                 ))}
               </select>
               <button
-                onClick={downloadGstCsv}
-                className="px-3.5 py-1.5 border border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-xs font-bold rounded-xl transition flex items-center gap-1 shadow-sm"
+                onClick={() => handleDownloadGst('csv')}
+                disabled={!!downloadingGst}
+                className="px-3 py-1.5 border border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-xs font-bold rounded-xl transition flex items-center gap-1 shadow-sm disabled:opacity-60 active:scale-95"
               >
-                <Download size={13} /> Export CSV
+                <Download size={13} /> {downloadingGst === 'csv' ? 'Exporting...' : 'Export CSV'}
+              </button>
+              <button
+                onClick={() => handleDownloadGst('xlsx')}
+                disabled={!!downloadingGst}
+                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl transition flex items-center gap-1 shadow-sm disabled:opacity-60 active:scale-95"
+              >
+                <Download size={13} /> {downloadingGst === 'xlsx' ? 'Exporting...' : 'Export Excel'}
               </button>
             </div>
           </div>
