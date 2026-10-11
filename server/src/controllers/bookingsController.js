@@ -746,13 +746,13 @@ exports.approve = async (req, res) => {
 
         // ─── Trigger New Customer Welcome Reward (Update 24) ───
         let welcomeType = 'points';
-        let welcomeValue = 0;
+        let welcomeValue = 500;
 
         const [typeRow] = await conn.query('SELECT value FROM settings WHERE key_name = "welcome_reward_type"');
-        if (typeRow.length) welcomeType = typeRow[0].value;
+        if (typeRow.length && typeRow[0].value) welcomeType = typeRow[0].value;
 
         const [valRow] = await conn.query('SELECT value FROM settings WHERE key_name = "welcome_reward_value"');
-        if (valRow.length) welcomeValue = parseFloat(valRow[0].value) || 0;
+        if (valRow.length && valRow[0].value) welcomeValue = parseFloat(valRow[0].value) || 500;
 
         if (welcomeType === 'points') {
           // Credit points to v2_wallets
