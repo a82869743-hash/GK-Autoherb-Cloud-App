@@ -35,11 +35,15 @@ export const useCreateStaff = () => {
 export const useUpdateStaff = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...body }: { id: number; name?: string; mobile?: string; email?: string; specialisations?: string }) => {
+    mutationFn: async ({ id, ...body }: { id: number; name?: string; mobile?: string; email?: string; specialisations?: string; custom_role_id?: number | null; base_salary?: number | null }) => {
       const res = await api.put(`/staff/${id}`, body);
       return res.data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['staff'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['staff'] });
+      qc.invalidateQueries({ queryKey: ['staff-hr-tasks'] });
+      qc.invalidateQueries({ queryKey: ['staff-hr-payroll'] });
+    },
   });
 };
 

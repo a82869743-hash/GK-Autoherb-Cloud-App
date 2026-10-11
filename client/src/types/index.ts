@@ -278,6 +278,7 @@ export interface StaffPayment {
 export interface StaffMember extends User {
   profile?: StaffProfile;
   specialisations?: string;
+  custom_role_name?: string;
   attendance?: AttendanceRecord[];
   payments?: StaffPayment[];
 }

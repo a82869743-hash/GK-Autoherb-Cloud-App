@@ -232,11 +232,29 @@ exports.login = async (req, res) => {
       return res.status(401).json({ success: false, error: 'Invalid credentials: Password incorrect' });
     }
 
+    // Fetch user permissions
+    let permissions = [];
+    if (user.role === 'admin' || user.role === 'super_admin') {
+      const [allPerms] = await pool.query('SELECT permission_key FROM v2_permissions');
+      permissions = allPerms.map(p => p.permission_key);
+    } else if (user.custom_role_id) {
+      const [rolePerms] = await pool.query(
+        `SELECT p.permission_key FROM v2_role_permissions rp
+         JOIN v2_permissions p ON rp.permission_id = p.id
+         WHERE rp.role_id = ?`,
+        [user.custom_role_id]
+      );
+      permissions = rolePerms.map(p => p.permission_key);
+    }
+
     const userData = {
       id: user.id,
       name: user.name,
       mobile: user.mobile,
       role: user.role,
+      custom_role_id: user.custom_role_id || null,
+      base_salary: user.base_salary || null,
+      permissions,
     };
 
     const token = generateToken(userData);
