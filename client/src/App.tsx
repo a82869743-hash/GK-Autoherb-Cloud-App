@@ -93,6 +93,9 @@ import PackageTrackingPage from './pages/admin/PackageTrackingPage';
 import QuotationsListPage from './pages/admin/QuotationsListPage';
 import QuotationCreatePage from './pages/admin/QuotationCreatePage';
 
+// Coupons & Automation pages
+import CouponsPage from './pages/admin/CouponsPage';
+
 // Phase 5 pages
 import RoleManagementPage from './pages/admin/RoleManagementPage';
 import FeedbackFormPage from './pages/customer/FeedbackFormPage';
@@ -345,6 +348,7 @@ export default function App() {
         <Route path="staff-hr" element={<StaffHRPage />} />
         <Route path="whatsapp" element={<WhatsAppPage />} />
         <Route path="customer-rewards" element={<CustomerRewardsPage />} />
+        <Route path="coupons" element={<CouponsPage />} />
         <Route path="roles" element={<RoleManagementPage />} />
         {/* ─── Quotations Routes ─── */}
         <Route path="quotations" element={<QuotationsListPage />} />

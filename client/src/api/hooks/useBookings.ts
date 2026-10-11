@@ -50,6 +50,8 @@ export const useCreateBooking = () => {
       pay_advance?: boolean | 'full' | 'part' | 'none';
       pickup_type?: string;
       pickup_address_details?: any;
+      coupon_id?: number;
+      coupon_discount?: number;
     }) => {
       const res = await api.post('/bookings', payload);
       return res.data;

@@ -66,35 +66,87 @@ export default function FeedbackPage() {
         />
       </div>
 
-      {/* Rating Distribution */}
-      {stats?.distribution && (
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-[0_4px_24px_rgba(0,0,0,0.03)]">
-          <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
-            <BarChart3 size={18} className="text-[#D32F2F]" />
-            <span>Rating Distribution Breakdown</span>
-          </h3>
-          <div className="space-y-3">
-            {[5, 4, 3, 2, 1].map(r => {
-              const count = stats.distribution.find((d: any) => d.rating === r)?.count || 0;
-              const pct = stats.total_reviews > 0 ? (count / stats.total_reviews) * 100 : 0;
-              return (
-                <div key={r} className="flex items-center gap-3">
-                  <div className="flex items-center gap-1 w-16 text-xs font-bold text-slate-700">
-                    {r} <Star size={12} className="text-amber-400 fill-amber-400" />
-                  </div>
-                  <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      style={{ width: `${pct}%` }}
-                      className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-500"
-                    />
-                  </div>
-                  <span className="text-xs font-bold text-slate-400 w-12 text-right">{count} ({Math.round(pct)}%)</span>
-                </div>
-              );
-            })}
+      {/* Google Review Funnel & Rating Distribution Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Google Review Funnel */}
+        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-[0_4px_24px_rgba(0,0,0,0.03)] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Sparkles size={18} className="text-amber-500" />
+                <span>Google Review Conversion Funnel</span>
+              </h3>
+              <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                Threshold: ≥{stats?.settings?.feedback_google_threshold || 4} ★
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mb-5 leading-relaxed">
+              Automated review invitations sent via WhatsApp post-service delivery, filtered to route 4★ & 5★ ratings to your public Google Business profile.
+            </p>
+
+            <div className="grid grid-cols-3 gap-3 text-center mb-5">
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Invites Sent</p>
+                <p className="text-lg font-black text-slate-900 mt-1">{stats?.funnel?.sent || 0}</p>
+              </div>
+              <div className="p-3 bg-indigo-50 rounded-2xl border border-indigo-100">
+                <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">Responded</p>
+                <p className="text-lg font-black text-indigo-700 mt-1">{stats?.funnel?.responded || 0}</p>
+                <p className="text-[9px] text-indigo-400 font-bold mt-0.5">{stats?.funnel?.conversion_rate || 0}% Response</p>
+              </div>
+              <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-100">
+                <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Pushed to Google</p>
+                <p className="text-lg font-black text-emerald-700 mt-1">{stats?.funnel?.pushed_to_google || 0}</p>
+                <p className="text-[9px] text-emerald-500 font-bold mt-0.5">High Satisfaction</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200/80 flex items-center justify-between text-xs">
+            <span className="text-slate-600 font-medium truncate max-w-[240px]">
+              Destination: {stats?.settings?.google_review_url ? 'Google Business Place Profile' : 'Default Studio Link'}
+            </span>
+            <a
+              href={stats?.settings?.google_review_url || 'https://search.google.com/local/writereview?placeid=ChIJn8N3wS1wXzkR8W6_m4gq5uU'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold text-[#D32F2F] hover:underline shrink-0"
+            >
+              Test Link ↗
+            </a>
           </div>
         </div>
-      )}
+
+        {/* Rating Distribution */}
+        {stats?.distribution && (
+          <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-[0_4px_24px_rgba(0,0,0,0.03)]">
+            <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <BarChart3 size={18} className="text-[#D32F2F]" />
+              <span>Rating Distribution Breakdown</span>
+            </h3>
+            <div className="space-y-3">
+              {[5, 4, 3, 2, 1].map(r => {
+                const count = stats.distribution.find((d: any) => d.rating === r)?.count || 0;
+                const pct = stats.total_reviews > 0 ? (count / stats.total_reviews) * 100 : 0;
+                return (
+                  <div key={r} className="flex items-center gap-3">
+                    <div className="flex items-center gap-1 w-16 text-xs font-bold text-slate-700">
+                      {r} <Star size={12} className="text-amber-400 fill-amber-400" />
+                    </div>
+                    <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        style={{ width: `${pct}%` }}
+                        className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-500"
+                      />
+                    </div>
+                    <span className="text-xs font-bold text-slate-400 w-12 text-right">{count} ({Math.round(pct)}%)</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Reviews List */}
       <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-[0_4px_24px_rgba(0,0,0,0.03)]">

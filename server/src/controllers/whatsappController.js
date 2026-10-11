@@ -174,3 +174,94 @@ exports.stats = async (req, res, next) => {
 
 // Export helper for use in other controllers
 exports._sendWhatsAppMessage = sendWhatsAppMessage;
+
+// ─── TEMPLATES MANAGEMENT (v2_whatsapp_templates) ───────
+exports.listTemplates = async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM v2_whatsapp_templates ORDER BY id ASC');
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('List templates error:', err);
+    res.status(500).json({ success: false, error: 'Failed to fetch templates' });
+  }
+};
+
+exports.updateTemplate = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { message_body, is_active } = req.body;
+
+    const [existing] = await pool.query('SELECT id FROM v2_whatsapp_templates WHERE id = ?', [id]);
+    if (!existing.length) return res.status(404).json({ success: false, error: 'Template not found' });
+
+    const updates = []; const params = [];
+    if (message_body !== undefined) { updates.push('message_body = ?'); params.push(message_body); }
+    if (is_active !== undefined) { updates.push('is_active = ?'); params.push(is_active ? 1 : 0); }
+
+    if (!updates.length) return res.status(400).json({ success: false, error: 'No fields provided' });
+    params.push(id);
+
+    await pool.query(`UPDATE v2_whatsapp_templates SET ${updates.join(', ')} WHERE id = ?`, params);
+    res.json({ success: true, message: 'Template updated successfully' });
+  } catch (err) {
+    console.error('Update template error:', err);
+    res.status(500).json({ success: false, error: 'Failed to update template' });
+  }
+};
+
+exports.testSendTemplate = async (req, res) => {
+  try {
+    const { phone, template_id, variables = {} } = req.body;
+    if (!phone || !template_id) {
+      return res.status(400).json({ success: false, error: 'Phone and template_id are required' });
+    }
+
+    const [templates] = await pool.query('SELECT * FROM v2_whatsapp_templates WHERE id = ?', [template_id]);
+    if (!templates.length) return res.status(404).json({ success: false, error: 'Template not found' });
+
+    const tmpl = templates[0];
+    let msgBody = tmpl.message_body;
+    for (const [key, val] of Object.entries(variables)) {
+      msgBody = msgBody.replace(new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g'), String(val));
+    }
+
+    const result = await sendWhatsAppMessage(phone, null, [], msgBody);
+    res.json({ success: true, message: 'Test message dispatched', data: result, rendered_message: msgBody });
+  } catch (err) {
+    console.error('Test send template error:', err);
+    res.status(500).json({ success: false, error: 'Failed to send test message' });
+  }
+};
+
+// ─── RETRY NOTIFICATION ─────────────────────────────────
+exports.retryNotification = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [rows] = await pool.query('SELECT * FROM v2_notification_logs WHERE id = ?', [id]);
+    if (!rows.length) return res.status(404).json({ success: false, error: 'Notification log not found' });
+
+    const log = rows[0];
+    const messagingService = require('../services/messagingService');
+
+    let result = { success: false };
+    if (log.channel === 'sms' || log.channel === 'both') {
+      result = await messagingService.sendSMS(log.mobile, process.env.MSG91_PROMO_TEMPLATE_ID || 'PROMO123', null, {
+        content: log.message_body
+      });
+    } else {
+      result = await sendWhatsAppMessage(log.mobile, null, [], log.message_body);
+    }
+
+    const newStatus = result.success ? 'sent' : 'failed';
+    await pool.query(
+      `UPDATE v2_notification_logs SET status = ?, attempts = attempts + 1, last_attempt_at = NOW(), response_data = ? WHERE id = ?`,
+      [newStatus, JSON.stringify(result), id]
+    );
+
+    res.json({ success: true, message: `Notification retry ${newStatus}`, data: result });
+  } catch (err) {
+    console.error('Retry notification error:', err);
+    res.status(500).json({ success: false, error: 'Retry attempt failed' });
+  }
+};
+

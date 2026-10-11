@@ -39,3 +39,63 @@ export const useSendWhatsApp = () => {
     },
   });
 };
+
+export const useWhatsAppTemplates = () => {
+  return useQuery({
+    queryKey: ['whatsapp-templates'],
+    queryFn: async () => {
+      const { data } = await api.get('/whatsapp/templates');
+      return data.data || [];
+    },
+  });
+};
+
+export const useUpdateWhatsAppTemplate = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: { id: number; body?: string; is_active?: boolean }) => {
+      const { data } = await api.put(`/whatsapp/templates/${id}`, body);
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('Template updated successfully');
+      qc.invalidateQueries({ queryKey: ['whatsapp-templates'] });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Failed to update template');
+    },
+  });
+};
+
+export const useTestWhatsAppTemplate = () => {
+  return useMutation({
+    mutationFn: async ({ id, recipient_number, variables }: { id: number; recipient_number: string; variables?: Record<string, string> }) => {
+      const { data } = await api.post(`/whatsapp/templates/${id}/test`, { recipient_number, variables });
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('Test message dispatched successfully');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Failed to send test message');
+    },
+  });
+};
+
+export const useRetryWhatsAppNotification = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const { data } = await api.post(`/whatsapp/notifications/${id}/retry`);
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('Notification retry queued');
+      qc.invalidateQueries({ queryKey: ['whatsapp-messages'] });
+      qc.invalidateQueries({ queryKey: ['whatsapp-stats'] });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Failed to retry notification');
+    },
+  });
+};

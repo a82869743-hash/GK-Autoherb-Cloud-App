@@ -531,6 +531,16 @@ exports.complete = async (req, res) => {
     } else if (cart[0].discount_type === 'fixed') {
       discountAmt = parseFloat(cart[0].discount_value || 0);
     }
+    const couponDiscount = parseFloat(cart[0].coupon_discount || 0);
+    discountAmt += couponDiscount;
+
+    if (cart[0].coupon_id && couponDiscount > 0) {
+      await conn.query(
+        `INSERT INTO coupon_redemptions (coupon_id, customer_id, job_cart_id, discount_amount)
+         VALUES (?, ?, ?, ?)`,
+        [cart[0].coupon_id, customerId, id, couponDiscount]
+      );
+    }
     const pickupCharge = parseFloat(cart[0].pickup_charge || 0);
     grandTotal = Math.max(0, grandTotal - discountAmt + pickupCharge);
 

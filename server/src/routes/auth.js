@@ -6,9 +6,16 @@ const authMiddleware = require('../middleware/auth');
 // ─── Forgot Password Controller (OTP-based reset) ──────────
 const forgotPasswordController = require('../controllers/forgotPasswordController');
 
+// ─── SMS OTP Auth Controller (Login & Auto-Register) ─────────
+const otpAuthController = require('../controllers/otpAuthController');
+
 // Public routes
 router.post('/register', authController.register);
 router.post('/login', authController.login);
+
+// Customer SMS OTP Login / Register routes
+router.post('/otp/send', otpAuthController.sendOtp);
+router.post('/otp/verify', otpAuthController.verifyOtp);
 
 // Forgot Password routes (public — no auth required)
 router.post('/forgot-password', forgotPasswordController.forgotPassword);

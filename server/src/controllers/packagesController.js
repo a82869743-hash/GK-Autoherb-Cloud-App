@@ -383,21 +383,35 @@ exports.delete = async (req, res) => {
 };
 
 // ─── CUSTOMER: SUBMIT PACKAGE REQUEST ───────
+// ─── CUSTOMER: SUBMIT PACKAGE REQUEST ───────
 exports.createRequest = async (req, res) => {
   try {
     const customerId = req.user.id;
-    const { vehicle_id, package_id, price, pricing_type = 'basic', car_type } = req.body;
+    const { vehicle_id, package_id, price, pricing_type = 'basic', car_type, coupon_id, discount_amount } = req.body;
 
     if (!vehicle_id || !package_id || price === undefined) {
       return res.status(400).json({ success: false, error: 'vehicle_id, package_id, and price are required' });
     }
 
+    const discount = parseFloat(discount_amount || 0);
+    const finalPrice = Math.max(0, parseFloat(price) - discount);
+
     const [result] = await pool.query(
       "INSERT INTO package_requests (customer_id, vehicle_id, package_id, price, pricing_type, car_type, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')",
-      [customerId, vehicle_id, package_id, price, pricing_type, car_type || null]
+      [customerId, vehicle_id, package_id, finalPrice, pricing_type, car_type || null]
     );
 
-    res.status(201).json({ success: true, requestId: result.insertId, message: 'Package request submitted to admin for approval' });
+    const requestId = result.insertId;
+
+    if (coupon_id && discount > 0) {
+      await pool.query(
+        `INSERT INTO coupon_redemptions (coupon_id, customer_id, package_request_id, discount_amount)
+         VALUES (?, ?, ?, ?)`,
+        [coupon_id, customerId, requestId, discount]
+      ).catch(e => console.warn('Coupon redemption log error:', e.message));
+    }
+
+    res.status(201).json({ success: true, requestId, message: 'Package request submitted to admin for approval' });
   } catch (err) {
     console.error('Package request create error:', err);
     res.status(500).json({ success: false, error: 'Server error' });

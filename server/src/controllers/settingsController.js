@@ -82,3 +82,27 @@ exports.updateAll = async (req, res) => {
     conn.release();
   }
 };
+
+// ─── SERVICE REMINDERS MANUAL TRIGGER & PREVIEW ────
+exports.previewReminders = async (req, res) => {
+  try {
+    const { runServiceReminders } = require('../services/cronService');
+    const result = await runServiceReminders({ isPreview: true });
+    res.json(result);
+  } catch (err) {
+    console.error('Preview reminders error:', err);
+    res.status(500).json({ success: false, error: 'Failed to preview reminders' });
+  }
+};
+
+exports.sendRemindersNow = async (req, res) => {
+  try {
+    const { runServiceReminders } = require('../services/cronService');
+    const result = await runServiceReminders({ isManual: true, io: req.app.get('io') });
+    res.json(result);
+  } catch (err) {
+    console.error('Send reminders now error:', err);
+    res.status(500).json({ success: false, error: 'Failed to dispatch reminders' });
+  }
+};
+

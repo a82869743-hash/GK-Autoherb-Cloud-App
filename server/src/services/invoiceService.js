@@ -184,6 +184,7 @@ async function generateInvoicePDF(jobCartId) {
     } else if (cart.discount_type === 'fixed') {
       discountAmt = parseFloat(cart.discount_value || 0);
     }
+    discountAmt += parseFloat(cart.coupon_discount || 0);
     const finalTotal = Math.max(0, grandTotal - discountAmt + parseFloat(cart.pickup_charge || 0));
     const isJobPaid = cart.payment_status === 'paid';
     const advancePaid = parseFloat(cart.advance_paid) || 0;

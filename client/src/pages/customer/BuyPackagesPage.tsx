@@ -6,6 +6,7 @@ import { PackageOpen, Car, CheckCircle, Loader2, ArrowRight, ShieldCheck, X, Ale
 import QrPaymentModal from '../../components/shared/QrPaymentModal';
 import PaymentSandboxModal from '../../components/shared/PaymentSandboxModal';
 import ErrorState from '../../components/shared/ErrorState';
+import CouponInput from '../../components/shared/CouponInput';
 
 interface Vehicle {
   id: number;
@@ -165,6 +166,7 @@ export default function BuyPackagesPage() {
   const [pricingType, setPricingType] = useState<'basic' | 'premium'>('basic');
   // Confirmation modal state
   const [confirmPkg, setConfirmPkg] = useState<Pkg | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<{ coupon_id: number; code: string; discount_amount: number; title?: string } | null>(null);
   const [myRequests, setMyRequests] = useState<any[]>([]);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
@@ -306,6 +308,7 @@ export default function BuyPackagesPage() {
       addToast('error', 'Please select a vehicle first.');
       return;
     }
+    setAppliedCoupon(null);
     setConfirmPkg(pkg);
   };
 
@@ -315,12 +318,15 @@ export default function BuyPackagesPage() {
     setSubmittingId(confirmPkg.id);
     try {
       const price = getPrice(confirmPkg);
+      const discount = appliedCoupon ? appliedCoupon.discount_amount : 0;
       const res = await api.post('/packages/requests', {
         vehicle_id: selectedVehicle.id,
         package_id: confirmPkg.id,
         price,
         pricing_type: pricingType,
-        car_type: filterCarType
+        car_type: filterCarType,
+        coupon_id: appliedCoupon ? appliedCoupon.coupon_id : undefined,
+        discount_amount: discount > 0 ? discount : undefined,
       });
       if (res.data.success) {
         addToast('success', 'Package request submitted! Admin will review and approve it shortly.');
@@ -330,6 +336,7 @@ export default function BuyPackagesPage() {
     } finally {
       setSubmittingId(null);
       setConfirmPkg(null);
+      setAppliedCoupon(null);
     }
   };
 
@@ -350,6 +357,8 @@ export default function BuyPackagesPage() {
     setSubmittingOnline(true);
     try {
       const price = getPrice(confirmPkg);
+      const discount = appliedCoupon ? appliedCoupon.discount_amount : 0;
+      const finalAmount = Math.max(0, price - discount);
 
       const sdkLoaded = await loadRazorpayScript();
       if (!sdkLoaded) {
@@ -364,7 +373,9 @@ export default function BuyPackagesPage() {
         package_id: confirmPkg.id,
         price,
         pricing_type: pricingType,
-        car_type: filterCarType
+        car_type: filterCarType,
+        coupon_id: appliedCoupon ? appliedCoupon.coupon_id : undefined,
+        discount_amount: discount > 0 ? discount : undefined,
       });
 
       if (!resRequest.data.success) {
@@ -373,9 +384,9 @@ export default function BuyPackagesPage() {
 
       const requestId = resRequest.data.requestId;
 
-      // 2. Create Razorpay order on backend
+      // 2. Create Razorpay order on backend with discounted finalAmount
       const resOrder = await api.post('/payments/razorpay/order', {
-        amount: price,
+        amount: finalAmount,
         package_id: confirmPkg.id,
         package_request_id: requestId
       });
@@ -458,6 +469,8 @@ export default function BuyPackagesPage() {
     setSubmittingOnline(true);
     try {
       const price = getPrice(confirmPkg);
+      const discount = appliedCoupon ? appliedCoupon.discount_amount : 0;
+      const finalAmount = Math.max(0, price - discount);
 
       // 1. Submit the package request first to get requestId
       const resRequest = await api.post('/packages/requests', {
@@ -465,7 +478,9 @@ export default function BuyPackagesPage() {
         package_id: confirmPkg.id,
         price,
         pricing_type: pricingType,
-        car_type: filterCarType
+        car_type: filterCarType,
+        coupon_id: appliedCoupon ? appliedCoupon.coupon_id : undefined,
+        discount_amount: discount > 0 ? discount : undefined,
       });
 
       if (!resRequest.data.success) {
@@ -473,10 +488,11 @@ export default function BuyPackagesPage() {
       }
 
       const requestId = resRequest.data.requestId;
-      setQrAmount(price);
+      setQrAmount(finalAmount);
       setActivePackageRequestId(requestId);
       setShowQrModal(true);
       setConfirmPkg(null);
+      setAppliedCoupon(null);
     } catch (err: any) {
       console.error(err);
       addToast('error', err.message || 'An error occurred during payment checkout.');
@@ -821,11 +837,37 @@ export default function BuyPackagesPage() {
                   <span className="text-gray-500">Reg No</span>
                   <span className="font-medium text-gray-700">{selectedVehicle.registration_no || '—'}</span>
                 </div>
-                <div className="border-t border-gray-200 pt-3 flex justify-between">
-                  <span className="text-gray-500 text-sm">Price</span>
-                  <span className="text-xl font-extrabold text-red-600">
-                    ₹{getPrice(confirmPkg).toLocaleString('en-IN')}
-                  </span>
+                <div className="border-t border-gray-200 pt-3 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Package Price</span>
+                    <span className="font-bold text-gray-800">
+                      ₹{getPrice(confirmPkg).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+
+                  {appliedCoupon && appliedCoupon.discount_amount > 0 && (
+                    <div className="flex justify-between text-sm text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg">
+                      <span className="font-semibold">Coupon Discount ({appliedCoupon.code})</span>
+                      <span className="font-extrabold">-₹{appliedCoupon.discount_amount.toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+
+                  <div className="pt-1">
+                    <CouponInput
+                      orderAmount={getPrice(confirmPkg)}
+                      packageIds={[confirmPkg.id]}
+                      appliedCoupon={appliedCoupon}
+                      onApply={(c) => setAppliedCoupon(c)}
+                      onRemove={() => setAppliedCoupon(null)}
+                    />
+                  </div>
+
+                  <div className="flex justify-between pt-2 border-t border-gray-200">
+                    <span className="text-gray-900 font-bold text-sm">Total Payable</span>
+                    <span className="text-xl font-extrabold text-[#D32F2F]">
+                      ₹{Math.max(0, getPrice(confirmPkg) - (appliedCoupon?.discount_amount || 0)).toLocaleString('en-IN')}
+                    </span>
+                  </div>
                 </div>
               </div>
 

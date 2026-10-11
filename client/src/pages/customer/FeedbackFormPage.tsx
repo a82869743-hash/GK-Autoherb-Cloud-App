@@ -20,6 +20,7 @@ export default function FeedbackFormPage() {
   });
   const [comments, setComments] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [submitResult, setSubmitResult] = useState<{ is_google_eligible?: boolean; google_review_url?: string | null } | null>(null);
 
   const handleRatingChange = (key: keyof typeof ratings, val: number) => {
     setRatings((prev) => ({ ...prev, [key]: val }));
@@ -39,7 +40,8 @@ export default function FeedbackFormPage() {
         comments,
       },
       {
-        onSuccess: () => {
+        onSuccess: (data: any) => {
+          setSubmitResult(data);
           setSubmitted(true);
           toast.success('Thank you for your valuable feedback!');
         },
@@ -111,28 +113,83 @@ export default function FeedbackFormPage() {
   }
 
   if (submitted) {
+    const isGoogleEligible = submitResult?.is_google_eligible;
+    const googleUrl = submitResult?.google_review_url || 'https://search.google.com/local/writereview?placeid=ChIJn8N3wS1wXzkR8W6_m4gq5uU';
+
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <AnimatedCard className="bg-white p-8 rounded-2xl max-w-md w-full border border-gray-100 text-center shadow-sm">
-          <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CheckCircle size={36} className="text-emerald-500 animate-bounce" />
-          </div>
-          <h3 className="text-xl font-bold text-[#1c1b1b] flex items-center justify-center gap-1.5">
-            Thank You! <Sparkles size={18} className="text-amber-500" />
-          </h3>
-          <p className="text-sm text-gray-500 mt-2">
-            Your review has been saved. We constantly strive to improve our services based on your valuable inputs.
-          </p>
-          <div className="mt-6 border-t border-gray-100 pt-4 text-xs text-gray-400">
-            Invoice: <span className="font-semibold text-gray-600">{context.invoice_number}</span>
-          </div>
-          <RippleButton
-            variant="primary"
-            onClick={() => navigate('/')}
-            className="mt-6 w-full bg-[#1c1b1b] hover:bg-black text-white rounded-xl"
-          >
-            Done
-          </RippleButton>
+        <AnimatedCard className="bg-white p-8 rounded-3xl max-w-md w-full border border-gray-100 text-center shadow-lg">
+          {isGoogleEligible ? (
+            <>
+              <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-amber-200">
+                <Star size={36} className="text-amber-500 fill-amber-400 animate-pulse" />
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                Studio Quality Score: {ratings.overall_rating} / 5 ★
+              </span>
+              <h3 className="text-xl font-black text-[#1c1b1b] mt-3 flex items-center justify-center gap-1.5">
+                Thank You, {context.customer_name}! <Sparkles size={18} className="text-amber-500" />
+              </h3>
+              <p className="text-xs text-gray-600 mt-2 leading-relaxed">
+                We're thrilled you had a 5-star experience! Reviews from car enthusiasts like you help our local studio in Vadodara grow.
+              </p>
+              
+              <div className="mt-5 p-4 rounded-2xl bg-gradient-to-br from-amber-50/60 to-orange-50/40 border border-amber-200/80 text-left space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center text-xs font-black">
+                    G
+                  </div>
+                  <span className="text-xs font-bold text-gray-900">Share on Google Reviews</span>
+                </div>
+                <p className="text-[11px] text-gray-500">
+                  Takes less than 30 seconds. Your review means the world to our detailing artisans!
+                </p>
+                <a
+                  href={googleUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full mt-2 py-3 px-4 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-700 hover:to-amber-700 text-white rounded-xl font-black text-xs shadow-md shadow-red-500/20 transition-all flex items-center justify-center gap-2 group cursor-pointer"
+                >
+                  <Star size={14} className="fill-white" />
+                  <span>Post Review on Google</span>
+                  <span className="text-amber-200 group-hover:translate-x-0.5 transition-transform">→</span>
+                </a>
+              </div>
+
+              <div className="mt-5 border-t border-gray-100 pt-3 text-[11px] text-gray-400">
+                Invoice: <span className="font-semibold text-gray-600">{context.invoice_number}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/')}
+                className="mt-3 text-xs font-bold text-gray-500 hover:text-gray-900 transition-colors"
+              >
+                Done / Back to Home
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-100">
+                <CheckCircle size={36} className="text-red-500" />
+              </div>
+              <h3 className="text-xl font-black text-[#1c1b1b] flex items-center justify-center gap-1.5">
+                We Hear You Loud & Clear
+              </h3>
+              <p className="text-xs text-gray-600 mt-2 leading-relaxed">
+                Thank you for your candid feedback. We are truly sorry we didn't meet your expectations today. Our studio manager has been personally notified and will review your comments to make this right.
+              </p>
+              <div className="mt-5 border-t border-gray-100 pt-3 text-[11px] text-gray-400">
+                Invoice: <span className="font-semibold text-gray-600">{context.invoice_number}</span>
+              </div>
+              <RippleButton
+                variant="primary"
+                onClick={() => navigate('/')}
+                className="mt-4 w-full bg-[#1c1b1b] hover:bg-black text-white rounded-xl text-xs font-bold py-2.5"
+              >
+                Done / Return Home
+              </RippleButton>
+            </>
+          )}
         </AnimatedCard>
       </div>
     );

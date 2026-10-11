@@ -534,6 +534,19 @@ exports.create = async (req, res) => {
       }
     }
 
+    // 8b. Record Coupon Redemption if coupon was applied
+    if (req.body.coupon_id && Number(req.body.coupon_discount) > 0) {
+      await conn.query(
+        'UPDATE bookings SET coupon_id = ?, coupon_discount = ? WHERE id = ?',
+        [req.body.coupon_id, Number(req.body.coupon_discount), bookingId]
+      );
+      await conn.query(
+        `INSERT INTO coupon_redemptions (coupon_id, customer_id, booking_id, discount_amount)
+         VALUES (?, ?, ?, ?)`,
+        [req.body.coupon_id, customerId, bookingId, Number(req.body.coupon_discount)]
+      );
+    }
+
     await conn.commit();
 
     // 9. Send notifications only if NOT pending_payment

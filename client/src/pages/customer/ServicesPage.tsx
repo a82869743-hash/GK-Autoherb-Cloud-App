@@ -1,17 +1,30 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Sparkles, CreditCard, Droplets, ArrowRight, Shield, Search, ArrowUpDown, X } from 'lucide-react';
-import { useServices } from '../../api/hooks/useServices';
+import { Sparkles, CreditCard, Droplets, ArrowRight, Shield, Search, ArrowUpDown, X, Play } from 'lucide-react';
+import { useServices, useCategories } from '../../api/hooks/useServices';
 import { useLoyalty } from '../../api/hooks/useLoyalty';
 import Button from '../../components/ui/Button';
+import Modal from '../../components/ui/Modal';
 import { SkeletonCard } from '../../components/ui/SkeletonLoader';
 import ErrorState from '../../components/shared/ErrorState';
 import { formatINR } from '../../utils/formatters';
 import ServiceDetailsModal from '../../components/shared/ServiceDetailsModal';
 
-export type ServiceCategoryKey = 'all' | 'general' | 'washing' | 'coating_ppf';
+export function getServiceImage(name: string): string {
+  const n = (name || '').toLowerCase();
+  if (n.includes('ceramic') || n.includes('coating')) return '/services/ceramic_coating.jpg';
+  if (n.includes('ppf') || n.includes('paint protection') || n.includes('film')) return '/services/ppf_protection.jpg';
+  if (n.includes('interior') || n.includes('deep clean') || n.includes('upholstery') || n.includes('seat')) return '/services/interior_detailing.jpg';
+  if (n.includes('polish') || n.includes('compound') || n.includes('wax') || n.includes('teflon') || n.includes('rubbing')) return '/services/paint_polish.jpg';
+  if (n.includes('exterior body') || n.includes('body wash')) return '/services/exterior_body.jpg';
+  if (n.includes('wash') || n.includes('foam') || n.includes('clean')) return '/services/car_wash.jpg';
+  if (n.includes('detailing') || n.includes('spa') || n.includes('premium')) return '/services/detailing_spa.jpg';
+  return '/services/wash_clean.jpg';
+}
 
-export const SERVICE_CATEGORIES: { key: ServiceCategoryKey; label: string }[] = [
+export type ServiceCategoryKey = string;
+
+export const SERVICE_CATEGORIES: { key: string; label: string }[] = [
   { key: 'all', label: 'All Services' },
   { key: 'general', label: 'General Services' },
   { key: 'washing', label: 'Washing Services' },
@@ -81,16 +94,25 @@ function sortServicesByPriority(services: any[]): any[] {
 export default function CustomerServicesPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const urlCategory = searchParams.get('category') as ServiceCategoryKey;
-  const initialCategory: ServiceCategoryKey = (urlCategory && ['all', 'general', 'washing', 'coating_ppf'].includes(urlCategory)) ? urlCategory : 'all';
-  const [categoryFilter, setCategoryFilter] = useState<ServiceCategoryKey>(initialCategory);
+  const urlCategory = (searchParams.get('category') || searchParams.get('cat') || 'all') as string;
+  const [categoryFilter, setCategoryFilter] = useState<string>(urlCategory);
+
+  const { data: dbCategories = [] } = useCategories();
+
+  const activeCategories = [
+    { key: 'all', label: 'All Services' },
+    ...(dbCategories.length > 0
+      ? dbCategories.map((c: any) => ({ key: String(c.id), label: c.name, name: c.name }))
+      : SERVICE_CATEGORIES.slice(1))
+  ];
 
   useEffect(() => {
-    const cat = searchParams.get('category') as ServiceCategoryKey;
-    if (cat && ['all', 'general', 'washing', 'coating_ppf'].includes(cat)) {
+    const cat = (searchParams.get('category') || searchParams.get('cat')) as string;
+    if (cat) {
       setCategoryFilter(cat);
     }
   }, [searchParams]);
+
   const [filter, setFilter] = useState<Filter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('priority');
@@ -99,18 +121,26 @@ export default function CustomerServicesPage() {
   const { data: loyalty } = useLoyalty('mine');
   
   const [selectedDetailsSvc, setSelectedDetailsSvc] = useState<any>(null);
+  const [activeVideoModal, setActiveVideoModal] = useState<{ url: string; title: string } | null>(null);
 
   const rawServices = svcData?.data || [];
 
   // Filter services by search term and category
   const filteredServices = rawServices.filter((svc: any) => {
-    if (!matchesServiceCategory(svc, categoryFilter)) return false;
+    if (categoryFilter !== 'all') {
+      const matchDbCategory = svc.category_id && String(svc.category_id) === String(categoryFilter);
+      const matchDbCatName = activeCategories.find((c: any) => c.key === categoryFilter)?.label?.toLowerCase();
+      const matchByName = matchDbCatName && (svc.category_name || '').toLowerCase() === matchDbCatName;
+      const matchHardcoded = matchesServiceCategory(svc, categoryFilter as any);
+      if (!matchDbCategory && !matchByName && !matchHardcoded) return false;
+    }
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase().trim();
     return (
       svc.name?.toLowerCase().includes(q) ||
       svc.description?.toLowerCase().includes(q) ||
-      svc.category?.toLowerCase().includes(q)
+      svc.category?.toLowerCase().includes(q) ||
+      svc.category_name?.toLowerCase().includes(q)
     );
   });
 
@@ -219,16 +249,16 @@ export default function CustomerServicesPage() {
           </div>
         </div>
 
-        {/* ── 4 Service Category Filter Buttons ── */}
+        {/* ── Dynamic Service Category Filter Buttons ── */}
         <div className="flex items-center gap-2 overflow-x-auto pt-2 border-t border-gray-100 no-scrollbar">
-          {SERVICE_CATEGORIES.map((cat) => {
+          {activeCategories.map((cat: any) => {
             const isSelected = categoryFilter === cat.key;
             return (
               <button
                 key={cat.key}
                 onClick={() => {
                   setCategoryFilter(cat.key);
-                  setSearchParams(cat.key === 'all' ? {} : { category: cat.key });
+                  setSearchParams(cat.key === 'all' ? {} : { cat: cat.key, category: cat.key });
                 }}
                 className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 cursor-pointer ${
                   isSelected
@@ -302,60 +332,103 @@ export default function CustomerServicesPage() {
                   <div
                     key={svc.id}
                     onClick={() => setSelectedDetailsSvc(svc)}
-                    className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 card-premium group cursor-pointer hover:border-red-200 transition-all opacity-0 animate-fade-in-up"
+                    className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100 card-premium group cursor-pointer hover:border-red-200 transition-all opacity-0 animate-fade-in-up flex flex-col justify-between"
                     style={{ animationDelay: `${idx * 0.05}s`, animationFillMode: 'forwards' }}
                   >
-                    <div className="flex items-start justify-between mb-2">
-                      <h3 className="font-bold text-[#1c1b1b] text-base group-hover:text-[#D32F2F] transition-colors">{svc.name}</h3>
-                      <span className="text-[10px] font-black text-red-600 bg-red-50 px-2 py-0.5 rounded-md">View Details ℹ️</span>
-                    </div>
-                    {svc.description && <p className="text-xs text-[#5f5e5e] mt-1 line-clamp-2 leading-relaxed">{svc.description}</p>}
-
-                    <div className="mt-4 pt-4 border-t border-gray-100">
-                      {filter === 'all' ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1.5 text-center">
-                          <div className="bg-[#faf7f5] rounded-lg py-2">
-                            <p className="text-[8px] font-bold uppercase text-[#5f5e5e]">Hatch</p>
-                            <p className="text-xs font-extrabold text-[#1c1b1b]">{renderPrice(svc.price_hatchback)}</p>
-                          </div>
-                          <div className="bg-[#faf7f5] rounded-lg py-2">
-                            <p className="text-[8px] font-bold uppercase text-[#5f5e5e]">Med Hatch</p>
-                            <p className="text-xs font-extrabold text-[#1c1b1b]">{renderPrice(svc.price_medium_hatchback)}</p>
-                          </div>
-                          <div className="bg-[#faf7f5] rounded-lg py-2">
-                            <p className="text-[8px] font-bold uppercase text-[#5f5e5e]">Sedan</p>
-                            <p className="text-xs font-extrabold text-[#1c1b1b]">{renderPrice(svc.price_sedan)}</p>
-                          </div>
-                          <div className="bg-[#faf7f5] rounded-lg py-2">
-                            <p className="text-[8px] font-bold uppercase text-[#5f5e5e]">Prem Sedan</p>
-                            <p className="text-xs font-extrabold text-[#1c1b1b]">{renderPrice(svc.price_premium_sedan)}</p>
-                          </div>
-                          <div className="bg-[#faf7f5] rounded-lg py-2">
-                            <p className="text-[8px] font-bold uppercase text-[#5f5e5e]">SUV</p>
-                            <p className="text-xs font-extrabold text-[#1c1b1b]">{renderPrice(svc.price_suv)}</p>
-                          </div>
+                    <div>
+                      {/* 4:3 Aspect Ratio Card Media */}
+                      <div className="aspect-[4/3] w-full relative rounded-xl overflow-hidden bg-slate-900 mb-3.5 shadow-xs">
+                        <img
+                          src={svc.image_url || getServiceImage(svc.name)}
+                          alt={svc.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = getServiceImage(svc.name);
+                          }}
+                        />
+                        {/* Category badge */}
+                        <div className="absolute top-2.5 left-2.5 z-10">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-black/70 text-white backdrop-blur-md">
+                            {svc.category_name || (svc.name && svc.name.toLowerCase().includes('wash') ? 'Washing' : 'Detailing')}
+                          </span>
                         </div>
-                      ) : (
-                        <p className="text-lg font-black text-[#D32F2F]">{renderPrice(svc[getPriceKey(filter)!])}</p>
+                        {/* Video Play Button if video_url is available */}
+                        {svc.video_url && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveVideoModal({ url: svc.video_url, title: svc.name });
+                            }}
+                            className="absolute bottom-2.5 right-2.5 z-10 px-2.5 py-1 rounded-full bg-red-600/90 hover:bg-red-600 text-white text-[10px] font-bold flex items-center gap-1.5 backdrop-blur-sm shadow-md transition-all active:scale-95"
+                          >
+                            <Play size={10} className="fill-white" />
+                            <span>Studio Video</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-start justify-between mb-1.5">
+                        <h3 className="font-bold text-[#1c1b1b] text-base group-hover:text-[#D32F2F] transition-colors">{svc.name}</h3>
+                        <span className="text-[10px] font-black text-red-600 bg-red-50 px-2 py-0.5 rounded-md shrink-0">Details ℹ️</span>
+                      </div>
+                      {svc.description && (
+                        <p className="text-xs text-[#5f5e5e] line-clamp-2 leading-relaxed">
+                          {svc.description}
+                        </p>
                       )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 mt-4" onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setSelectedDetailsSvc(svc)}
-                      >
-                        Details ℹ️
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="bg-[#D32F2F] hover:bg-[#b52626] text-white font-bold"
-                        onClick={() => navigate(`/customer/bookings/new?service_id=${svc.id}&category=${categoryFilter}`)}
-                        icon={<ArrowRight size={14} />}
-                      >
-                        Book Now
-                      </Button>
+                    <div>
+                      <div className="mt-4 pt-3.5 border-t border-gray-100">
+                        {filter === 'all' ? (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1.5 text-center">
+                            <div className="bg-[#faf7f5] rounded-lg py-1.5">
+                              <p className="text-[8px] font-bold uppercase text-[#5f5e5e]">Hatch</p>
+                              <p className="text-xs font-extrabold text-[#1c1b1b]">{renderPrice(svc.price_hatchback)}</p>
+                            </div>
+                            <div className="bg-[#faf7f5] rounded-lg py-1.5">
+                              <p className="text-[8px] font-bold uppercase text-[#5f5e5e]">Med Hatch</p>
+                              <p className="text-xs font-extrabold text-[#1c1b1b]">{renderPrice(svc.price_medium_hatchback)}</p>
+                            </div>
+                            <div className="bg-[#faf7f5] rounded-lg py-1.5">
+                              <p className="text-[8px] font-bold uppercase text-[#5f5e5e]">Sedan</p>
+                              <p className="text-xs font-extrabold text-[#1c1b1b]">{renderPrice(svc.price_sedan)}</p>
+                            </div>
+                            <div className="bg-[#faf7f5] rounded-lg py-1.5">
+                              <p className="text-[8px] font-bold uppercase text-[#5f5e5e]">Prem Sedan</p>
+                              <p className="text-xs font-extrabold text-[#1c1b1b]">{renderPrice(svc.price_premium_sedan)}</p>
+                            </div>
+                            <div className="bg-[#faf7f5] rounded-lg py-1.5">
+                              <p className="text-[8px] font-bold uppercase text-[#5f5e5e]">SUV</p>
+                              <p className="text-xs font-extrabold text-[#1c1b1b]">{renderPrice(svc.price_suv)}</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-gray-400 capitalize">{filter.replace('_', ' ')}:</span>
+                            <p className="text-lg font-black text-[#D32F2F]">{renderPrice(svc[getPriceKey(filter)!])}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 mt-4" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setSelectedDetailsSvc(svc)}
+                        >
+                          Details ℹ️
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="bg-[#D32F2F] hover:bg-[#b52626] text-white font-bold"
+                          onClick={() => navigate(`/customer/bookings/new?service_id=${svc.id}&category=${categoryFilter}`)}
+                          icon={<ArrowRight size={14} />}
+                        >
+                          Book Now
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -371,6 +444,47 @@ export default function CustomerServicesPage() {
         onClose={() => setSelectedDetailsSvc(null)}
         service={selectedDetailsSvc}
       />
+
+      {/* Service Demonstration Video Modal */}
+      {activeVideoModal && (
+        <Modal
+          open={!!activeVideoModal}
+          onClose={() => setActiveVideoModal(null)}
+          title={`Studio Video: ${activeVideoModal.title}`}
+          size="lg"
+        >
+          <div className="p-2 space-y-3">
+            <div className="aspect-video w-full rounded-2xl overflow-hidden bg-black shadow-lg">
+              {activeVideoModal.url.includes('youtube.com') || activeVideoModal.url.includes('youtu.be') ? (
+                <iframe
+                  src={activeVideoModal.url.replace('watch?v=', 'embed/')}
+                  title={activeVideoModal.title}
+                  className="w-full h-full border-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : (
+                <video
+                  src={activeVideoModal.url}
+                  controls
+                  autoPlay
+                  className="w-full h-full object-contain"
+                />
+              )}
+            </div>
+            <div className="flex justify-between items-center pt-2">
+              <p className="text-xs text-gray-500 font-medium">GK AutoHerb studio process & quality demonstration</p>
+              <button
+                type="button"
+                onClick={() => setActiveVideoModal(null)}
+                className="px-4 py-1.5 text-xs font-bold text-gray-600 hover:text-gray-900 bg-gray-100 rounded-xl"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

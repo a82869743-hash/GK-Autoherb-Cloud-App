@@ -63,3 +63,23 @@ export const useDeleteService = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['services'] }),
   });
 };
+
+export const useCategories = () =>
+  useQuery({
+    queryKey: ['service-categories'],
+    queryFn: async () => {
+      const res = await api.get('/services/categories/list');
+      return res.data.data || [];
+    },
+  });
+
+export const useServiceMedia = (serviceId: number | undefined) =>
+  useQuery({
+    queryKey: ['service-media', serviceId],
+    queryFn: async () => {
+      const res = await api.get(`/services/${serviceId}/media`);
+      return res.data.data || [];
+    },
+    enabled: !!serviceId,
+  });
+

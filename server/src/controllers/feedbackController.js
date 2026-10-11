@@ -92,8 +92,57 @@ exports.submitFeedback = async (req, res) => {
       [request.id]
     );
 
+    // 4. Fetch Google Review settings
+    const [settingsRows] = await conn.query(
+      "SELECT key_name, value FROM settings WHERE key_name IN ('google_review_url', 'feedback_google_threshold', 'admin_whatsapp_number')"
+    );
+    const settingsMap = settingsRows.reduce((acc, curr) => {
+      acc[curr.key_name] = curr.value;
+      return acc;
+    }, {});
+
+    const threshold = parseInt(settingsMap.feedback_google_threshold || '4');
+    const googleReviewUrl = settingsMap.google_review_url || 'https://search.google.com/local/writereview?placeid=ChIJn8N3wS1wXzkR8W6_m4gq5uU';
+    const isGoogleEligible = overall_rating >= threshold;
+
     await conn.commit();
-    res.status(201).json({ success: true, message: 'Thank you for your feedback!' });
+
+    // 5. If rating is low (below threshold), immediately alert admin via Socket.io and notification log
+    if (!isGoogleEligible) {
+      try {
+        const io = req.app.get('io');
+        if (io) {
+          io.emit('admin_notification', {
+            type: 'low_rating',
+            title: `Low Rating Alert (${overall_rating}★)`,
+            message: `Customer ${request.customer_name || 'Customer'} gave a ${overall_rating}★ rating on Invoice ${request.invoice_number || 'N/A'}: "${comments || 'No comment'}"`,
+            created_at: new Date()
+          });
+        }
+
+        // WhatsApp / notification trigger to admin
+        const adminNumber = settingsMap.admin_whatsapp_number || '9408424541';
+        const messagingService = require('../services/messagingService');
+        messagingService.sendWhatsApp(
+          adminNumber,
+          'ADMIN_LOW_RATING',
+          {
+            body: `⚠️ *ALERT: Low Rating Received*\nCustomer: ${request.customer_name} (${request.customer_mobile || 'N/A'})\nRating: ${overall_rating}★\nJob Cart: #${request.job_cart_id}\nFeedback: "${comments || 'None'}"\nPlease contact customer immediately.`
+          }
+        ).catch(() => {});
+      } catch (alertErr) {
+        console.warn('Low rating alert warning:', alertErr.message);
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      is_google_eligible: isGoogleEligible,
+      google_review_url: isGoogleEligible ? googleReviewUrl : null,
+      message: isGoogleEligible
+        ? 'Thank you for your rating! We would greatly appreciate if you could share your experience on Google.'
+        : 'Thank you for sharing your feedback. We take quality seriously and our studio manager will review this immediately.'
+    });
   } catch (err) {
     await conn.rollback();
     console.error('Submit feedback error:', err);
@@ -195,6 +244,29 @@ exports.getFeedbackStats = async (req, res) => {
        ORDER BY overall_rating DESC`
     );
 
+    // Conversion funnel metrics from review requests
+    const [funnel] = await pool.query(
+      `SELECT 
+        COUNT(*) as requests_sent,
+        SUM(CASE WHEN status = 'responded' THEN 1 ELSE 0 END) as requests_responded
+       FROM v2_review_requests`
+    );
+
+    // Google review settings
+    const [settingsRows] = await pool.query(
+      "SELECT key_name, value FROM settings WHERE key_name IN ('google_review_url', 'feedback_google_threshold', 'feedback_enabled')"
+    );
+    const settingsMap = settingsRows.reduce((acc, curr) => {
+      acc[curr.key_name] = curr.value;
+      return acc;
+    }, {});
+
+    const threshold = parseInt(settingsMap.feedback_google_threshold || '4');
+    const [googleEligible] = await pool.query(
+      'SELECT COUNT(*) as count FROM v2_feedback WHERE overall_rating >= ?',
+      [threshold]
+    );
+
     res.json({
       success: true,
       data: {
@@ -202,7 +274,20 @@ exports.getFeedbackStats = async (req, res) => {
         avg_rating: parseFloat(stats[0].avg_rating || 0),
         positive_count: stats[0].positive_count || 0,
         negative_count: stats[0].negative_count || 0,
-        distribution: dist
+        distribution: dist,
+        funnel: {
+          sent: funnel[0].requests_sent || 0,
+          responded: funnel[0].requests_responded || 0,
+          pushed_to_google: googleEligible[0].count || 0,
+          conversion_rate: funnel[0].requests_sent > 0
+            ? Math.round(((funnel[0].requests_responded || 0) / funnel[0].requests_sent) * 100)
+            : 0
+        },
+        settings: {
+          google_review_url: settingsMap.google_review_url || '',
+          feedback_google_threshold: threshold,
+          feedback_enabled: settingsMap.feedback_enabled !== '0'
+        }
       }
     });
   } catch (err) {

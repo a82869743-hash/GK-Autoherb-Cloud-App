@@ -21,6 +21,7 @@ import QrPaymentModal from '../../components/shared/QrPaymentModal';
 import PaymentSandboxModal from '../../components/shared/PaymentSandboxModal';
 import Modal from '../../components/ui/Modal';
 import ServiceDetailsModal from '../../components/shared/ServiceDetailsModal';
+import CouponInput from '../../components/shared/CouponInput';
 import { SERVICE_CATEGORIES, ServiceCategoryKey, matchesServiceCategory } from './ServicesPage';
 import { 
   getDeviceLiveLocation, 
@@ -94,6 +95,7 @@ export default function BookingPage() {
   const [loyalty, setLoyalty] = useState<{ credits: number; free_washes: number; wax_count: number }>({ credits: 0, free_washes: 0, wax_count: 0 });
   const [useFreeWash, setUseFreeWash] = useState(false);
   const [isFirstWashEligible, setIsFirstWashEligible] = useState(false);
+  const [appliedCoupon, setAppliedCoupon] = useState<{ coupon_id: number; code: string; discount_amount: number; title?: string } | null>(null);
 
   // QR Payment states
   const [showQrModal, setShowQrModal] = useState(false);
@@ -389,9 +391,11 @@ export default function BookingPage() {
     return Math.round(totalAfterFirstWashDiscount * 0.10);
   }, [isPackageBooking, useFreeWash, payAdvance, totalAfterFirstWashDiscount]);
 
+  const couponDiscountAmount = appliedCoupon?.discount_amount || 0;
+
   const finalTotal = useMemo(() => {
-    return totalAfterFirstWashDiscount - discountAmount + pickupCharge;
-  }, [totalAfterFirstWashDiscount, discountAmount, pickupCharge]);
+    return Math.max(0, totalAfterFirstWashDiscount - discountAmount - couponDiscountAmount + pickupCharge);
+  }, [totalAfterFirstWashDiscount, discountAmount, couponDiscountAmount, pickupCharge]);
 
   const requiredAdvancePossible = useMemo(() => {
     if (isPackageBooking || useFreeWash) return 0;
@@ -552,6 +556,8 @@ export default function BookingPage() {
         use_package: isPackageBooking ? true : undefined,
         is_free_wash: useFreeWash || undefined,
         pay_advance: !isPackageBooking && !useFreeWash ? payAdvance : undefined,
+        coupon_id: appliedCoupon ? appliedCoupon.coupon_id : undefined,
+        coupon_discount: couponDiscountAmount > 0 ? couponDiscountAmount : undefined,
         pickup_type: pickupOption,
         pickup_address_details: pickupOption !== 'none' ? {
           address: pickupAddress,
@@ -1538,6 +1544,24 @@ export default function BookingPage() {
                       <span className="ml-auto">-₹{discountAmount}</span>
                     </div>
                   )}
+                  {couponDiscountAmount > 0 && (
+                    <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-emerald-600 bg-emerald-50/70 px-2.5 rounded-lg">
+                      <span className="text-emerald-700 font-bold flex items-center gap-1.5">
+                        <Gift size={14} className="text-emerald-600" />
+                        Coupon Applied ({appliedCoupon?.code})
+                      </span>
+                      <span className="ml-auto text-emerald-700 font-extrabold">-₹{couponDiscountAmount}</span>
+                    </div>
+                  )}
+                  <div className="pt-2 pb-1">
+                    <CouponInput
+                      orderAmount={totalAfterFirstWashDiscount}
+                      serviceIds={selectedServices}
+                      appliedCoupon={appliedCoupon}
+                      onApply={(res) => setAppliedCoupon(res)}
+                      onRemove={() => setAppliedCoupon(null)}
+                    />
+                  </div>
                 </>
               )}
               {pickupOption !== 'none' && (

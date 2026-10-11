@@ -5,7 +5,7 @@ import {
   X, Search, LayoutDashboard, ClipboardList, Droplets, Calendar, CalendarCheck, MapPin, Truck,
   Users, PlusCircle, Layers, Package, Star, Gift, Wrench, Sparkles, ShoppingCart, ShoppingBag,
   DollarSign, CreditCard, FileText, Archive, BarChart3, Wallet, CheckSquare, MessageSquare,
-  HelpCircle, Shield, Upload, Trash2, Settings, ExternalLink, ChevronRight, Bell, Bot
+  HelpCircle, Shield, Upload, Trash2, Settings, ExternalLink, ChevronRight, Bell, Bot, Tag
 } from 'lucide-react';
 import { useDashboardStats } from '../../api/hooks/useDashboard';
 
@@ -56,6 +56,7 @@ export default function AdminAppLauncherDrawer({ isOpen, onClose }: AdminAppLaun
         { name: 'Package Tracking', desc: 'Active subscription quotas', to: '/admin/package-tracking', icon: Layers, color: 'text-cyan-600', bgColor: 'bg-cyan-50 border-cyan-100' },
         { name: 'Loyalty Points', desc: 'Points ratio & customer lookup', to: '/admin/loyalty', icon: Star, color: 'text-yellow-600', bgColor: 'bg-yellow-50 border-yellow-100' },
         { name: 'Customer Rewards', desc: 'Welcome wash & gift perks', to: '/admin/customer-rewards', icon: Gift, color: 'text-pink-600', bgColor: 'bg-pink-50 border-pink-100' },
+        { name: 'Coupons & Offers', desc: 'Promo codes & discounts', to: '/admin/coupons', icon: Tag, color: 'text-red-600', bgColor: 'bg-red-50 border-red-100' },
       ]
     },
     {

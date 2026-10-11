@@ -12,4 +12,8 @@ router.get('/', protect, authorize('admin'), settingsController.getAll);
 // Protected route for Admin to update settings
 router.patch('/', protect, authorize('admin'), settingsController.updateAll);
 
+// Automation & Service Reminders
+router.get('/reminders/preview',  protect, authorize('admin'), settingsController.previewReminders);
+router.post('/reminders/send-now', protect, authorize('admin'), settingsController.sendRemindersNow);
+
 module.exports = router;
