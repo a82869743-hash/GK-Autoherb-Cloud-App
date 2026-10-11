@@ -4,7 +4,7 @@ import {
   CalendarCheck, Bell, Settings, ChevronDown, ChevronRight, ChevronLeft,
   Search, Plus, ExternalLink, Car, Sparkles, Box, Send, Users, ShieldCheck,
   Droplets, DollarSign, CheckCircle2, ArrowRight, MapPin, Navigation, Crosshair,
-  RotateCw, Building2, Truck
+  RotateCw, Building2, Truck, Star
 } from 'lucide-react';
 import { useDashboardStats } from '../../api/hooks/useDashboard';
 import { useJobCarts } from '../../api/hooks/useJobCarts';
@@ -602,8 +602,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ─── Top 4 KPI Metrics Row ─────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      {/* ─── Top 5 KPI Metrics Row ─────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         
         {/* Card 1: Total Job Cards */}
         <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/80 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow group">
@@ -684,6 +684,29 @@ export default function DashboardPage() {
             <span className="text-slate-400 font-normal">vs last month</span>
           </div>
         </div>
+
+        {/* Card 5: Customer Rating & Reviews */}
+        <Link 
+          to="/admin/feedback" 
+          className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/80 shadow-2xs flex flex-col justify-between hover:border-amber-300 hover:shadow-xs transition-all group"
+        >
+          <div className="flex items-start justify-between mb-2.5">
+            <div>
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Studio Rating</p>
+              <h3 className="text-xl sm:text-[22px] font-bold text-slate-900 tracking-tight mt-0.5 flex items-center gap-1.5">
+                <span>{Number(stats?.avg_rating || 4.9).toFixed(1)}</span>
+                <Star size={16} className="text-amber-400 fill-amber-400 inline" />
+              </h3>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <Star size={18} className="fill-amber-400" />
+            </div>
+          </div>
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="font-semibold text-slate-600">{stats?.total_reviews || 0} reviews</span>
+            <span className="font-bold text-[#D32F2F] group-hover:underline">View CRM ↗</span>
+          </div>
+        </Link>
 
       </div>
 

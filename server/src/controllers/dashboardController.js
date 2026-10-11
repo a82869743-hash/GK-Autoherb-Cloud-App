@@ -14,7 +14,8 @@ exports.getStats = async (req, res) => {
       [purchases], [pendingPay], [lowStock],
       [todayBookings], [totalCustomers], [recentCompletions],
       [staffPresent], [expiringPkgs],
-      [pendingBookings], [pendingPackageReqs], [pendingProductOrders]
+      [pendingBookings], [pendingPackageReqs], [pendingProductOrders],
+      [feedbackStats]
     ] = await Promise.all([
       // Revenue
       pool.query(
@@ -84,6 +85,8 @@ exports.getStats = async (req, res) => {
       pool.query(`SELECT COUNT(*) AS total FROM bookings WHERE status = 'pending_approval'`),
       pool.query(`SELECT COUNT(*) AS total FROM package_requests WHERE status = 'pending'`),
       pool.query(`SELECT COUNT(*) AS total FROM product_orders WHERE payment_status = 'pending'`),
+      // Customer Reviews & Feedback
+      pool.query(`SELECT COUNT(*) as total_reviews, COALESCE(ROUND(AVG(overall_rating), 1), 0) as avg_rating FROM v2_feedback`),
     ]);
 
     const todayRevVal = parseFloat(todayRev[0].total);
@@ -117,6 +120,8 @@ exports.getStats = async (req, res) => {
         pending_package_requests: pendingPackageReqs[0]?.total || 0,
         pending_product_orders: pendingProductOrders[0]?.total || 0,
         total_pending_approvals: (pendingBookings[0]?.total || 0) + (pendingPackageReqs[0]?.total || 0) + (pendingProductOrders[0]?.total || 0),
+        avg_rating: parseFloat(feedbackStats?.[0]?.avg_rating || 5.0),
+        total_reviews: parseInt(feedbackStats?.[0]?.total_reviews || 0),
       }
     });
   } catch (err) {
