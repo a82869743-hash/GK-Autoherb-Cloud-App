@@ -225,15 +225,16 @@ export default function CustomerBookingsPage() {
   return (
     <div className="space-y-6 pb-28 lg:pb-12 max-w-[1600px] mx-auto font-sans">
       <AdminHeaderBar
-        title="Customer Bookings"
+        category="Customer Appointments"
+        title="Customer Bookings & Slots"
         subtitle="Manage incoming customer slot appointments & convert to Job Cards"
       >
         <button
           onClick={() => setManualBookingOpen(true)}
-          className="px-4 py-2.5 bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs font-bold rounded-2xl shadow-sm hover:shadow transition-all inline-flex items-center gap-1.5 active:scale-95"
+          className="px-4 py-2 bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs font-bold rounded-xl shadow-xs hover:shadow transition-all inline-flex items-center gap-1.5 active:scale-95"
         >
           <Plus size={15} />
-          <span>+ New Manual Booking</span>
+          <span>New Manual Booking</span>
         </button>
       </AdminHeaderBar>
 

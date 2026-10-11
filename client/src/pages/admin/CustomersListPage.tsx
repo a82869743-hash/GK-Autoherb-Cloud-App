@@ -85,22 +85,23 @@ export default function CustomersListPage() {
     <div className="space-y-6 pb-28 lg:pb-12 max-w-[1600px] mx-auto font-sans">
       {/* Header Bar */}
       <AdminHeaderBar
+        category="Client Relations & CRM"
         title="Customer Profiles & Fleet CRM"
         subtitle="Manage client identities, vehicle garage registry, and detailing history"
         actions={
           <div className="flex items-center gap-2.5">
             <button
               onClick={() => setVmModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-slate-200/90 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-all shadow-xs active:scale-95"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200/90 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-all shadow-2xs active:scale-95"
             >
-              <Car size={16} className="text-slate-500" />
+              <Car size={15} className="text-slate-500" />
               <span>Vehicle Master</span>
             </button>
             <button
               onClick={() => navigate('/admin/add-customer')}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-[#D32F2F] hover:bg-[#b71c1c] text-white font-bold text-xs shadow-md shadow-red-200 transition-all active:scale-95"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#D32F2F] hover:bg-[#b71c1c] text-white font-bold text-xs shadow-xs transition-all active:scale-95"
             >
-              <Plus size={16} />
+              <Plus size={15} />
               <span>Add Customer</span>
             </button>
           </div>

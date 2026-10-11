@@ -61,29 +61,29 @@ export default function AdminMetricCard({
   };
 
   return (
-    <div className={`bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/70 shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex flex-col justify-between hover:shadow-md transition-shadow group ${className}`}>
-      <div className="flex items-start justify-between mb-3">
+    <div className={`bg-white rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow group ${className}`}>
+      <div className="flex items-start justify-between mb-2.5">
         <div>
-          <p className="text-xs font-semibold text-slate-500">{displayTitle}</p>
-          <h3 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1">
+          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{displayTitle}</p>
+          <h3 className="text-xl sm:text-[22px] font-bold text-slate-900 tracking-tight mt-0.5">
             {value}
           </h3>
           {subtitle && (
             <p className="text-[11px] text-slate-400 mt-0.5 font-medium">{subtitle}</p>
           )}
         </div>
-        <div className={`w-10 h-10 rounded-2xl ${styleClass} flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform`}>
+        <div className={`w-10 h-10 rounded-xl ${styleClass} flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform`}>
           {renderIcon()}
         </div>
       </div>
 
       {(trendText || trendLabel) && (
-        <div className="flex items-center gap-1.5 text-xs font-bold pt-1">
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold pt-1">
           {trendText && (
             <span className={`inline-flex items-center gap-1 ${
               isPositive ? 'text-emerald-600' : 'text-rose-600'
             }`}>
-              {isPositive ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
+              {isPositive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
               {trendText}
             </span>
           )}

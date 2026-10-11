@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 interface AdminHeaderBarProps {
   title: string;
   subtitle?: string;
+  category?: string;
   badge?: React.ReactNode;
   showDatePicker?: boolean;
   dateRangeText?: string;
@@ -17,6 +18,7 @@ interface AdminHeaderBarProps {
 export default function AdminHeaderBar({
   title,
   subtitle,
+  category,
   badge,
   showDatePicker = false,
   dateRangeText = 'May 20 – May 27, 2026',
@@ -37,14 +39,19 @@ export default function AdminHeaderBar({
   };
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white px-6 py-4 rounded-3xl border border-slate-200/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)]">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white px-5 sm:px-6 py-3.5 sm:py-4 rounded-2xl border border-slate-200/80 shadow-2xs">
       <div>
+        {category && (
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[#D32F2F] block mb-0.5">
+            {category}
+          </span>
+        )}
         <div className="flex items-center gap-2.5">
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">{title}</h1>
+          <h1 className="text-xl sm:text-[22px] font-bold text-slate-900 tracking-tight leading-tight">{title}</h1>
           {badge}
         </div>
         {subtitle && (
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
+          <p className="text-xs text-slate-500 font-normal mt-0.5">
             {subtitle}
           </p>
         )}

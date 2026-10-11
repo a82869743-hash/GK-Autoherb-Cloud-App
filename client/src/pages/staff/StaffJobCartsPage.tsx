@@ -45,27 +45,24 @@ export default function StaffJobCartsPage() {
   return (
     <div className="space-y-6 pb-12 font-sans">
       {/* ── Staff Header Bar ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full bg-red-50 border border-red-100 text-[#D32F2F] text-[10px] font-black uppercase tracking-wider">
-              Workshop Bays
-            </span>
-            <span className="text-xs text-slate-400 font-bold">• Today's Floor</span>
-          </div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-1">
-            Today's Job Queue
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[#D32F2F] block mb-0.5">
+            Workshop Bay Operations
+          </span>
+          <h1 className="text-xl sm:text-[22px] font-bold text-slate-900 tracking-tight leading-tight">
+            Active Workshop Job Queue
           </h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
+          <p className="text-xs text-slate-500 font-normal mt-0.5">
             {jobs.length} vehicle{jobs.length === 1 ? '' : 's'} registered on the workshop floor today
           </p>
         </div>
 
         <Link
           to="/staff/job-carts/new"
-          className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-[#af101a] to-[#D32F2F] hover:from-[#b71c1c] hover:to-[#991b1b] text-white font-bold rounded-2xl shadow-lg shadow-red-600/20 hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] transition-all text-xs uppercase tracking-wider shrink-0 self-start sm:self-center"
+          className="flex items-center gap-1.5 px-4 py-2 bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs font-bold rounded-xl shadow-xs transition-all active:scale-95 shrink-0 self-start sm:self-center"
         >
-          <PlusCircle size={16} />
+          <PlusCircle size={15} />
           <span>New Job Cart</span>
         </Link>
       </div>
@@ -74,13 +71,13 @@ export default function StaffJobCartsPage() {
       <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
         {/* Search */}
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
           <input
             type="text"
             placeholder="Search by license plate, car brand, or model..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F] shadow-2xs transition-all"
+            className="w-full h-9 pl-9 pr-3 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:ring-1 focus:ring-red-500/20 focus:border-[#D32F2F] text-slate-800 placeholder-slate-400 transition-all"
           />
         </div>
 
@@ -95,14 +92,14 @@ export default function StaffJobCartsPage() {
             <button
               key={chip.key}
               onClick={() => setStatusFilter(chip.key)}
-              className={`px-3.5 py-2 rounded-2xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 flex items-center gap-1.5 ${
                 statusFilter === chip.key
-                  ? 'bg-slate-900 text-white shadow-xs'
+                  ? 'bg-slate-900 text-white shadow-2xs'
                   : 'bg-white hover:bg-slate-50 border border-slate-200/80 text-slate-600'
               }`}
             >
               <span>{chip.label}</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+              <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold ${
                 statusFilter === chip.key ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
               }`}>
                 {chip.count}

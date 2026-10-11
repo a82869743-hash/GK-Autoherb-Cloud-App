@@ -452,9 +452,12 @@ export default function DashboardPage() {
       {/* ─── Top Header Bar ────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white px-5 py-3.5 rounded-xl border border-slate-200/80 shadow-2xs">
         <div>
-          <h1 className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight">Dashboard</h1>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[#D32F2F] block mb-0.5">
+            Studio Operations & Live Bay Control
+          </span>
+          <h1 className="text-xl sm:text-[22px] font-bold text-slate-900 tracking-tight leading-tight">Workshop Operations Dashboard</h1>
           <p className="text-xs text-slate-500 font-normal mt-0.5">
-            Real-time workshop activity, detailing queue & vehicle progress overview
+            Real-time workshop activity, detailing bays queue & vehicle progress overview
           </p>
         </div>
 
@@ -603,16 +606,16 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         
         {/* Card 1: Total Job Cards */}
-        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/70 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow group">
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/80 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow group">
           <div className="flex items-start justify-between mb-2.5">
             <div>
-              <p className="text-xs font-medium text-slate-500">Total Job Cards</p>
-              <h3 className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight mt-0.5">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total Job Cards</p>
+              <h3 className="text-xl sm:text-[22px] font-bold text-slate-900 tracking-tight mt-0.5">
                 {(stats?.total_job_carts || 1284).toLocaleString()}
               </h3>
             </div>
-            <div className="w-8 h-8 rounded-lg bg-[#EEF2FF] text-[#D32F2F] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <FileText size={16} />
+            <div className="w-10 h-10 rounded-xl bg-red-50 text-[#D32F2F] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <FileText size={18} />
             </div>
           </div>
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
@@ -623,16 +626,16 @@ export default function DashboardPage() {
         </div>
 
         {/* Card 2: Pending Bookings / Appointments */}
-        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/70 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow group">
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/80 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow group">
           <div className="flex items-start justify-between mb-2.5">
             <div>
-              <p className="text-xs font-medium text-slate-500">Pending Bookings</p>
-              <h3 className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight mt-0.5">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Pending Bookings</p>
+              <h3 className="text-xl sm:text-[22px] font-bold text-slate-900 tracking-tight mt-0.5">
                 {(todayBookings.length > 0 ? todayBookings.length : 124).toLocaleString()}
               </h3>
             </div>
-            <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] text-[#D32F2F] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <Clock size={16} />
+            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <Clock size={18} />
             </div>
           </div>
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
@@ -643,16 +646,16 @@ export default function DashboardPage() {
         </div>
 
         {/* Card 3: Active Bay Work (In Detailing / Wash) */}
-        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/70 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow group">
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/80 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow group">
           <div className="flex items-start justify-between mb-2.5">
             <div>
-              <p className="text-xs font-medium text-slate-500">Active In Bay</p>
-              <h3 className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight mt-0.5">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Active In Bay</p>
+              <h3 className="text-xl sm:text-[22px] font-bold text-slate-900 tracking-tight mt-0.5">
                 {(stats?.open_job_carts || 68).toLocaleString()}
               </h3>
             </div>
-            <div className="w-8 h-8 rounded-lg bg-[#F5F3FF] text-[#7C3AED] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <Wrench size={16} />
+            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <Wrench size={18} />
             </div>
           </div>
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
@@ -663,16 +666,16 @@ export default function DashboardPage() {
         </div>
 
         {/* Card 4: Low Stock Chemical & Material Items */}
-        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/70 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow group">
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/80 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow group">
           <div className="flex items-start justify-between mb-2.5">
             <div>
-              <p className="text-xs font-medium text-slate-500">Low Stock Alerts</p>
-              <h3 className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight mt-0.5">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Low Stock Alerts</p>
+              <h3 className="text-xl sm:text-[22px] font-bold text-slate-900 tracking-tight mt-0.5">
                 {(stats?.low_stock_items || 44).toLocaleString()}
               </h3>
             </div>
-            <div className="w-8 h-8 rounded-lg bg-[#FFF1F2] text-[#E11D48] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <AlertTriangle size={16} />
+            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <AlertTriangle size={18} />
             </div>
           </div>
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-600">
@@ -693,15 +696,15 @@ export default function DashboardPage() {
           {/* Header Row: Title & "+ New Job Card" CTA */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg sm:text-xl font-black text-slate-900">Job Cards</h2>
-              <p className="text-xs text-slate-400 font-medium mt-0.5">Update Progress and job cards</p>
+              <h2 className="text-lg sm:text-xl font-bold text-slate-900">Active Job Cards</h2>
+              <p className="text-xs text-slate-500 font-normal mt-0.5">Live workshop progress, technician assignments & detailing stages</p>
             </div>
             <Link
               to="/admin/job-carts/new"
-              className="px-4 py-2.5 bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs font-bold rounded-2xl shadow-sm hover:shadow transition-all inline-flex items-center justify-center gap-1.5 shrink-0 active:scale-95"
+              className="px-4 py-2 bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs font-bold rounded-xl shadow-xs hover:shadow transition-all inline-flex items-center justify-center gap-1.5 shrink-0 active:scale-95"
             >
               <Plus size={15} />
-              <span>+ New Job Card</span>
+              <span>New Job Card</span>
             </Link>
           </div>
 
@@ -709,14 +712,14 @@ export default function DashboardPage() {
           <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
             
             {/* Search Input */}
-            <div className="relative flex-1">
-              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <div className="relative flex-1 min-w-[220px]">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search job card, customer name or vehicle..."
+                placeholder="Search job card, customer name, vehicle reg..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs font-medium text-slate-800 placeholder-slate-400 outline-none focus:bg-white focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F] transition-all"
+                className="w-full h-9 pl-9 pr-3 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:ring-1 focus:ring-red-500/20 focus:border-[#D32F2F] text-slate-800 placeholder-slate-400 transition-all"
               />
             </div>
 
@@ -725,9 +728,9 @@ export default function DashboardPage() {
               <select
                 value={statusFilter}
                 onChange={e => setStatusFilter(e.target.value)}
-                className="px-3.5 py-2.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs font-bold text-slate-700 outline-none hover:bg-slate-100 transition-all cursor-pointer"
+                className="h-9 px-3 text-xs font-semibold border border-slate-200 rounded-lg bg-slate-50 text-slate-700 outline-none hover:bg-slate-100 transition-all cursor-pointer"
               >
-                <option value="all">Status ⌵</option>
+                <option value="all">All Statuses ⌵</option>
                 <option value="in_progress">In Progress</option>
                 <option value="pending">Queued / Intake</option>
                 <option value="completed">Completed</option>
@@ -737,10 +740,10 @@ export default function DashboardPage() {
               <select
                 value={sortBy}
                 onChange={e => setSortBy(e.target.value as any)}
-                className="px-3.5 py-2.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs font-bold text-slate-700 outline-none hover:bg-slate-100 transition-all cursor-pointer"
+                className="h-9 px-3 text-xs font-semibold border border-slate-200 rounded-lg bg-slate-50 text-slate-700 outline-none hover:bg-slate-100 transition-all cursor-pointer"
               >
-                <option value="recent">Sort : Recent ⌵</option>
-                <option value="amount">Sort : Amount ⌵</option>
+                <option value="recent">Sort: Recent ⌵</option>
+                <option value="amount">Sort: Amount ⌵</option>
               </select>
             </div>
           </div>

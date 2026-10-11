@@ -641,34 +641,34 @@ export default function CustomerDashboardPage() {
           {/* Card 1: All Services */}
           <Link
             to="/customer/services?category=all"
-            className="bg-gradient-to-br from-red-500/[0.04] via-transparent to-transparent rounded-xl p-3.5 sm:p-4 border border-red-200/60 hover:border-red-400 shadow-2xs hover:shadow-sm hover:-translate-y-0.5 transition-all flex flex-col justify-between group/metric cursor-pointer"
+            className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/80 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between group/metric cursor-pointer"
           >
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-red-800">All Services</span>
-                <div className="w-7 h-7 rounded-lg bg-red-100 border border-red-200 text-[#D32F2F] flex items-center justify-center shadow-2xs group-hover/metric:scale-105 transition-transform">
-                  <Layers size={14} />
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">All Services</span>
+                <div className="w-8 h-8 rounded-lg bg-red-50 text-[#D32F2F] flex items-center justify-center shadow-2xs group-hover/metric:scale-105 transition-transform">
+                  <Layers size={15} />
                 </div>
               </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight tabular-nums">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xl sm:text-[22px] font-bold text-slate-900 tracking-tight tabular-nums">
                   {allCount || 18}
                 </span>
-                <span className="text-[11px] text-red-700 font-medium uppercase">Available</span>
+                <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Catalog</span>
               </div>
             </div>
             
             <div className="mt-2.5">
-              <div className="w-full bg-red-100/70 h-1.5 rounded-full overflow-hidden">
+              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-gradient-to-r from-[#af101a] to-[#D32F2F] rounded-full transition-all duration-500" 
+                  className="h-full bg-[#D32F2F] rounded-full transition-all duration-500" 
                   style={{ width: '100%' }} 
                 />
               </div>
-              <p className="text-[10px] text-slate-500 font-medium mt-1.5 flex items-center justify-between">
+              <p className="text-[11px] text-slate-500 font-medium mt-1.5 flex items-center justify-between">
                 <span>Complete Catalog</span>
                 <span className="text-[#D32F2F] font-semibold group-hover/metric:translate-x-0.5 transition-transform flex items-center">
-                  Explore <ChevronRight size={10} className="inline ml-0.5" />
+                  Explore <ChevronRight size={11} className="inline ml-0.5" />
                 </span>
               </p>
             </div>
@@ -677,34 +677,34 @@ export default function CustomerDashboardPage() {
           {/* Card 2: Washing Services */}
           <Link
             to="/customer/services?category=washing"
-            className="bg-gradient-to-br from-sky-500/[0.04] via-transparent to-transparent rounded-xl p-3.5 sm:p-4 border border-sky-200/60 hover:border-sky-400 shadow-2xs hover:shadow-sm hover:-translate-y-0.5 transition-all flex flex-col justify-between group/metric cursor-pointer"
+            className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/80 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between group/metric cursor-pointer"
           >
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-sky-800">Wash Services</span>
-                <div className="w-7 h-7 rounded-lg bg-sky-100 border border-sky-200 text-sky-700 flex items-center justify-center shadow-2xs group-hover/metric:scale-105 transition-transform">
-                  <Droplets size={14} />
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Wash Services</span>
+                <div className="w-8 h-8 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center shadow-2xs group-hover/metric:scale-105 transition-transform">
+                  <Droplets size={15} />
                 </div>
               </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight tabular-nums">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xl sm:text-[22px] font-bold text-slate-900 tracking-tight tabular-nums">
                   {washCount || 6}
                 </span>
-                <span className="text-[11px] text-sky-700 font-medium uppercase">Washes</span>
+                <span className="text-[11px] text-sky-600 font-semibold uppercase tracking-wider">Active</span>
               </div>
             </div>
 
             <div className="mt-2.5">
-              <div className="w-full bg-sky-100/70 h-1.5 rounded-full overflow-hidden">
+              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-sky-500 rounded-full transition-all duration-500" 
                   style={{ width: '100%' }} 
                 />
               </div>
-              <p className="text-[10px] text-slate-500 font-medium mt-1.5 flex items-center justify-between">
+              <p className="text-[11px] text-slate-500 font-medium mt-1.5 flex items-center justify-between">
                 <span>Foam & Underbody</span>
-                <span className="text-sky-700 font-semibold group-hover/metric:translate-x-0.5 transition-transform flex items-center">
-                  Book Wash <ChevronRight size={10} className="inline ml-0.5" />
+                <span className="text-sky-600 font-semibold group-hover/metric:translate-x-0.5 transition-transform flex items-center">
+                  Book Wash <ChevronRight size={11} className="inline ml-0.5" />
                 </span>
               </p>
             </div>
@@ -713,34 +713,34 @@ export default function CustomerDashboardPage() {
           {/* Card 3: Coating & PPF Services */}
           <Link
             to="/customer/services?category=coating_ppf"
-            className="bg-gradient-to-br from-purple-500/[0.04] via-transparent to-transparent rounded-xl p-3.5 sm:p-4 border border-purple-200/60 hover:border-purple-400 shadow-2xs hover:shadow-sm hover:-translate-y-0.5 transition-all flex flex-col justify-between group/metric cursor-pointer"
+            className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/80 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between group/metric cursor-pointer"
           >
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-purple-800">PPF & Coating</span>
-                <div className="w-7 h-7 rounded-lg bg-purple-100 border border-purple-200 text-purple-700 flex items-center justify-center shadow-2xs group-hover/metric:scale-105 transition-transform">
-                  <Shield size={14} />
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">PPF & Coating</span>
+                <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shadow-2xs group-hover/metric:scale-105 transition-transform">
+                  <Shield size={15} />
                 </div>
               </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight tabular-nums">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xl sm:text-[22px] font-bold text-slate-900 tracking-tight tabular-nums">
                   {ppfCount || 4}
                 </span>
-                <span className="text-[11px] text-purple-700 font-medium uppercase">Shields</span>
+                <span className="text-[11px] text-purple-600 font-semibold uppercase tracking-wider">Shields</span>
               </div>
             </div>
 
             <div className="mt-2.5">
-              <div className="w-full bg-purple-100/70 h-1.5 rounded-full overflow-hidden">
+              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-purple-500 rounded-full transition-all duration-500" 
                   style={{ width: '100%' }} 
                 />
               </div>
-              <p className="text-[10px] text-slate-500 font-medium mt-1.5 flex items-center justify-between">
+              <p className="text-[11px] text-slate-500 font-medium mt-1.5 flex items-center justify-between">
                 <span>9H & Self-Healing</span>
-                <span className="text-purple-700 font-semibold group-hover/metric:translate-x-0.5 transition-transform flex items-center">
-                  Explore <ChevronRight size={10} className="inline ml-0.5" />
+                <span className="text-purple-600 font-semibold group-hover/metric:translate-x-0.5 transition-transform flex items-center">
+                  Explore <ChevronRight size={11} className="inline ml-0.5" />
                 </span>
               </p>
             </div>
@@ -749,34 +749,34 @@ export default function CustomerDashboardPage() {
           {/* Card 4: General Services */}
           <Link
             to="/customer/services?category=general"
-            className="bg-gradient-to-br from-emerald-500/[0.04] via-transparent to-transparent rounded-xl p-3.5 sm:p-4 border border-emerald-200/60 hover:border-emerald-400 shadow-2xs hover:shadow-sm hover:-translate-y-0.5 transition-all flex flex-col justify-between group/metric cursor-pointer"
+            className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/80 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between group/metric cursor-pointer"
           >
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-800">General Services</span>
-                <div className="w-7 h-7 rounded-lg bg-emerald-100 border border-emerald-200 text-emerald-700 flex items-center justify-center shadow-2xs group-hover/metric:scale-105 transition-transform">
-                  <Wrench size={14} />
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">General Services</span>
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-2xs group-hover/metric:scale-105 transition-transform">
+                  <Wrench size={15} />
                 </div>
               </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight tabular-nums">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xl sm:text-[22px] font-bold text-slate-900 tracking-tight tabular-nums">
                   {generalCount || 8}
                 </span>
-                <span className="text-[11px] text-emerald-700 font-medium uppercase">Treatments</span>
+                <span className="text-[11px] text-emerald-600 font-semibold uppercase tracking-wider">Treatments</span>
               </div>
             </div>
 
             <div className="mt-2.5">
-              <div className="w-full bg-emerald-100/70 h-1.5 rounded-full overflow-hidden">
+              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-emerald-500 rounded-full transition-all duration-500" 
                   style={{ width: '100%' }} 
                 />
               </div>
-              <p className="text-[10px] text-slate-500 font-medium mt-1.5 flex items-center justify-between">
+              <p className="text-[11px] text-slate-500 font-medium mt-1.5 flex items-center justify-between">
                 <span>Interior Spa & Care</span>
-                <span className="text-emerald-700 font-semibold group-hover/metric:translate-x-0.5 transition-transform flex items-center">
-                  Book Care <ChevronRight size={10} className="inline ml-0.5" />
+                <span className="text-emerald-600 font-semibold group-hover/metric:translate-x-0.5 transition-transform flex items-center">
+                  Book Care <ChevronRight size={11} className="inline ml-0.5" />
                 </span>
               </p>
             </div>

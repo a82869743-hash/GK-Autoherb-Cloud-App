@@ -34,14 +34,14 @@ export default function AdminFilterBar({
   return (
     <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
       {/* Search Input */}
-      <div className="relative flex-1">
-        <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+      <div className="relative flex-1 min-w-[220px]">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
         <input
           type="text"
           placeholder={searchPlaceholder}
           value={searchValue}
           onChange={e => onSearchChange(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs font-medium text-slate-800 placeholder-slate-400 outline-none focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-[#D32F2F] transition-all"
+          className="w-full h-9 pl-9 pr-3 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:ring-1 focus:ring-red-500/20 focus:border-[#D32F2F] text-slate-800 placeholder-slate-400 transition-all"
         />
       </div>
 
@@ -51,7 +51,7 @@ export default function AdminFilterBar({
           <select
             value={statusValue}
             onChange={e => onStatusChange(e.target.value)}
-            className="px-3.5 py-2.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs font-bold text-slate-700 outline-none hover:bg-slate-100 transition-all cursor-pointer"
+            className="h-9 px-3 text-xs font-semibold border border-slate-200 rounded-lg bg-slate-50 text-slate-700 outline-none hover:bg-slate-100 transition-all cursor-pointer"
           >
             {statusOptions.map(opt => (
               <option key={opt.value} value={opt.value}>
@@ -65,7 +65,7 @@ export default function AdminFilterBar({
           <select
             value={sortValue}
             onChange={e => onSortChange(e.target.value)}
-            className="px-3.5 py-2.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs font-bold text-slate-700 outline-none hover:bg-slate-100 transition-all cursor-pointer"
+            className="h-9 px-3 text-xs font-semibold border border-slate-200 rounded-lg bg-slate-50 text-slate-700 outline-none hover:bg-slate-100 transition-all cursor-pointer"
           >
             {sortOptions.map(opt => (
               <option key={opt.value} value={opt.value}>
