@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, User, Phone, Mail, Calendar, CheckSquare, IndianRupee, Download, Award, Clock, ShieldCheck, DollarSign } from 'lucide-react';
 import { useStaffDetail, useUpdateStaff, useStaffAttendance, useMarkAttendance, useStaffPayments, useAddPayment, useCompletePayment } from '../../api/hooks/useStaff';
+import { useRoles } from '../../api/hooks/useRoles';
 import { useUIStore } from '../../store/uiStore';
 import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
 import AdminMetricCard from '../../components/admin/AdminMetricCard';
@@ -28,6 +29,7 @@ export default function StaffDetailPage() {
   const staffId = parseInt(id || '0');
 
   const { data: staff, isLoading: isStaffLoading } = useStaffDetail(staffId);
+  const { data: roles = [] } = useRoles();
   const { data: attendance, isLoading: isAttLoading } = useStaffAttendance(staffId);
   const { data: payments, isLoading: isPayLoading } = useStaffPayments(staffId);
 
@@ -42,26 +44,43 @@ export default function StaffDetailPage() {
 
   const [attForm, setAttForm] = useState({ att_date: new Date().toISOString().slice(0, 10), status: 'present', note: '', check_in_time: '', check_out_time: '' });
   const [payForm, setPayForm] = useState({ amount: '', purpose: '', payment_date: new Date().toISOString().slice(0, 10) });
-  const [profileForm, setProfileForm] = useState({ name: '', mobile: '', email: '', specialisations: '' });
+  const [profileForm, setProfileForm] = useState({
+    name: '',
+    mobile: '',
+    email: '',
+    specialisations: '',
+    custom_role_id: '' as string | number,
+    base_salary: '' as string | number,
+  });
 
-  useState(() => {
+  useEffect(() => {
     if (staff) {
       setProfileForm({
         name: staff.name || '',
         mobile: staff.mobile || '',
         email: staff.email || '',
-        specialisations: staff.profile?.specialisations || '',
+        specialisations: staff.profile?.specialisations || staff.specialisations || '',
+        custom_role_id: staff.custom_role_id != null ? String(staff.custom_role_id) : '',
+        base_salary: staff.base_salary != null ? String(staff.base_salary) : '15000',
       });
     }
-  });
+  }, [staff]);
 
   if (isStaffLoading) return <SkeletonLoader lines={8} />;
   if (!staff) return <div className="p-12 text-center text-slate-500 font-bold">Staff member not found.</div>;
 
   const handleUpdateProfile = async () => {
     try {
-      await updateMutation.mutateAsync({ id: staffId, ...profileForm });
-      toast('success', 'Profile updated successfully');
+      await updateMutation.mutateAsync({
+        id: staffId,
+        name: profileForm.name,
+        mobile: profileForm.mobile,
+        email: profileForm.email,
+        specialisations: profileForm.specialisations,
+        custom_role_id: profileForm.custom_role_id ? Number(profileForm.custom_role_id) : null,
+        base_salary: profileForm.base_salary !== '' ? Number(profileForm.base_salary) : null,
+      });
+      toast('success', 'Profile and role settings updated successfully');
     } catch (err: any) {
       toast('error', err?.response?.data?.error || 'Failed to update profile');
     }
@@ -109,7 +128,7 @@ export default function StaffDetailPage() {
       <AdminHeaderBar
         title={staff.name}
         subtitle={`Staff ID #${staffId} • ${staff.mobile} ${staff.email ? `• ${staff.email}` : ''}`}
-        badge={staff.profile?.specialisations ? staff.profile.specialisations.split(',')[0] : 'Technician'}
+        badge={staff.custom_role_name || (staff.profile?.specialisations ? staff.profile.specialisations.split(',')[0] : 'Technician')}
         actions={
           <div className="flex items-center gap-2">
             <button
@@ -159,7 +178,7 @@ export default function StaffDetailPage() {
           />
           <AdminMetricCard
             title="Account Status"
-            value="Active Crew"
+            value={staff.custom_role_name || "Active Crew"}
             subtitle="Operational detailing bay"
             icon={<ShieldCheck className="w-5 h-5 text-sky-600" />}
             variant="sky"
@@ -173,15 +192,51 @@ export default function StaffDetailPage() {
         </div>
 
         {activeTab === 'profile' && (
-          <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm max-w-2xl space-y-4">
-            <h3 className="text-base font-bold text-slate-900 mb-2">Edit Technician Profile</h3>
+          <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm max-w-2xl space-y-5">
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Edit Technician Profile</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Manage identity, permissions role, and baseline payroll configuration.</p>
+            </div>
             <div className="space-y-4">
               <Input label="Full Name" value={profileForm.name} onChange={e => setProfileForm({...profileForm, name: e.target.value})} />
-              <Input label="Mobile" value={profileForm.mobile} onChange={e => setProfileForm({...profileForm, mobile: e.target.value})} />
-              <Input label="Email" value={profileForm.email} onChange={e => setProfileForm({...profileForm, email: e.target.value})} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input label="Mobile" value={profileForm.mobile} onChange={e => setProfileForm({...profileForm, mobile: e.target.value})} />
+                <Input label="Email" value={profileForm.email} onChange={e => setProfileForm({...profileForm, email: e.target.value})} />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Assigned RBAC Role
+                </label>
+                <select
+                  value={profileForm.custom_role_id}
+                  onChange={e => setProfileForm({ ...profileForm, custom_role_id: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 bg-white text-slate-900 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F] transition-all"
+                >
+                  <option value="">Base Technician (Standard Staff Access)</option>
+                  {roles.map((r: any) => (
+                    <option key={r.id} value={r.id}>
+                      {r.role_name} {r.description ? `— ${r.description}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-400 font-medium">
+                  Grants granular page access and feature permissions as defined in Role Management.
+                </p>
+              </div>
+
+              <Input
+                label="Monthly Base Salary (₹)"
+                type="number"
+                placeholder="e.g. 18000"
+                value={profileForm.base_salary}
+                onChange={e => setProfileForm({ ...profileForm, base_salary: e.target.value })}
+              />
+
               <Textarea label="Specialisations (comma separated)" value={profileForm.specialisations} onChange={e => setProfileForm({...profileForm, specialisations: e.target.value})} />
-              <div className="pt-2">
-                <Button variant="primary" onClick={handleUpdateProfile} loading={updateMutation.isPending}>Save Changes</Button>
+              
+              <div className="pt-2 flex items-center justify-end">
+                <Button variant="primary" onClick={handleUpdateProfile} loading={updateMutation.isPending}>Save Profile & Role</Button>
               </div>
             </div>
           </div>

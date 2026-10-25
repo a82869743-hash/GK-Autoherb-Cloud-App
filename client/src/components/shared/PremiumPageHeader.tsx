@@ -22,76 +22,49 @@ export default function PremiumPageHeader({
 }: PremiumPageHeaderProps) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: -12 }}
+      initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
-      className="mb-6"
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      className="mb-5"
     >
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-center gap-3">
           {/* Animated icon container */}
-          <motion.div
-            initial={{ scale: 0.5, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.1, type: 'spring', stiffness: 300, damping: 20 }}
-            className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${accentGradient} flex items-center justify-center shadow-lg`}
-            style={{ boxShadow: `0 4px 20px ${iconColor}30` }}
+          <div
+            className={`w-9 h-9 rounded-xl bg-gradient-to-br ${accentGradient} flex items-center justify-center shadow-sm shrink-0`}
           >
-            <Icon size={22} className="text-white" />
-          </motion.div>
+            <Icon size={18} className="text-white" />
+          </div>
 
           <div>
-            <div className="flex items-center gap-2.5">
-              <motion.h1
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.15 }}
-                className="text-2xl font-bold text-[#1c1b1b] tracking-tight"
-              >
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl sm:text-[22px] font-semibold text-[#1c1b1b] tracking-tight">
                 {title}
-              </motion.h1>
+              </h1>
               {badge && (
-                <motion.span
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ delay: 0.3, type: 'spring' }}
-                  className="text-[9px] font-bold bg-[#D32F2F] text-white px-2 py-0.5 rounded-full uppercase tracking-wider"
-                >
+                <span className="text-[10px] font-medium bg-[#D32F2F] text-white px-2 py-0.5 rounded-full">
                   {badge}
-                </motion.span>
+                </span>
               )}
             </div>
             {subtitle && (
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-                className="text-sm text-[#5f5e5e] mt-0.5"
-              >
+              <p className="text-xs sm:text-[13px] text-[#5f5e5e] mt-0.5">
                 {subtitle}
-              </motion.p>
+              </p>
             )}
           </div>
         </div>
 
         {actions && (
-          <motion.div
-            initial={{ opacity: 0, x: 10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.25 }}
-            className="flex flex-wrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0"
-          >
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto mt-1 sm:mt-0">
             {actions}
-          </motion.div>
+          </div>
         )}
       </div>
 
-      {/* Animated underline accent */}
-      <motion.div
-        initial={{ scaleX: 0 }}
-        animate={{ scaleX: 1 }}
-        transition={{ delay: 0.3, duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
-        className="mt-4 h-px origin-left"
+      {/* Underline accent */}
+      <div
+        className="mt-3.5 h-px"
         style={{ background: `linear-gradient(90deg, ${iconColor}40, transparent)` }}
       />
     </motion.div>

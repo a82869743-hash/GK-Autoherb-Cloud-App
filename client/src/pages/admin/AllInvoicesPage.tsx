@@ -218,9 +218,9 @@ export default function AllInvoicesPage() {
           accentColor="sky"
         />
         <AdminMetricCard
-          label="Fiscal Ledger Sync"
-          value="Reconciled"
-          trend={{ text: '100% cloud synced', positive: true }}
+          label="Bills on this page"
+          value={records.length}
+          trend="Matches your filters"
           icon={<ShieldCheck size={20} />}
           accentColor="purple"
         />
@@ -245,6 +245,39 @@ export default function AllInvoicesPage() {
             </button>
           );
         })}
+      </div>
+
+      {/* Quick date ranges */}
+      <div className="-mx-4 px-4 sm:mx-0 sm:px-0 flex gap-2 overflow-x-auto no-scrollbar">
+        {(() => {
+          const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          const now = new Date();
+          const weekStart = new Date(now);
+          weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+          const presets = [
+            { label: 'All dates', from: '', to: '' },
+            { label: 'Today', from: ymd(now), to: ymd(now) },
+            { label: 'This week', from: ymd(weekStart), to: ymd(now) },
+            { label: 'This month', from: ymd(new Date(now.getFullYear(), now.getMonth(), 1)), to: ymd(now) },
+            { label: 'Last month', from: ymd(new Date(now.getFullYear(), now.getMonth() - 1, 1)), to: ymd(new Date(now.getFullYear(), now.getMonth(), 0)) },
+          ];
+          return presets.map((p) => {
+            const on = fromDate === p.from && toDate === p.to;
+            return (
+              <button
+                key={p.label}
+                onClick={() => {
+                  setFromDate(p.from);
+                  setToDate(p.to);
+                  setPage(1);
+                }}
+                className={`app-chip shrink-0 ${on ? 'app-chip-on' : 'app-chip-off'}`}
+              >
+                {p.label}
+              </button>
+            );
+          });
+        })()}
       </div>
 
       {/* Filter & Search Bar */}

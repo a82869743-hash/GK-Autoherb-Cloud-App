@@ -1,5 +1,11 @@
+require('dotenv').config();
+
 async function testSMS() {
-  const apiKey = '53af389f-418d-11f1-9800-0200cd936042';
+  const apiKey = process.env.MSG91_AUTH_KEY || process.env.TWOFACTOR_API_KEY;
+  if (!apiKey) {
+    console.error('MSG91_AUTH_KEY or TWOFACTOR_API_KEY not configured in .env');
+    return;
+  }
   const url = `https://2factor.in/API/V1/${apiKey}/ADDON_SERVICES/SEND/TSMS`;
 
   const payloads = [

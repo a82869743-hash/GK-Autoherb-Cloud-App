@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import io from 'socket.io-client';
-import { Clock, Droplets, CheckCircle2, Car, Sparkles, Activity, Shield } from 'lucide-react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { createSocket } from '../../lib/socket';
+import JobCardTracker from './JobCardTracker';
+import { Clock, Droplets, CheckCircle2, Car, Sparkles, Activity, Shield, Share2 } from 'lucide-react';
 import api from '../../api/axiosInstance';
 
 const WASH_PHASE_LABELS = {
@@ -25,6 +26,13 @@ const PHASE_DETAILS = {
 const PHASE_ORDER = ['pre_wash', 'foam_apply', 'pressure_rinse', 'interior_clean', 'dry_polish', 'complete'];
 
 export default function JobTrackingPage() {
+  const [params] = useSearchParams();
+  // Job-card links from WhatsApp carry a signed token (?t=); quick-wash links don't
+  if (params.get('t')) return <JobCardTracker />;
+  return <QuickWashTracking />;
+}
+
+function QuickWashTracking() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   
@@ -68,9 +76,8 @@ export default function JobTrackingPage() {
   useEffect(() => {
     if (!id) return;
 
-    const socketUrl = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:5000';
     // Connect as guest (no token needed, app.js middleware allows it)
-    const socket = io(socketUrl, { transports: ['websocket', 'polling'] });
+    const socket = createSocket();
 
     socket.on('connect', () => {
       console.log('Socket connected for live tracking');
@@ -141,14 +148,14 @@ export default function JobTrackingPage() {
         
         {/* GK Header */}
         <div className="text-center">
-          <h1 className="text-3xl font-black tracking-tight text-[#1c1b1b]">GK AUTOHERB</h1>
-          <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Car Studio Management</p>
+          <h1 className="text-xl sm:text-[22px] font-semibold tracking-tight text-[#1c1b1b]">GK AutoHerb</h1>
+          <p className="text-xs text-gray-500 font-medium tracking-normal mt-0.5">Car Studio Management</p>
         </div>
 
         {/* Live Card */}
-        <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100 card-premium">
+        <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm overflow-hidden border border-gray-100 card-premium">
           {/* Top Banner */}
-          <div className="bg-gradient-to-br from-[#1c1b1b] to-[#2c2b2b] p-6 text-center text-white relative">
+          <div className="bg-gradient-to-br from-[#1c1b1b] to-[#2c2b2b] p-5 text-center text-white relative">
             <div className="absolute top-2 right-2 flex items-center gap-1.5 bg-red-600/10 text-red-400 border border-red-500/20 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider animate-pulse">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
               Live Tracking
@@ -227,10 +234,22 @@ export default function JobTrackingPage() {
         {/* Before & After Photo Gallery */}
         {jobPhotos.length > 0 && (
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 space-y-4">
-            <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
-              <Sparkles size={16} className="text-[#D32F2F]" />
-              <span>Vehicle Before & After Inspection Photos</span>
-            </h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
+                <Sparkles size={16} className="text-[#D32F2F]" />
+                <span>Vehicle Before & After Inspection Photos</span>
+              </h3>
+              <button
+                onClick={() => {
+                  const shareText = encodeURIComponent(`GK AutoHerb Car Studio: Check out my vehicle detailing inspection photos & real-time progress: ${window.location.href}`);
+                  window.open(`https://api.whatsapp.com/send?text=${shareText}`, '_blank');
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-xl hover:bg-emerald-100 transition-all active:scale-95"
+              >
+                <Share2 size={13} />
+                <span>Share Photos</span>
+              </button>
+            </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>

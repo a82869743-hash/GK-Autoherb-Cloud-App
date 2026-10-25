@@ -1,194 +1,160 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { Phone, CheckCircle2, Truck, Navigation, Clock, MapPin } from 'lucide-react';
 import { useDelivery, useDeliveryLocation } from '../../api/hooks/useDeliveries';
+import { useCustomerProfile } from '../../api/hooks/useCustomerApp';
+import { usePublicSettings } from '../../api/hooks/useSettings';
 import { useAuthStore } from '../../store/authStore';
-import io from 'socket.io-client';
-import { ArrowLeft, Phone, MapPin, Clock, CheckCircle2, Truck } from 'lucide-react';
+import { createSocket } from '../../lib/socket';
+import LiveMap from '../../components/customer/LiveMap';
+import { AppPageHeader } from '../../components/customer/ui';
+import { calculateHaversineDistance, estimateDriveMinutes, resolveStudioLocation } from '../../utils/locationService';
+
+type Fix = { lat: number; lng: number; at: number };
+
+function agoLabel(ts: number | null) {
+  if (!ts) return 'waiting for GPS';
+  const s = Math.round((Date.now() - ts) / 1000);
+  if (s < 10) return 'live';
+  if (s < 60) return `${s}s ago`;
+  return `${Math.round(s / 60)} min ago`;
+}
 
 export default function TrackingPage() {
   const { id } = useParams();
-  const navigate = useNavigate();
-  const { token } = useAuthStore();
-  const { data: delivery, isLoading, error } = useDelivery(Number(id));
-  const { data: locationData } = useDeliveryLocation(Number(id));
-  const [staffLocation, setStaffLocation] = useState<{lat: number, lng: number} | null>(null);
+  const token = useAuthStore((s) => s.token);
+  const { data: delivery, isLoading, error, refetch } = useDelivery(Number(id));
+  const { data: polled } = useDeliveryLocation(Number(id));
+  const { data: profile } = useCustomerProfile();
+  const { data: settingsRes } = usePublicSettings();
+  const [fix, setFix] = useState<Fix | null>(null);
+  const [trail, setTrail] = useState<Fix[]>([]);
+  const [, tick] = useState(0);
 
-  // Use polled location as fallback, socket for real-time
+  const pushFix = (lat: number, lng: number, at = Date.now()) => {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    setFix((prev) => (prev && prev.at > at ? prev : { lat, lng, at }));
+    setTrail((t) => (t.length && t[t.length - 1].lat === lat && t[t.length - 1].lng === lng ? t : [...t.slice(-200), { lat, lng, at }]));
+  };
+
+  // Polling fallback (every 5s) — also gives the last known point on open
   useEffect(() => {
-    if (locationData?.last_lat && locationData?.last_lng) {
-      setStaffLocation({ lat: parseFloat(locationData.last_lat), lng: parseFloat(locationData.last_lng) });
+    if (polled?.last_lat && polled?.last_lng) {
+      pushFix(parseFloat(polled.last_lat), parseFloat(polled.last_lng), polled.location_updated_at ? new Date(polled.location_updated_at).getTime() : Date.now());
     }
-  }, [locationData]);
+  }, [polled?.last_lat, polled?.last_lng, polled?.location_updated_at]);
 
-  // Socket.io for real-time location updates
+  // Real-time updates over socket.io
   useEffect(() => {
     if (!id || !token) return;
-
-    const socketUrl = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:5000';
-    const newSocket = io(socketUrl, { auth: { token }, transports: ['websocket', 'polling'] });
-
-    newSocket.on('connect', () => {
-      newSocket.emit('join_delivery', { deliveryId: Number(id) });
-    });
-
-    newSocket.on('location_update', (loc) => {
-      if (loc && loc.lat && loc.lng) {
-        setStaffLocation({ lat: parseFloat(loc.lat), lng: parseFloat(loc.lng) });
-      }
-    });
-
-    newSocket.on('location', (loc) => {
-      if (loc && loc.lat && loc.lng) {
-        setStaffLocation({ lat: parseFloat(loc.lat), lng: parseFloat(loc.lng) });
-      }
-    });
-
-    newSocket.on('delivery_completed', () => {
-      // Trigger refetch
-      window.location.reload();
-    });
-
+    const socket = createSocket(token);
+    socket.on('connect', () => socket.emit('join_delivery', { deliveryId: Number(id) }));
+    const onLoc = (loc: any) => loc && pushFix(parseFloat(loc.lat), parseFloat(loc.lng));
+    socket.on('location_update', onLoc);
+    socket.on('location', onLoc);
+    socket.on('delivery_completed', () => refetch());
     return () => {
-      newSocket.disconnect();
+      socket.disconnect();
     };
   }, [id, token]);
 
-  if (isLoading) return (
-    <div className="p-8 text-center text-[#5f5e5e] animate-fade-in">
-      <div className="animate-spin w-8 h-8 rounded-full border-4 border-gray-200 border-t-[#D32F2F] mx-auto mb-3" />
-      Loading delivery details...
-    </div>
-  );
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 5000);
+    return () => clearInterval(t);
+  }, []);
 
-  if (error || !delivery) return (
-    <div className="p-8 text-center">
-      <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
-        <Truck size={28} className="text-red-400" />
+  const studio = useMemo(() => resolveStudioLocation(settingsRes?.data), [settingsRes]);
+  const home = profile?.addresses?.find((a) => a.is_default) || profile?.addresses?.[0];
+  const destination = home?.latitude && home?.longitude ? { lat: Number(home.latitude), lng: Number(home.longitude) } : null;
+  const kmLeft = fix && destination ? calculateHaversineDistance(fix.lat, fix.lng, destination.lat, destination.lng) : null;
+
+  if (isLoading) {
+    return <div className="py-24 flex justify-center"><div className="h-8 w-8 rounded-full border-4 border-slate-200 border-t-[#D32F2F] animate-spin" /></div>;
+  }
+  if (error || !delivery) {
+    return (
+      <div>
+        <AppPageHeader title="Track delivery" />
+        <div className="app-card p-8 text-center mt-4">
+          <Truck className="mx-auto text-slate-300" size={40} />
+          <p className="font-display font-bold mt-3">Delivery not found</p>
+          <p className="text-sm text-slate-500">This delivery may have finished or isn't linked to your account.</p>
+        </div>
       </div>
-      <p className="text-red-500 font-bold text-lg mb-2">Delivery Not Found</p>
-      <p className="text-gray-500 text-sm mb-4">This delivery may not exist or you don't have access.</p>
-      <button
-        onClick={() => navigate('/customer')}
-        className="px-4 py-2 bg-[#D32F2F] text-white rounded-lg text-sm font-semibold hover:bg-[#b71c1c] transition-colors"
-      >
-        Back to Dashboard
-      </button>
-    </div>
-  );
+    );
+  }
 
-  const isDelivered = delivery.status === 'delivered';
-  const isInTransit = delivery.status === 'in_transit';
+  const delivered = delivery.status === 'delivered';
 
   return (
-    <div className="max-w-3xl mx-auto p-4 md:p-8">
-      {/* Back button */}
-      <button
-        onClick={() => navigate('/customer')}
-        className="flex items-center gap-2 text-gray-500 hover:text-gray-900 mb-4 text-sm font-medium transition-colors"
-      >
-        <ArrowLeft size={14} /> Back to Dashboard
-      </button>
+    <div className="-mx-4 min-h-[100dvh] flex flex-col">
+      <div className="px-4">
+        <AppPageHeader title={delivered ? 'Delivered' : 'Live delivery'} subtitle={`${delivery.brand} ${delivery.model} · ${delivery.registration_no}`} />
+      </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden card-premium">
-        {/* Hero header */}
-        <div className="hero-bg text-white p-6 text-center relative overflow-hidden pattern-overlay">
-          <div className="relative z-10">
-            <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center mx-auto mb-3 animate-float">
-              {isDelivered ? (
-                <CheckCircle2 size={24} className="text-green-400" />
-              ) : (
-                <Truck size={24} className="text-[#D32F2F]" />
-              )}
-            </div>
-            <h1 className="text-2xl font-black mb-1 tracking-tight">
-              {isDelivered ? 'Vehicle Delivered ✅' : 'Live Vehicle Delivery'}
-            </h1>
-            <p className="text-white/60 text-sm font-medium">Tracking {delivery.registration_no}</p>
+      <div className="relative flex-1 min-h-[52dvh]">
+        {delivered ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-emerald-50">
+            <CheckCircle2 size={56} className="text-emerald-600" />
+            <p className="font-display text-xl font-extrabold mt-3">Your car has been delivered</p>
+            {delivery.delivered_at && <p className="text-sm text-slate-500 mt-1">{new Date(delivery.delivered_at).toLocaleString('en-IN')}</p>}
           </div>
-          <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#D32F2F] via-[#D32F2F]/40 to-transparent" />
-        </div>
-
-        <div className="p-6">
-          {/* Status + Executive info */}
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <p className="text-[9px] uppercase font-bold tracking-widest text-[#5f5e5e] mb-1.5">Status</p>
-              <span className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider border ${
-                isDelivered
-                  ? 'bg-green-50 text-green-700 border-green-200'
-                  : 'bg-blue-50 text-blue-700 border-blue-200 animate-pulse'
-              }`}>
-                {isDelivered ? '✅ Delivered' : '🚗 In Transit'}
-              </span>
-            </div>
-            <div className="text-right">
-              <p className="text-[9px] uppercase font-bold tracking-widest text-[#5f5e5e] mb-1.5">Assigned Executive</p>
-              <p className="font-bold text-[#1c1b1b]">{delivery.staff_name}</p>
-              {delivery.staff_mobile && (
-                <a
-                  href={`tel:${delivery.staff_mobile}`}
-                  className="inline-flex items-center gap-1 text-[#D32F2F] text-sm font-medium hover:underline"
-                >
-                  <Phone size={12} /> {delivery.staff_mobile}
-                </a>
-              )}
-            </div>
-          </div>
-
-          {/* Vehicle Info */}
-          <div className="bg-[#faf7f5] rounded-xl p-4 mb-4 border border-gray-100">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
-                <MapPin size={18} className="text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-[#1c1b1b]">{delivery.brand} {delivery.model}</p>
-                <p className="text-xs text-gray-500">{delivery.registration_no}</p>
-              </div>
-              {isInTransit && staffLocation && (
-                <span className="ml-auto flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded-lg border border-green-200">
-                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" /> Live
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Map / Status Area */}
-          <div className="bg-[#faf7f5] rounded-xl h-64 md:h-96 w-full flex items-center justify-center relative overflow-hidden border border-gray-100">
-            {isDelivered ? (
-              <div className="text-center p-6 animate-scale-in">
-                <div className="w-16 h-16 bg-green-100 text-green-600 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-sm">
-                  <CheckCircle2 size={32} />
-                </div>
-                <h3 className="font-black text-xl text-[#1c1b1b] mb-1">Vehicle Delivered</h3>
-                <p className="text-[#5f5e5e] text-sm">Your vehicle was successfully delivered.</p>
-                {delivery.delivered_at && (
-                  <p className="text-xs text-gray-400 mt-2">
-                    <Clock size={12} className="inline mr-1" />
-                    {new Date(delivery.delivered_at).toLocaleString('en-IN')}
-                  </p>
-                )}
-              </div>
-            ) : staffLocation && !isNaN(staffLocation.lat) && !isNaN(staffLocation.lng) ? (
-              <div className="absolute inset-0">
-                <iframe 
-                  width="100%" 
-                  height="100%" 
-                  frameBorder="0" 
-                  style={{border:0}}
-                  loading="lazy"
-                  src={`https://maps.google.com/maps?q=${staffLocation.lat},${staffLocation.lng}&z=15&output=embed`} 
-                  allowFullScreen
-                />
-              </div>
-            ) : (
-              <div className="text-center p-6 bg-white/80 backdrop-blur-sm rounded-xl shadow-sm z-10 m-4 border border-gray-100">
-                <div className="animate-spin w-8 h-8 rounded-full border-4 border-gray-200 border-t-[#D32F2F] mx-auto mb-3" />
-                <p className="text-sm font-medium text-[#5f5e5e]">Waiting for GPS signal from the executive...</p>
-                <p className="text-xs text-gray-400 mt-1">Location updates every 5 seconds</p>
+        ) : (
+          <>
+            <LiveMap car={fix} destination={destination} studio={{ lat: studio.lat, lng: studio.lng }} trail={trail} className="absolute inset-0" />
+            {!fix && (
+              <div className="absolute inset-x-4 top-4 z-[500] app-card px-4 py-3 text-sm text-slate-600 flex items-center gap-2">
+                <span className="h-4 w-4 rounded-full border-2 border-slate-300 border-t-[#D32F2F] animate-spin" />
+                Waiting for the driver's GPS signal…
               </div>
             )}
+          </>
+        )}
+      </div>
+
+      <div className="relative z-[600] -mt-6 rounded-t-3xl bg-white px-4 pt-5 pb-8 shadow-sheet">
+        <div className="flex items-center gap-3">
+          <span className={`h-12 w-12 rounded-2xl flex items-center justify-center ${delivered ? 'bg-emerald-100 text-emerald-700' : 'bg-[#D32F2F] text-white'}`}>
+            {delivered ? <CheckCircle2 size={24} /> : <Truck size={24} />}
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="font-display text-lg font-extrabold text-slate-900">{delivered ? 'Delivered' : 'On the way to you'}</p>
+            <p className="text-xs text-slate-500 flex items-center gap-1">
+              <span className={`h-2 w-2 rounded-full ${fix && Date.now() - fix.at < 60000 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+              Location {agoLabel(fix?.at ?? null)}
+            </p>
           </div>
+        </div>
+
+        {!delivered && kmLeft !== null && (
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <p className="text-[11px] text-slate-500 flex items-center gap-1"><Navigation size={12} /> Distance</p>
+              <p className="font-display text-lg font-extrabold">{kmLeft} km</p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <p className="text-[11px] text-slate-500 flex items-center gap-1"><Clock size={12} /> Arriving in</p>
+              <p className="font-display text-lg font-extrabold">~{estimateDriveMinutes(kmLeft)} min</p>
+            </div>
+          </div>
+        )}
+        {!delivered && !destination && (
+          <p className="mt-3 text-xs text-slate-500 flex items-center gap-1.5"><MapPin size={13} /> Pin your address (Profile → Saved addresses → use current location) to see distance & ETA.</p>
+        )}
+
+        <div className="mt-4 flex items-center gap-3 rounded-2xl border border-slate-200 p-3">
+          <div className="h-10 w-10 rounded-full bg-slate-900 text-white font-display font-bold flex items-center justify-center">
+            {(delivery.staff_name || 'D').charAt(0)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-display font-bold text-slate-900 truncate">{delivery.staff_name}</p>
+            <p className="text-xs text-slate-500">Your GK AutoHerb driver</p>
+          </div>
+          {delivery.staff_mobile && (
+            <a href={`tel:${delivery.staff_mobile}`} className="h-11 w-11 rounded-full bg-emerald-500 text-white flex items-center justify-center" aria-label="Call driver">
+              <Phone size={19} />
+            </a>
+          )}
         </div>
       </div>
     </div>

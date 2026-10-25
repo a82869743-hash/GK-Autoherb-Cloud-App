@@ -1,138 +1,86 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ClipboardList, ChevronDown, ChevronUp, Download, Calendar, Car, Hash, Clock } from 'lucide-react';
+import { ClipboardList, Download, Calendar, Car, Share2, Radio } from 'lucide-react';
 import { useJobCarts } from '../../api/hooks/useJobCarts';
 import { useAuthStore } from '../../store/authStore';
-import StatusBadge from '../../components/shared/StatusBadge';
-import EmptyState from '../../components/shared/EmptyState';
-import ErrorState from '../../components/shared/ErrorState';
-import { SkeletonCard } from '../../components/ui/SkeletonLoader';
 import { formatINR, formatDate } from '../../utils/formatters';
-import type { JobPhoto } from '../../types';
+import { AppPageHeader, EmptyBlock, Skeleton } from '../../components/customer/ui';
+
+const STAGE_LABEL: Record<string, string> = {
+  received: 'Vehicle received', inspection: 'Inspection', washing: 'Washing', detailing: 'Detailing',
+  curing: 'Coating & curing', quality_check: 'Quality check', ready: 'Ready for pickup', delivered: 'Delivered',
+};
 
 export default function CustomerJobCartsPage() {
-  const { data, isLoading, isError, refetch } = useJobCarts({ page: 1, limit: 100 });
-  const [expanded, setExpanded] = useState<number | null>(null);
+  const { data, isLoading } = useJobCarts({ page: 1, limit: 100 });
   const token = useAuthStore((s) => s.token);
+  const carts: any[] = data?.data || [];
 
-  if (isError) {
-    return (
-      <div className="pt-4">
-        <h2 className="text-2xl font-extrabold text-[#1c1b1b] tracking-tight mb-6">My Job Carts</h2>
-        <ErrorState
-          message="Failed to load job carts. Please check your connection and try again."
-          onRetry={() => refetch()}
-        />
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="space-y-4 pt-4">
-        <h2 className="text-2xl font-extrabold text-[#1c1b1b] tracking-tight">My Job Carts</h2>
-        <div className="grid gap-4">{[1, 2, 3].map(i => <SkeletonCard key={i} />)}</div>
-      </div>
-    );
-  }
-
-  const carts = data?.data || [];
-
-  if (!carts.length) {
-    return (
-      <div className="pt-4">
-        <h2 className="text-2xl font-extrabold text-[#1c1b1b] tracking-tight mb-6">My Job Carts</h2>
-        <EmptyState
-          icon={ClipboardList}
-          title="No Job Carts Yet"
-          description="Your service history will appear here after your first visit"
-        />
-      </div>
-    );
-  }
-
-  const handleDownloadInvoice = (cartId: number) => {
+  const downloadInvoice = (cartId: number) => {
     const apiBase = import.meta.env.VITE_API_URL || '/api';
-    window.open(
-      `${apiBase}/job-carts/${cartId}/invoice?token=${token}`,
-      '_blank'
-    );
+    window.open(`${apiBase}/job-carts/${cartId}/invoice?token=${token}`, '_blank');
   };
 
   return (
-    <div className="pt-4">
-      <h2 className="text-2xl font-extrabold text-[#1c1b1b] tracking-tight mb-6">My Job Carts</h2>
+    <div>
+      <AppPageHeader title="Service history" subtitle="Job cards, live status & invoices" />
+      <div className="mt-2 space-y-3">
+        {isLoading ? (
+          [1, 2, 3].map((i) => <Skeleton key={i} className="h-36" />)
+        ) : carts.length === 0 ? (
+          <EmptyBlock icon={<ClipboardList size={24} />} title="No visits yet" text="Your job cards and invoices appear here after your first visit." />
+        ) : (
+          carts.map((cart) => {
+            const live = cart.status === 'open' || cart.status === 'draft';
+            return (
+              <div key={cart.id} className="app-card p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-display font-extrabold text-slate-900">{cart.brand} {cart.model}</p>
+                    <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-3">
+                      <span className="flex items-center gap-1"><Car size={12} /> {cart.registration_no}</span>
+                      <span className="flex items-center gap-1"><Calendar size={12} /> {formatDate(cart.visit_date)}</span>
+                      <span>Visit #{cart.visit_number}</span>
+                    </p>
+                  </div>
+                  <span className="font-display font-extrabold text-slate-900 whitespace-nowrap">{formatINR(cart.total_amount)}</span>
+                </div>
 
-      <div className="space-y-3">
-        {carts.map((cart: any, idx: number) => {
-          const isOpen = expanded === cart.id;
-          return (
-            <div
-              key={cart.id}
-              className="bg-white rounded-xl shadow-sm overflow-hidden transition-all border border-gray-100 card-premium opacity-0 animate-fade-in-up"
-              style={{ animationDelay: `${idx * 0.04}s`, animationFillMode: 'forwards' }}
-            >
-              {/* Red accent side */}
-              <div className="flex">
-                <div className={`w-1 shrink-0 transition-colors duration-200 ${isOpen ? 'bg-gradient-to-b from-[#af101a] to-[#D32F2F]' : 'bg-transparent'}`} />
-                <div className="flex-1">
-                  {/* Card Header */}
-                  <button
-                    onClick={() => setExpanded(isOpen ? null : cart.id)}
-                    className="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-[#faf7f5] transition-colors"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-extrabold text-[#1c1b1b] tracking-wide">{cart.registration_no}</span>
-                        <StatusBadge status={cart.status} />
-                      </div>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#5f5e5e]">
-                        <span className="flex items-center gap-1"><Car size={12} /> {cart.brand} {cart.model}</span>
-                        <span className="flex items-center gap-1"><Calendar size={12} /> {formatDate(cart.visit_date)}</span>
-                        <span className="flex items-center gap-1"><Hash size={12} /> Visit #{cart.visit_number}</span>
-                      </div>
-                    </div>
+                {live ? (
+                  <div className="mt-3 rounded-xl bg-red-50/70 px-3 py-2 flex items-center gap-2 text-[13px]">
+                    <Radio size={15} className="text-[#D32F2F] animate-pulse" />
+                    <span className="font-semibold text-slate-800">{STAGE_LABEL[cart.stage || 'received'] || 'In progress'}</span>
+                  </div>
+                ) : (
+                  <p className="mt-3 text-xs font-semibold text-emerald-700">Completed{cart.invoice_number ? ` · Invoice ${cart.invoice_number}` : ''}</p>
+                )}
 
-                    <div className="flex items-center gap-3 ml-4 shrink-0">
-                      <span className="text-lg font-black text-[#1c1b1b] tracking-tight">{formatINR(cart.total_amount)}</span>
-                      <div className={`p-1 rounded-full transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>
-                        <ChevronDown size={18} className="text-gray-500" />
-                      </div>
-                    </div>
-                  </button>
-
-                  {/* Expanded Content */}
-                  {isOpen && (
-                    <div className="px-5 pb-5 border-t border-gray-100 animate-fade-in">
-                      <div className="py-3">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2">Services</p>
-                        <p className="text-sm text-[#5f5e5e]">{cart.services_count} service(s) · Total: {formatINR(cart.total_amount)}</p>
-                      </div>
-
-                      <div className="pt-3 border-t border-gray-100 flex flex-wrap items-center gap-2">
-                        <Link
-                          to={`/job/${cart.id}`}
-                          className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-lg transition-all"
-                        >
-                          <Clock size={14} className="text-[#D32F2F]" />
-                          <span>Track Progress & Photos</span>
-                        </Link>
-                        {cart.status === 'complete' && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleDownloadInvoice(cart.id); }}
-                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-br from-[#af101a] to-[#D32F2F] text-white text-xs font-bold uppercase tracking-wider rounded-lg hover:shadow-glow-red transition-all hover:-translate-y-0.5"
-                          >
-                            <Download size={14} /> Download Invoice
-                          </button>
-                        )}
-                      </div>
-                    </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {cart.tracking_path && (
+                    <Link to={cart.tracking_path} className="app-btn h-9 px-3 bg-slate-100 text-slate-800 text-[13px]">
+                      {live ? 'Track live' : 'View timeline'}
+                    </Link>
+                  )}
+                  {cart.status === 'complete' && (
+                    <>
+                      <button onClick={() => downloadInvoice(cart.id)} className="app-btn h-9 px-3 bg-[#111] text-white text-[13px]">
+                        <Download size={14} /> Invoice
+                      </button>
+                      <button
+                        onClick={() => {
+                          const text = encodeURIComponent(`GK AutoHerb invoice for ${cart.registration_no} (${cart.brand} ${cart.model}): ${cart.invoice_number || cart.id} · ${formatINR(cart.total_amount)}`);
+                          window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+                        }}
+                        className="app-btn h-9 px-3 bg-emerald-50 text-emerald-700 text-[13px]"
+                      >
+                        <Share2 size={14} /> Share
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );

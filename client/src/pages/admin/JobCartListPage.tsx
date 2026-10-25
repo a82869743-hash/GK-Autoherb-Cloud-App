@@ -109,15 +109,16 @@ export default function JobCartListPage() {
       
       {/* ─── Top Header Bar ────────────────────────────────────────── */}
       <AdminHeaderBar
-        title="Job Cards"
-        subtitle={`${stats.total} total vehicle job cards in studio`}
+        category="Workshop Operations"
+        title="Job Cards & Work Orders"
+        subtitle="Live vehicle progress, technician work orders and detailing queue"
       >
         <button
           onClick={() => navigate('/admin/job-carts/new')}
-          className="px-4 py-2.5 bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs font-bold rounded-2xl shadow-sm hover:shadow transition-all inline-flex items-center gap-1.5 active:scale-95 shrink-0"
+          className="px-4 py-2 bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs font-bold rounded-xl shadow-xs hover:shadow transition-all inline-flex items-center gap-1.5 active:scale-95 shrink-0"
         >
           <Plus size={15} />
-          <span>+ New Job Card</span>
+          <span>New Job Card</span>
         </button>
       </AdminHeaderBar>
 
@@ -127,7 +128,7 @@ export default function JobCartListPage() {
           label="Total Job Cards"
           value={stats.total.toLocaleString()}
           icon={<FileText size={18} />}
-          trend="↑ 12.5%"
+          trend="All time"
           variant="red"
         />
         <AdminMetricCard

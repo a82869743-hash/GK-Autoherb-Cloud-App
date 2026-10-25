@@ -20,6 +20,13 @@ router.delete('/categories/:id',  auth, role(['admin']), ctrl.deleteCategory);
 router.get('/:serviceId/addons',           ctrl.listAddons);   // public
 router.post('/:serviceId/addons',          auth, role(['admin']), ctrl.createAddon);
 router.put('/:serviceId/addons/:addonId',  auth, role(['admin']), ctrl.updateAddon);
-router.delete('/:serviceId/addons/:addonId', auth, role(['admin']), ctrl.deleteAddon);
+// ─── Service Media, Videos & Images ────────────────
+const upload = require('../middleware/upload');
+
+router.get('/:id/media',                   ctrl.listMedia); // public
+router.post('/:id/media',                  auth, role(['admin']), upload.single('file'), ctrl.addMedia);
+router.delete('/:id/media/:mediaId',       auth, role(['admin']), ctrl.deleteMedia);
+router.put('/:id/main-image',              auth, role(['admin']), upload.single('file'), ctrl.updateMainImage);
+router.post('/bulk-image-update',          auth, role(['admin']), ctrl.bulkUpdateImages);
 
 module.exports = router;

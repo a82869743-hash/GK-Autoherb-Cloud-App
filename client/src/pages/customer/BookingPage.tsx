@@ -21,6 +21,13 @@ import QrPaymentModal from '../../components/shared/QrPaymentModal';
 import PaymentSandboxModal from '../../components/shared/PaymentSandboxModal';
 import Modal from '../../components/ui/Modal';
 import ServiceDetailsModal from '../../components/shared/ServiceDetailsModal';
+import CouponInput from '../../components/shared/CouponInput';
+import { SERVICE_CATEGORIES, ServiceCategoryKey, matchesServiceCategory } from './ServicesPage';
+import { priceForSegment, segmentForVehicle, SEGMENT_LABEL } from '../../utils/pricing';
+import { useGarageStore } from '../../store/garageStore';
+import { useMyVouchers } from '../../api/hooks/useCustomerApp';
+import { AppPageHeader } from '../../components/customer/ui';
+import ServiceImage from '../../components/customer/ServiceImage';
 import { 
   getDeviceLiveLocation, 
   reverseGeocodeCoords, 
@@ -31,6 +38,15 @@ import {
   OWNER_STUDIO_LOCATION,
   LocationCoordinates 
 } from '../../utils/locationService';
+
+const CATEGORY_LABELS: Record<string, string> = {
+  hatchback: 'Hatchback',
+  medium_hatchback: 'Medium Hatchback',
+  sedan: 'Sedan',
+  premium_sedan: 'Premium Sedan',
+  suv: 'SUV',
+  luxury: 'Luxury',
+};
 
 const STEPS = ['Service & Vehicle', 'Date', 'Time', 'Confirm'];
 
@@ -50,31 +66,33 @@ function sortServicesByPriority(services: any[]): any[] {
   return [...services].sort((a, b) => getServicePriority(a.name) - getServicePriority(b.name));
 }
 
-function getServiceImage(name: string): string {
-  const n = (name || '').toLowerCase();
-  if (n.includes('ceramic') || n.includes('coating')) return '/services/ceramic_coating.jpg';
-  if (n.includes('ppf') || n.includes('paint protection') || n.includes('film')) return '/services/ppf_protection.jpg';
-  if (n.includes('interior') || n.includes('deep clean') || n.includes('upholstery') || n.includes('seat')) return '/services/interior_detailing.jpg';
-  if (n.includes('polish') || n.includes('compound') || n.includes('wax') || n.includes('teflon') || n.includes('rubbing')) return '/services/paint_polish.jpg';
-  if (n.includes('exterior body') || n.includes('body wash')) return '/services/exterior_body.jpg';
-  if (n.includes('wash') || n.includes('foam') || n.includes('clean')) return '/services/car_wash.jpg';
-  if (n.includes('detailing') || n.includes('spa') || n.includes('premium')) return '/services/detailing_spa.jpg';
-  return '/services/wash_clean.jpg';
-}
-
 export default function BookingPage() {
   const toast = useUIStore((s) => s.toast);
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const createMut = useCreateBooking();
 
   const [step, setStep] = useState(0);
   const [filter, setFilter] = useState('sedan');
+  const urlCategory = searchParams.get('category') as ServiceCategoryKey;
+  const initialCategory: ServiceCategoryKey = (urlCategory && ['all', 'general', 'washing', 'coating_ppf'].includes(urlCategory)) ? urlCategory : 'all';
+  const [serviceCategory, setServiceCategory] = useState<ServiceCategoryKey>(initialCategory);
+
+  useEffect(() => {
+    const cat = searchParams.get('category') as ServiceCategoryKey;
+    if (cat && ['all', 'general', 'washing', 'coating_ppf'].includes(cat)) {
+      setServiceCategory(cat);
+    }
+  }, [searchParams]);
   const [serviceSearch, setServiceSearch] = useState('');
   const [selectedDetailService, setSelectedDetailService] = useState<any | null>(null);
   const [loyalty, setLoyalty] = useState<{ credits: number; free_washes: number; wax_count: number }>({ credits: 0, free_washes: 0, wax_count: 0 });
   const [useFreeWash, setUseFreeWash] = useState(false);
   const [isFirstWashEligible, setIsFirstWashEligible] = useState(false);
+  const [appliedCoupon, setAppliedCoupon] = useState<{ coupon_id: number; code: string; discount_amount: number; title?: string } | null>(null);
+  const [voucherCode, setVoucherCode] = useState<string>((searchParams.get('voucher') || '').toUpperCase());
+  const { data: myVouchers = [] } = useMyVouchers();
+  const activeVehicleId = useGarageStore((s) => s.activeVehicleId);
 
   // QR Payment states
   const [showQrModal, setShowQrModal] = useState(false);
@@ -177,14 +195,14 @@ export default function BookingPage() {
         setUserVehicles(fetchedVehicles);
         
         if (fetchedVehicles.length > 0) {
-          const primary = initialVehicleId
-            ? (fetchedVehicles.find((v: any) => v.id.toString() === initialVehicleId) || fetchedVehicles.find((v: any) => v.is_primary) || fetchedVehicles[0])
-            : (fetchedVehicles.find((v: any) => v.is_primary) || fetchedVehicles[0]);
+          const preferredId = initialVehicleId || (activeVehicleId ? String(activeVehicleId) : null);
+          const primary = (preferredId && fetchedVehicles.find((v: any) => v.id.toString() === preferredId))
+            || fetchedVehicles.find((v: any) => v.is_primary) || fetchedVehicles[0];
           setSelectedVehicleId(primary.id);
           setBrand(primary.brand);
           setModel(primary.model);
           setRegNo(primary.registration_no || '');
-          setFilter(primary.category || getCategoryForModel(primary.brand, primary.model));
+          setFilter(segmentForVehicle(primary));
         } else {
           setManualEntry(true);
           setFilter('sedan');
@@ -238,6 +256,17 @@ export default function BookingPage() {
       } catch {} finally { setServicesLoading(false); }
     })();
   }, []);
+
+  // Deep link from a service card ("Book now"): keep that service pinned first and scroll to it
+  const deepLinkedServiceId = Number(searchParams.get('service_id')) || null;
+  useEffect(() => {
+    if (!deepLinkedServiceId || servicesLoading) return;
+    setServiceCategory('all');
+    const t = setTimeout(() => {
+      document.getElementById(`book-svc-${deepLinkedServiceId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 250);
+    return () => clearTimeout(t);
+  }, [deepLinkedServiceId, servicesLoading]);
 
   // Handle URL params: service_id, package_id, from_package
   useEffect(() => {
@@ -329,18 +358,14 @@ export default function BookingPage() {
     const cat = filter !== 'all' ? filter : 'sedan';
     return selectedServicesObjs.reduce((sum, s) => {
       if (!s.name || !s.name.toLowerCase().includes('wash')) return sum;
-      const priceKey = `price_${cat}`;
-      return sum + (Number(s[priceKey]) || Number(s.price_sedan) || 0);
+      return sum + priceForSegment(s, cat);
     }, 0);
   }, [isPackageBooking, filter, selectedServicesObjs]);
 
   const estimatedTotal = useMemo(() => {
     if (isPackageBooking) return 0;
     const cat = filter !== 'all' ? filter : 'sedan';
-    return selectedServicesObjs.reduce((sum, s) => {
-      const priceKey = `price_${cat}`;
-      return sum + (Number(s[priceKey]) || Number(s.price_sedan) || 0);
-    }, 0);
+    return selectedServicesObjs.reduce((sum, s) => sum + priceForSegment(s, cat), 0);
   }, [isPackageBooking, filter, selectedServicesObjs]);
 
   const activePackageHasFreePickup = useMemo(() => {
@@ -370,9 +395,25 @@ export default function BookingPage() {
     return Math.round(totalAfterFirstWashDiscount * 0.10);
   }, [isPackageBooking, useFreeWash, payAdvance, totalAfterFirstWashDiscount]);
 
+  const couponDiscountAmount = appliedCoupon?.discount_amount || 0;
+
+  const appliedVoucher = useMemo(
+    () => (voucherCode ? (myVouchers as any[]).find((v) => v.voucher_code === voucherCode && v.status === 'active') : null),
+    [voucherCode, myVouchers]
+  );
+  const voucherDiscount = useMemo(() => {
+    if (!appliedVoucher || isPackageBooking) return 0;
+    if (appliedVoucher.reward_type === 'discount_amount') return Number(appliedVoucher.discount_amount) || 0;
+    const matches = selectedServicesObjs.filter((svc) =>
+      appliedVoucher.reward_type === 'free_service' ? Number(svc.id) === Number(appliedVoucher.service_id) : /wash/i.test(svc.name || '')
+    );
+    if (!matches.length) return 0;
+    return Math.min(...matches.map((svc) => priceForSegment(svc, filter)));
+  }, [appliedVoucher, selectedServicesObjs, filter, isPackageBooking]);
+
   const finalTotal = useMemo(() => {
-    return totalAfterFirstWashDiscount - discountAmount + pickupCharge;
-  }, [totalAfterFirstWashDiscount, discountAmount, pickupCharge]);
+    return Math.max(0, totalAfterFirstWashDiscount - discountAmount - couponDiscountAmount - voucherDiscount + pickupCharge);
+  }, [totalAfterFirstWashDiscount, discountAmount, couponDiscountAmount, voucherDiscount, pickupCharge]);
 
   const requiredAdvancePossible = useMemo(() => {
     if (isPackageBooking || useFreeWash) return 0;
@@ -533,6 +574,9 @@ export default function BookingPage() {
         use_package: isPackageBooking ? true : undefined,
         is_free_wash: useFreeWash || undefined,
         pay_advance: !isPackageBooking && !useFreeWash ? payAdvance : undefined,
+        coupon_id: appliedCoupon ? appliedCoupon.coupon_id : undefined,
+        coupon_discount: couponDiscountAmount > 0 ? couponDiscountAmount : undefined,
+        reward_voucher_code: appliedVoucher && voucherDiscount > 0 ? appliedVoucher.voucher_code : undefined,
         pickup_type: pickupOption,
         pickup_address_details: pickupOption !== 'none' ? {
           address: pickupAddress,
@@ -639,35 +683,22 @@ export default function BookingPage() {
   }
 
   return (
-    <div className="pt-4 max-w-2xl mx-auto">
-      {/* Back to bookings */}
-      <button
-        onClick={() => {
-          if (step > 0 && !window.confirm('You have unsaved booking progress. Leave this page?')) return;
-          navigate('/customer/bookings');
+    <div className="pb-4">
+      <AppPageHeader
+        title={isPackageBooking ? 'Book from package' : 'Book a service'}
+        subtitle={`Step ${step + 1} of ${STEPS.length} · ${STEPS[step]}`}
+        onBack={() => {
+          if (step > 0) { setStep(step - 1); return; }
+          navigate(-1);
         }}
-        className="flex items-center gap-2 text-gray-500 hover:text-gray-900 mb-4 text-sm font-medium transition-colors"
-      >
-        <ArrowLeft size={14} /> Back to My Bookings
-      </button>
+      />
 
-      {/* Progress Stepper */}
-      <div className="flex items-center justify-between mb-8">
+      {/* Progress */}
+      <div className="flex gap-1.5 mt-1 mb-5">
         {STEPS.map((label, i) => (
-          <div key={label} className="flex items-center">
-            <div className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-extrabold transition-colors ${
-              i < step ? 'bg-[#D32F2F] text-white' : i === step ? 'bg-[#D32F2F] text-white ring-4 ring-red-100' : 'bg-[#f6f3f2] text-[#5f5e5e]'
-            }`}>
-              {i < step ? <Check size={14} /> : i + 1}
-            </div>
-            {i < STEPS.length - 1 && (
-              <div className={`hidden sm:block w-12 md:w-20 h-0.5 mx-1 ${i < step ? 'bg-[#D32F2F]' : 'bg-gray-200'}`} />
-            )}
-          </div>
+          <span key={label} className={`h-1.5 flex-1 rounded-full transition-colors ${i <= step ? 'bg-[#D32F2F]' : 'bg-slate-200'}`} />
         ))}
       </div>
-
-      <h3 className="text-lg font-extrabold text-[#1c1b1b] uppercase tracking-wide mb-6">{isPackageBooking ? 'Package Services' : STEPS[step]}</h3>
 
       {/* ═══ Step 0: Select Service ═══ */}
       {step === 0 && (
@@ -687,11 +718,7 @@ export default function BookingPage() {
                       setBrand(v.brand);
                       setModel(v.model);
                       setRegNo(v.registration_no || '');
-                      if (v.category) {
-                        setFilter(v.category);
-                      } else {
-                        setFilter(getCategoryForModel(v.brand, v.model));
-                      }
+                      setFilter(segmentForVehicle(v));
                     }
                   }}
                   className="w-full px-4 py-3 bg-[#f6f3f2] border border-transparent rounded-lg text-[#1c1b1b] font-bold focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white focus:border-[#D32F2F]/30 transition-all duration-200 cursor-pointer text-sm"
@@ -722,11 +749,7 @@ export default function BookingPage() {
                       setBrand(primary.brand);
                       setModel(primary.model);
                       setRegNo(primary.registration_no || '');
-                      if (primary.category) {
-                        setFilter(primary.category);
-                      } else {
-                        setFilter(getCategoryForModel(primary.brand, primary.model));
-                      }
+                      setFilter(segmentForVehicle(primary));
                     }}
                     className="text-xs font-bold text-[#D32F2F] hover:underline mb-2"
                   >
@@ -757,8 +780,12 @@ export default function BookingPage() {
                     ]}
                     value={model}
                     onChange={(e) => {
-                      setModel(e.target.value);
+                      const val = e.target.value;
+                      setModel(val);
                       setCustomModel('');
+                      if (val && val !== 'Other' && brand && brand !== 'Others') {
+                        setFilter(getCategoryForModel(brand, val));
+                      }
                     }}
                     placeholder={brand ? "Select Model" : "Select brand first"}
                     disabled={!brand || brand === 'Others'}
@@ -785,7 +812,7 @@ export default function BookingPage() {
                         <input
                           type="text"
                           value={customModel}
-                          onChange={(e) => setCustomModel(e.target.value)}
+                          onChange={(e) => { setCustomModel(e.target.value); setFilter(segmentForVehicle({ brand: brand === 'Others' ? customBrand : brand, model: e.target.value })); }}
                           placeholder="e.g. Cayenne"
                           className="w-full px-4 py-3 bg-[#f6f3f2] border border-transparent rounded-lg text-[#1c1b1b] font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white focus:border-[#D32F2F]/30 transition-all duration-200 text-sm"
                           required
@@ -798,17 +825,26 @@ export default function BookingPage() {
                   <Input label="Registration No (Optional)" placeholder="e.g. GJ01AB1234" value={regNo} onChange={(e) => setRegNo(e.target.value.toUpperCase())} />
                   <div>
                     <label className="block text-xs font-bold text-[#5f5e5e] mb-1.5 uppercase tracking-wide">Vehicle Category *</label>
-                    <select
-                      value={filter}
-                      onChange={(e) => setFilter(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#f6f3f2] border border-transparent rounded-lg text-sm font-bold text-[#1c1b1b] focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white focus:border-[#D32F2F]/30 transition-all duration-200 cursor-pointer"
-                    >
-                      <option value="hatchback">Hatchback</option>
-                      <option value="medium_hatchback">Medium Hatchback</option>
-                      <option value="sedan">Sedan</option>
-                      <option value="premium_sedan">Premium Sedan</option>
-                      <option value="suv">SUV</option>
-                    </select>
+                    {brand && brand !== 'Others' && model && model !== 'Other' ? (
+                      <div className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200/90 rounded-lg flex items-center justify-between">
+                        <span className="text-sm font-bold text-[#1c1b1b]">
+                          {CATEGORY_LABELS[filter] || filter.toUpperCase().replace('_', ' ')}
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <CheckCircle2 size={11} className="text-emerald-600" />
+                          Auto-Classified
+                        </span>
+                      </div>
+                    ) : !brand || !model ? (
+                      <div className="w-full px-3 py-2.5 bg-[#f6f3f2] border border-dashed border-gray-200 rounded-lg text-xs text-gray-400 font-medium flex items-center justify-between">
+                        <span>Select Brand & Model first</span>
+                        <span className="text-[10px] uppercase font-bold text-gray-400">Auto-detected</span>
+                      </div>
+                    ) : (
+                      <div className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200/90 rounded-lg text-sm font-bold text-[#1c1b1b]">
+                        {CATEGORY_LABELS[filter] || 'Sedan'} <span className="text-[11px] font-medium text-slate-500">· studio confirms on arrival</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -866,7 +902,6 @@ export default function BookingPage() {
                           return false;
                         });
                         const isSelected = selectedPackageServiceNames.includes(usage.service_name);
-                        const packageImg = matchedService?.image_url || getServiceImage(usage.service_name);
 
                         return (
                           <div
@@ -887,10 +922,9 @@ export default function BookingPage() {
                           >
                             {/* Service Image */}
                             <div className="relative w-full sm:w-44 h-32 sm:h-auto shrink-0 overflow-hidden bg-slate-100">
-                              <img
-                                src={packageImg}
-                                alt={usage.service_name}
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              <ServiceImage
+                                service={{ name: usage.service_name, image_url: matchedService?.image_url }}
+                                className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                               />
                               <div className="absolute inset-0 bg-gradient-to-t sm:bg-gradient-to-r from-black/50 via-transparent to-transparent pointer-events-none" />
                               {matchedService?.duration_minutes && (
@@ -1033,11 +1067,38 @@ export default function BookingPage() {
                         </div>
                       </div>
 
+                      {/* 4 Service Category Filter Buttons */}
+                      <div className="flex gap-2 overflow-x-auto pb-1 mb-3.5 no-scrollbar">
+                        {SERVICE_CATEGORIES.map((cat) => {
+                          const isSelected = serviceCategory === cat.key;
+                          return (
+                            <button
+                              key={cat.key}
+                              type="button"
+                              onClick={() => {
+                                setServiceCategory(cat.key);
+                                const n = new URLSearchParams(searchParams);
+                                if (cat.key === 'all') n.delete('category');
+                                else n.set('category', cat.key);
+                                setSearchParams(n);
+                              }}
+                              className={`whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                                isSelected
+                                  ? 'bg-gradient-to-r from-[#D32F2F] to-[#b71c1c] text-white shadow-md shadow-red-600/25 scale-[1.02]'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                              }`}
+                            >
+                              {cat.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
                       {/* Filtered Services List */}
                       {(() => {
                         const activeList = sortServicesByPriority(
-                          services.filter(s => s.is_active && (!useFreeWash || (s.name && s.name.toLowerCase().includes('wash'))))
-                        ).filter(s => {
+                          services.filter(s => s.is_active && matchesServiceCategory(s, serviceCategory) && (!useFreeWash || (s.name && s.name.toLowerCase().includes('wash'))))
+                        ).sort((a, b) => (b.id === deepLinkedServiceId ? 1 : 0) - (a.id === deepLinkedServiceId ? 1 : 0)).filter(s => {
                           if (!serviceSearch.trim()) return true;
                           const q = serviceSearch.toLowerCase().trim();
                           return (s.name && s.name.toLowerCase().includes(q)) || (s.description && s.description.toLowerCase().includes(q));
@@ -1062,15 +1123,15 @@ export default function BookingPage() {
                           <div className="grid gap-3.5">
                             {activeList.map((svc) => {
                               const isSelected = selectedServices.includes(svc.id);
-                              const p = parseFloat(String(svc[`price_${filter}`] || svc.price_sedan || 0));
+                              const p = priceForSegment(svc, filter);
                               const isWash = svc.name && svc.name.toLowerCase().includes('wash');
                               const hasDiscount = isFirstWashEligible && isWash && !isPackageBooking && p > 0;
                               const discounted = hasDiscount ? Math.round(p * 0.50) : p;
-                              const serviceImg = svc.image_url || getServiceImage(svc.name);
 
                               return (
                                 <div
                                   key={svc.id}
+                                  id={`book-svc-${svc.id}`}
                                   onClick={() => {
                                     setSelectedServices(prev =>
                                       prev.includes(svc.id) ? prev.filter(id => id !== svc.id) : [...prev, svc.id]
@@ -1086,10 +1147,9 @@ export default function BookingPage() {
                                 >
                                   {/* Service Relevant Image */}
                                   <div className="relative w-full sm:w-44 h-36 sm:h-auto shrink-0 overflow-hidden bg-slate-100">
-                                    <img
-                                      src={serviceImg}
-                                      alt={svc.name}
-                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                    <ServiceImage
+                                      service={svc}
+                                      className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                                     />
                                     <div className="absolute inset-0 bg-gradient-to-t sm:bg-gradient-to-r from-black/50 via-transparent to-transparent pointer-events-none" />
 
@@ -1173,7 +1233,7 @@ export default function BookingPage() {
                                           <span className="text-base font-black text-[#1c1b1b]">₹{p}</span>
                                         )}
                                         <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">
-                                          For {filter === 'medium_hatchback' ? 'Med Hatch' : filter === 'premium_sedan' ? 'Prem Sedan' : filter.toUpperCase().replace('_', ' ')}
+                                          For your {SEGMENT_LABEL[filter] || 'car'}
                                         </p>
                                       </div>
 
@@ -1471,6 +1531,53 @@ export default function BookingPage() {
                       <span className="ml-auto">-₹{discountAmount}</span>
                     </div>
                   )}
+                  {couponDiscountAmount > 0 && (
+                    <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-emerald-600 bg-emerald-50/70 px-2.5 rounded-lg">
+                      <span className="text-emerald-700 font-bold flex items-center gap-1.5">
+                        <Gift size={14} className="text-emerald-600" />
+                        Coupon Applied ({appliedCoupon?.code})
+                      </span>
+                      <span className="ml-auto text-emerald-700 font-extrabold">-₹{couponDiscountAmount}</span>
+                    </div>
+                  )}
+                  {voucherDiscount > 0 && (
+                    <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-emerald-600 bg-emerald-50/70 px-2.5 rounded-lg">
+                      <span className="text-emerald-700 font-bold flex items-center gap-1.5">
+                        <Gift size={14} className="text-emerald-600" />
+                        Reward voucher ({appliedVoucher?.voucher_code})
+                      </span>
+                      <span className="ml-auto text-emerald-700 font-extrabold">-₹{voucherDiscount}</span>
+                    </div>
+                  )}
+                  {(myVouchers as any[]).some((v) => v.status === 'active') && (
+                    <div className="pt-2">
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Reward voucher</label>
+                      <select
+                        value={voucherCode}
+                        onChange={(e) => setVoucherCode(e.target.value)}
+                        className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold"
+                      >
+                        <option value="">Don't use a voucher</option>
+                        {(myVouchers as any[]).filter((v) => v.status === 'active').map((v) => (
+                          <option key={v.id} value={v.voucher_code}>{v.reward_title} · {v.voucher_code}</option>
+                        ))}
+                      </select>
+                      {appliedVoucher && voucherDiscount === 0 && (
+                        <p className="text-[11px] text-amber-700 mt-1">
+                          {appliedVoucher.reward_type === 'free_wash' ? 'Add a wash service to use this voucher.' : 'Add the rewarded service to use this voucher.'}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  <div className="pt-2 pb-1">
+                    <CouponInput
+                      orderAmount={totalAfterFirstWashDiscount}
+                      serviceIds={selectedServices}
+                      appliedCoupon={appliedCoupon}
+                      onApply={(res) => setAppliedCoupon(res)}
+                      onRemove={() => setAppliedCoupon(null)}
+                    />
+                  </div>
                 </>
               )}
               {pickupOption !== 'none' && (

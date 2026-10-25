@@ -23,6 +23,7 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         card: '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)',
@@ -31,6 +32,9 @@ export default {
         'glow-red': '0 0 20px rgba(211,47,47,0.15), 0 0 40px rgba(211,47,47,0.08)',
         'glow-red-lg': '0 0 30px rgba(211,47,47,0.25), 0 0 60px rgba(211,47,47,0.12)',
         'inner-glow': 'inset 0 1px 2px rgba(0,0,0,0.06)',
+        app: '0 1px 2px rgba(16,24,40,0.04), 0 2px 8px rgba(16,24,40,0.06)',
+        'app-lg': '0 8px 28px rgba(16,24,40,0.12)',
+        sheet: '0 -8px 30px rgba(16,24,40,0.18)',
       },
       backgroundImage: {
         'brand-gradient': 'linear-gradient(135deg, #af101a 0%, #D32F2F 50%, #FF5252 100%)',
@@ -64,6 +68,10 @@ export default {
           '0%, 100%': { boxShadow: '0 0 0 0 rgba(211,47,47,0.2)' },
           '50%': { boxShadow: '0 0 0 8px rgba(211,47,47,0)' },
         },
+        'sheet-up': {
+          '0%': { transform: 'translateY(100%)' },
+          '100%': { transform: 'translateY(0)' },
+        },
         'shimmer-glow': {
           '0%': { backgroundPosition: '-200% 0' },
           '100%': { backgroundPosition: '200% 0' },
@@ -77,6 +85,7 @@ export default {
         'float': 'float 3s ease-in-out infinite',
         'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
         'shimmer-glow': 'shimmer-glow 2s linear infinite',
+        'sheet-up': 'sheet-up 0.28s cubic-bezier(0.32, 0.72, 0, 1) forwards',
       },
     },
   },

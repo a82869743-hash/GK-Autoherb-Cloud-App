@@ -13,7 +13,7 @@ const axios = require('axios');
  * @returns {Promise<{success: boolean, method: string, response: any}>}
  */
 async function sendJobCardSMS(mobile, jobId) {
-  const apiKey = process.env.MSG91_AUTH_KEY;
+  const apiKey = process.env.TWO_FACTOR_API_KEY || process.env.MSG91_AUTH_KEY;
   const sender = process.env.MSG91_SENDER_ID || 'GKAUTO';
   const baseUrl = process.env.APP_BASE_URL || 'https://gkautobook.cloud';
 

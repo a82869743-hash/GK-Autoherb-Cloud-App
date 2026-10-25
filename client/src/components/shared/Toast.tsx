@@ -3,10 +3,10 @@ import { useUIStore } from '../../store/uiStore';
 import type { ToastType } from '../../types';
 
 const ICONS: Record<ToastType, React.ReactNode> = {
-  success: <CheckCircle size={18} className="text-green-500 shrink-0" />,
-  error: <XCircle size={18} className="text-red-500 shrink-0" />,
-  warning: <AlertTriangle size={18} className="text-amber-500 shrink-0" />,
-  info: <Info size={18} className="text-blue-500 shrink-0" />,
+  success: <CheckCircle size={16} className="text-green-500 shrink-0" />,
+  error: <XCircle size={16} className="text-red-500 shrink-0" />,
+  warning: <AlertTriangle size={16} className="text-amber-500 shrink-0" />,
+  info: <Info size={16} className="text-blue-500 shrink-0" />,
 };
 
 const BG_CLASSES: Record<ToastType, string> = {
@@ -26,10 +26,10 @@ export default function ToastContainer() {
       {toasts.map((toast) => (
         <div
           key={toast.id}
-          className={`pointer-events-auto bg-white rounded-lg shadow-lg shadow-black/5 border border-gray-100 border-l-4 ${BG_CLASSES[toast.type]} px-4 py-3 flex items-start gap-3 animate-slide-in`}
+          className={`pointer-events-auto bg-white rounded-lg shadow-md shadow-black/5 border border-gray-100 border-l-[3px] ${BG_CLASSES[toast.type]} px-3.5 py-2.5 flex items-start gap-2.5 animate-slide-in`}
         >
           {ICONS[toast.type]}
-          <p className="text-sm font-medium text-[#1c1b1b] flex-1">{toast.message}</p>
+          <p className="text-xs sm:text-[13px] font-normal text-[#1c1b1b] flex-1 leading-snug">{toast.message}</p>
           <button
             onClick={() => dismissToast(toast.id)}
             className="p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors shrink-0"

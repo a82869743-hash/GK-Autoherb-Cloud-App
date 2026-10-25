@@ -80,27 +80,35 @@ export default function CustomersListPage() {
   };
 
   const totalFleetVehicles = customers.reduce((acc, c) => acc + (c.vehicles?.length || 0), 0);
+  const thisMonth = new Date().getMonth();
+  const birthdaysThisMonth = customers.filter((c: any) => c.date_of_birth && new Date(c.date_of_birth).getMonth() === thisMonth).length;
+  const joinedThisMonth = customers.filter((c: any) => {
+    const d = c.created_at ? new Date(c.created_at) : null;
+    const now = new Date();
+    return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  }).length;
 
   return (
     <div className="space-y-6 pb-28 lg:pb-12 max-w-[1600px] mx-auto font-sans">
       {/* Header Bar */}
       <AdminHeaderBar
+        category="Client Relations & CRM"
         title="Customer Profiles & Fleet CRM"
         subtitle="Manage client identities, vehicle garage registry, and detailing history"
         actions={
           <div className="flex items-center gap-2.5">
             <button
               onClick={() => setVmModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-slate-200/90 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-all shadow-xs active:scale-95"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200/90 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-all shadow-2xs active:scale-95"
             >
-              <Car size={16} className="text-slate-500" />
+              <Car size={15} className="text-slate-500" />
               <span>Vehicle Master</span>
             </button>
             <button
               onClick={() => navigate('/admin/add-customer')}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-[#D32F2F] hover:bg-[#b71c1c] text-white font-bold text-xs shadow-md shadow-red-200 transition-all active:scale-95"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#D32F2F] hover:bg-[#b71c1c] text-white font-bold text-xs shadow-xs transition-all active:scale-95"
             >
-              <Plus size={16} />
+              <Plus size={15} />
               <span>Add Customer</span>
             </button>
           </div>
@@ -124,16 +132,16 @@ export default function CustomersListPage() {
           accentColor="sky"
         />
         <AdminMetricCard
-          label="Loyalty Membership"
-          value={Math.round((customers.length || 1) * 0.85)}
-          trend={{ text: 'AutoHerb Club', positive: true }}
+          label="Birthdays this month"
+          value={birthdaysThisMonth}
+          trend="Wishes go out automatically"
           icon={<Sparkles size={20} />}
           accentColor="amber"
         />
         <AdminMetricCard
-          label="Studio Retention"
-          value="94.2%"
-          trend={{ text: 'Repeat Detailing', positive: true }}
+          label="Joined this month"
+          value={joinedThisMonth}
+          trend="New customer accounts"
           icon={<ShieldCheck size={20} />}
           accentColor="emerald"
         />

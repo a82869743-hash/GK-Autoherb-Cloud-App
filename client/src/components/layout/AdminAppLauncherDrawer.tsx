@@ -1,11 +1,11 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { BottomSheet } from '../customer/ui';
 import { 
   X, Search, LayoutDashboard, ClipboardList, Droplets, Calendar, CalendarCheck, MapPin, Truck,
   Users, PlusCircle, Layers, Package, Star, Gift, Wrench, Sparkles, ShoppingCart, ShoppingBag,
   DollarSign, CreditCard, FileText, Archive, BarChart3, Wallet, CheckSquare, MessageSquare,
-  HelpCircle, Shield, Upload, Trash2, Settings, ExternalLink, ChevronRight, Bell, Bot
+  HelpCircle, Shield, Upload, Trash2, Settings, ExternalLink, ChevronRight, Bell, Bot, Tag
 } from 'lucide-react';
 import { useDashboardStats } from '../../api/hooks/useDashboard';
 
@@ -56,6 +56,7 @@ export default function AdminAppLauncherDrawer({ isOpen, onClose }: AdminAppLaun
         { name: 'Package Tracking', desc: 'Active subscription quotas', to: '/admin/package-tracking', icon: Layers, color: 'text-cyan-600', bgColor: 'bg-cyan-50 border-cyan-100' },
         { name: 'Loyalty Points', desc: 'Points ratio & customer lookup', to: '/admin/loyalty', icon: Star, color: 'text-yellow-600', bgColor: 'bg-yellow-50 border-yellow-100' },
         { name: 'Customer Rewards', desc: 'Welcome wash & gift perks', to: '/admin/customer-rewards', icon: Gift, color: 'text-pink-600', bgColor: 'bg-pink-50 border-pink-100' },
+        { name: 'Coupons & Offers', desc: 'Promo codes & discounts', to: '/admin/coupons', icon: Tag, color: 'text-red-600', bgColor: 'bg-red-50 border-red-100' },
       ]
     },
     {
@@ -99,7 +100,9 @@ export default function AdminAppLauncherDrawer({ isOpen, onClose }: AdminAppLaun
       items: [
         { name: 'AI Bot Monitoring', desc: 'Live chat queries & knowledge tuning', to: '/admin/chatbot', icon: Bot, color: 'text-red-600', bgColor: 'bg-red-50 border-red-100', badge: 'Live' },
         { name: 'Messages & SMS', desc: 'Campaigns & bulk alerts', to: '/admin/messages', icon: MessageSquare, color: 'text-[#D32F2F]', bgColor: 'bg-red-50 border-red-100' },
-        { name: 'WhatsApp Gateway', desc: 'Direct WhatsApp messenger', to: '/admin/whatsapp', icon: MessageSquare, color: 'text-emerald-600', bgColor: 'bg-emerald-50 border-emerald-100' },
+        { name: 'WhatsApp Inbox & Bot', desc: 'Auto-replies, reminders & inbox', to: '/admin/whatsapp', icon: MessageSquare, color: 'text-emerald-600', bgColor: 'bg-emerald-50 border-emerald-100' },
+        { name: 'Festival Offers', desc: 'Festive WhatsApp offers, scheduled', to: '/admin/festival-offers', icon: Sparkles, color: 'text-orange-600', bgColor: 'bg-orange-50 border-orange-100' },
+        { name: 'Birthday & Anniversary', desc: 'Automatic wishes & personal offers', to: '/admin/greetings', icon: Gift, color: 'text-pink-600', bgColor: 'bg-pink-50 border-pink-100' },
         { name: 'Customer Inquiries', desc: 'Lead pipeline & followups', to: '/admin/inquiries', icon: HelpCircle, color: 'text-amber-600', bgColor: 'bg-amber-50 border-amber-100', badge: stats?.newLeads || undefined },
         { name: 'Feedback & Reviews', desc: '5-star reviews & ratings', to: '/admin/feedback', icon: Star, color: 'text-yellow-600', bgColor: 'bg-yellow-50 border-yellow-100' },
       ]
@@ -142,121 +145,54 @@ export default function AdminAppLauncherDrawer({ isOpen, onClose }: AdminAppLaun
   if (!isOpen) return null;
 
   return (
-    <AnimatePresence>
-      <div 
-        className="fixed inset-0 bg-black/60 backdrop-blur-md z-[90] flex items-end justify-center p-0 sm:p-4"
-        onClick={onClose}
-      >
-        <motion.div
-          initial={{ opacity: 0, y: '100%' }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: '100%' }}
-          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          onClick={(e) => e.stopPropagation()}
-          className="w-full sm:max-w-2xl bg-white rounded-t-[32px] sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] sm:max-h-[85vh] border border-slate-200"
-        >
-          {/* Top Grab Handle */}
-          <div className="pt-3 pb-1 flex justify-center cursor-grab active:cursor-grabbing">
-            <div className="w-12 h-1.5 bg-slate-300 rounded-full" />
-          </div>
-
-          {/* Header & Search */}
-          <div className="px-6 py-3 border-b border-slate-100 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-                  <span>GK AutoHerb Hub</span>
-                  <span className="text-[10px] font-black uppercase tracking-wider bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
-                    Terminal
-                  </span>
-                </h2>
-                <p className="text-xs text-slate-500 font-medium mt-0.5">All 45 modules, services and studio tools</p>
-              </div>
-              <button 
-                onClick={onClose}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Live Search Field */}
-            <div className="relative">
-              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search any page, bill, inventory, customer..."
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-100/80 hover:bg-slate-100 focus:bg-white border border-slate-200 focus:border-[#D32F2F] rounded-2xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#D32F2F]/20 transition-all text-slate-900 placeholder:text-slate-400"
-                autoFocus
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Scrollable Categories List */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 dark-scroll pb-24 sm:pb-8">
-            {filteredCategories.length > 0 ? (
-              filteredCategories.map((group) => (
-                <div key={group.category} className="space-y-2.5">
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                      {group.category}
-                    </span>
-                    <span className="text-[10px] font-semibold text-slate-400">
-                      {group.items.length} tools
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                    {group.items.map((item) => (
-                      <button
-                        key={item.to}
-                        onClick={() => handleNavigate(item.to)}
-                        className="p-3 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-2xl flex items-start gap-3 transition-all hover:border-slate-300 text-left active:scale-[0.98] group relative shadow-2xs hover:shadow-sm"
-                      >
-                        <div className={`w-10 h-10 rounded-xl ${item.bgColor} flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform`}>
-                          <item.icon size={20} className={item.color} />
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-black text-slate-900 truncate group-hover:text-[#D32F2F] transition-colors">
-                              {item.name}
-                            </span>
-                          </div>
-                          <p className="text-[10px] text-slate-500 font-medium truncate mt-0.5">
-                            {item.desc}
-                          </p>
-                        </div>
-
-                        {item.badge && (
-                          <span className="absolute top-2 right-2 px-1.5 py-0.5 bg-[#D32F2F] text-white text-[8px] font-black rounded-full uppercase tracking-tight shadow-2xs">
-                            {item.badge}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="py-12 text-center text-slate-400">
-                <Search size={32} className="mx-auto mb-2 text-slate-300" />
-                <p className="text-xs font-bold">No apps found matching "{searchQuery}"</p>
-              </div>
-            )}
-          </div>
-        </motion.div>
+    <BottomSheet open={isOpen} onClose={onClose} title="All apps" maxHeight="92dvh">
+      <div className="sticky top-0 z-10 -mx-5 px-5 pb-3 bg-white">
+        <div className="relative">
+          <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search pages and tools"
+            className="app-input pl-10 bg-slate-50"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center" aria-label="Clear">
+              <X size={14} />
+            </button>
+          )}
+        </div>
       </div>
-    </AnimatePresence>
+
+      {filteredCategories.length > 0 ? (
+        <div className="space-y-6 pb-4">
+          {filteredCategories.map((group) => (
+            <section key={group.category}>
+              <h3 className="font-display text-[15px] font-extrabold text-slate-900 mb-3">{group.category}</h3>
+              <div className="grid grid-cols-4 sm:grid-cols-5 gap-x-2 gap-y-4">
+                {group.items.map((item) => (
+                  <button key={item.to} onClick={() => handleNavigate(item.to)} className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform">
+                    <span className={`relative h-[52px] w-[52px] rounded-2xl border ${item.bgColor} flex items-center justify-center`}>
+                      <item.icon size={22} className={item.color} />
+                      {item.badge && (
+                        <span className="absolute -top-1.5 -right-1.5 max-w-[56px] truncate px-1.5 h-[18px] leading-[18px] rounded-full bg-[#D32F2F] text-white text-[9.5px] font-bold">
+                          {item.badge}
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-[11.5px] font-display font-bold text-slate-700 text-center leading-tight line-clamp-2">{item.name}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      ) : (
+        <div className="py-12 text-center text-slate-400">
+          <Search size={30} className="mx-auto mb-2 text-slate-300" />
+          <p className="text-sm font-semibold">No page matches "{searchQuery}"</p>
+        </div>
+      )}
+    </BottomSheet>
   );
 }

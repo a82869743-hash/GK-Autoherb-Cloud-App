@@ -62,7 +62,7 @@ MSG91_SENDER_ID=GKAHER
 
 ### What's there currently:
 ```env
-MSG91_AUTH_KEY=53af389f-418d-11f1-9800-0200cd936042
+MSG91_AUTH_KEY=YOUR_2FACTOR_API_KEY_HERE
 MSG91_SENDER_ID=GKAUTO
 ```
 
@@ -70,7 +70,7 @@ MSG91_SENDER_ID=GKAUTO
 
 | Variable | Current Value | What to Put |
 |----------|--------------|-------------|
-| `MSG91_AUTH_KEY` | `53af389f-418d-11f1-9800-0200cd936042` | Your **2Factor.in API Key** (keep this if it's already your 2Factor key) |
+| `MSG91_AUTH_KEY` | `YOUR_2FACTOR_API_KEY_HERE` | Your **2Factor.in API Key** |
 | `MSG91_SENDER_ID` | `GKAUTO` | Your **DLT-approved 6-char Sender ID** (e.g. `GKAHER`) |
 
 > **Note:** The variable is named `MSG91_AUTH_KEY` for legacy reasons, but it holds your 2Factor.in key.

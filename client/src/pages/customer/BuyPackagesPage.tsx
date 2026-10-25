@@ -6,6 +6,7 @@ import { PackageOpen, Car, CheckCircle, Loader2, ArrowRight, ShieldCheck, X, Ale
 import QrPaymentModal from '../../components/shared/QrPaymentModal';
 import PaymentSandboxModal from '../../components/shared/PaymentSandboxModal';
 import ErrorState from '../../components/shared/ErrorState';
+import CouponInput from '../../components/shared/CouponInput';
 
 interface Vehicle {
   id: number;
@@ -29,6 +30,7 @@ const CAR_TYPE_MAP: Record<string, string> = {
   sedan: 'SEDAN_SUV',
   premium_sedan: 'PREMIUM_SEDAN',
   suv: 'SEDAN_SUV',
+  luxury: 'LARGE_CAR',
 };
 
 interface PkgService {
@@ -165,6 +167,7 @@ export default function BuyPackagesPage() {
   const [pricingType, setPricingType] = useState<'basic' | 'premium'>('basic');
   // Confirmation modal state
   const [confirmPkg, setConfirmPkg] = useState<Pkg | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<{ coupon_id: number; code: string; discount_amount: number; title?: string } | null>(null);
   const [myRequests, setMyRequests] = useState<any[]>([]);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
@@ -306,6 +309,7 @@ export default function BuyPackagesPage() {
       addToast('error', 'Please select a vehicle first.');
       return;
     }
+    setAppliedCoupon(null);
     setConfirmPkg(pkg);
   };
 
@@ -315,12 +319,15 @@ export default function BuyPackagesPage() {
     setSubmittingId(confirmPkg.id);
     try {
       const price = getPrice(confirmPkg);
+      const discount = appliedCoupon ? appliedCoupon.discount_amount : 0;
       const res = await api.post('/packages/requests', {
         vehicle_id: selectedVehicle.id,
         package_id: confirmPkg.id,
         price,
         pricing_type: pricingType,
-        car_type: filterCarType
+        car_type: filterCarType,
+        coupon_id: appliedCoupon ? appliedCoupon.coupon_id : undefined,
+        discount_amount: discount > 0 ? discount : undefined,
       });
       if (res.data.success) {
         addToast('success', 'Package request submitted! Admin will review and approve it shortly.');
@@ -330,6 +337,7 @@ export default function BuyPackagesPage() {
     } finally {
       setSubmittingId(null);
       setConfirmPkg(null);
+      setAppliedCoupon(null);
     }
   };
 
@@ -350,6 +358,8 @@ export default function BuyPackagesPage() {
     setSubmittingOnline(true);
     try {
       const price = getPrice(confirmPkg);
+      const discount = appliedCoupon ? appliedCoupon.discount_amount : 0;
+      const finalAmount = Math.max(0, price - discount);
 
       const sdkLoaded = await loadRazorpayScript();
       if (!sdkLoaded) {
@@ -364,7 +374,9 @@ export default function BuyPackagesPage() {
         package_id: confirmPkg.id,
         price,
         pricing_type: pricingType,
-        car_type: filterCarType
+        car_type: filterCarType,
+        coupon_id: appliedCoupon ? appliedCoupon.coupon_id : undefined,
+        discount_amount: discount > 0 ? discount : undefined,
       });
 
       if (!resRequest.data.success) {
@@ -373,9 +385,9 @@ export default function BuyPackagesPage() {
 
       const requestId = resRequest.data.requestId;
 
-      // 2. Create Razorpay order on backend
+      // 2. Create Razorpay order on backend with discounted finalAmount
       const resOrder = await api.post('/payments/razorpay/order', {
-        amount: price,
+        amount: finalAmount,
         package_id: confirmPkg.id,
         package_request_id: requestId
       });
@@ -458,6 +470,8 @@ export default function BuyPackagesPage() {
     setSubmittingOnline(true);
     try {
       const price = getPrice(confirmPkg);
+      const discount = appliedCoupon ? appliedCoupon.discount_amount : 0;
+      const finalAmount = Math.max(0, price - discount);
 
       // 1. Submit the package request first to get requestId
       const resRequest = await api.post('/packages/requests', {
@@ -465,7 +479,9 @@ export default function BuyPackagesPage() {
         package_id: confirmPkg.id,
         price,
         pricing_type: pricingType,
-        car_type: filterCarType
+        car_type: filterCarType,
+        coupon_id: appliedCoupon ? appliedCoupon.coupon_id : undefined,
+        discount_amount: discount > 0 ? discount : undefined,
       });
 
       if (!resRequest.data.success) {
@@ -473,10 +489,11 @@ export default function BuyPackagesPage() {
       }
 
       const requestId = resRequest.data.requestId;
-      setQrAmount(price);
+      setQrAmount(finalAmount);
       setActivePackageRequestId(requestId);
       setShowQrModal(true);
       setConfirmPkg(null);
+      setAppliedCoupon(null);
     } catch (err: any) {
       console.error(err);
       addToast('error', err.message || 'An error occurred during payment checkout.');
@@ -506,33 +523,33 @@ export default function BuyPackagesPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 font-sans">
+    <div className="max-w-7xl mx-auto py-5 px-4 sm:px-6 lg:px-8 font-sans">
       {/* Header */}
-      <div className="mb-8 text-center">
-        <div className="inline-flex items-center gap-2 bg-red-50 text-red-700 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider mb-3">
-          <PackageOpen className="w-4 h-4" />
+      <div className="mb-5 text-center">
+        <div className="inline-flex items-center gap-1.5 bg-red-50 text-red-700 px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider mb-2">
+          <PackageOpen className="w-3.5 h-3.5" />
           Almost 45% Discount
         </div>
-        <h1 className="text-3xl font-extrabold text-gray-900">
+        <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 tracking-tight">
           Annual Car Care Packages
         </h1>
-        <p className="mt-2 text-gray-600 text-sm">
+        <p className="mt-1 text-gray-500 text-xs sm:text-sm">
           Select your vehicle to see personalized pricing for our exclusive car care packages.
         </p>
       </div>
 
       {vehicles.length === 0 ? (
-        <div className="text-center bg-white p-10 rounded-2xl shadow-sm border border-red-100">
-          <Car className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-bold text-gray-900">No Vehicles Found</h3>
-          <p className="text-gray-500 mt-2">You need to add a vehicle to your profile before purchasing packages.</p>
+        <div className="text-center bg-white p-8 rounded-xl shadow-2xs border border-red-100">
+          <Car className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+          <h3 className="text-base font-semibold text-gray-900">No Vehicles Found</h3>
+          <p className="text-gray-500 text-xs mt-1">You need to add a vehicle to your profile before purchasing packages.</p>
         </div>
       ) : (
-        <div className="mb-10 max-w-xl mx-auto space-y-4">
+        <div className="mb-6 max-w-xl mx-auto space-y-3">
           <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">Select Vehicle</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Select Vehicle</label>
             <select
-              className="w-full bg-white border-2 border-red-100 focus:border-red-500 focus:ring-0 rounded-xl py-3 px-4 shadow-sm text-gray-900 font-medium transition-colors"
+              className="w-full bg-white border border-slate-200 focus:border-[#D32F2F] focus:ring-0 rounded-lg h-9 px-3 text-sm text-gray-900 font-normal transition-colors cursor-pointer"
               value={selectedVehicle?.id || ''}
               onChange={(e) => setSelectedVehicle(vehicles.find(v => v.id === Number(e.target.value)) || null)}
             >
@@ -545,18 +562,12 @@ export default function BuyPackagesPage() {
           </div>
 
           <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-            <label className="block text-sm font-bold text-gray-700 mb-2">Vehicle Type Filter</label>
-            <select
-              className="w-full bg-gray-50 border border-gray-200 focus:border-purple-500 focus:ring-0 rounded-lg py-2 px-3 text-gray-900 font-medium transition-colors"
-              value={filterCarType}
-              onChange={(e) => setFilterCarType(e.target.value)}
-            >
-              <option value="SMALL_HATCHBACK">Small Hatchback</option>
-              <option value="MEDIUM_HATCHBACK">Medium Hatchback</option>
-              <option value="SEDAN_SUV">Sedan / SUV</option>
-              <option value="PREMIUM_SEDAN">Premium Sedan</option>
-              <option value="LARGE_CAR">Large Car</option>
-            </select>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-gray-500">Prices shown for your car type</span>
+              <span className="text-sm font-bold text-gray-900">
+                {({ SMALL_HATCHBACK: 'Hatchback', MEDIUM_HATCHBACK: 'Premium hatchback', SEDAN_SUV: 'Sedan / SUV', PREMIUM_SEDAN: 'Premium sedan', LARGE_CAR: 'Large / luxury car' } as Record<string, string>)[filterCarType] || filterCarType}
+              </span>
+            </div>
 
             {/* Basic / Premium Toggle */}
             <div className="flex items-center justify-center gap-3 mt-4 pt-3 border-t border-gray-100">
@@ -821,11 +832,37 @@ export default function BuyPackagesPage() {
                   <span className="text-gray-500">Reg No</span>
                   <span className="font-medium text-gray-700">{selectedVehicle.registration_no || '—'}</span>
                 </div>
-                <div className="border-t border-gray-200 pt-3 flex justify-between">
-                  <span className="text-gray-500 text-sm">Price</span>
-                  <span className="text-xl font-extrabold text-red-600">
-                    ₹{getPrice(confirmPkg).toLocaleString('en-IN')}
-                  </span>
+                <div className="border-t border-gray-200 pt-3 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Package Price</span>
+                    <span className="font-bold text-gray-800">
+                      ₹{getPrice(confirmPkg).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+
+                  {appliedCoupon && appliedCoupon.discount_amount > 0 && (
+                    <div className="flex justify-between text-sm text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg">
+                      <span className="font-semibold">Coupon Discount ({appliedCoupon.code})</span>
+                      <span className="font-extrabold">-₹{appliedCoupon.discount_amount.toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+
+                  <div className="pt-1">
+                    <CouponInput
+                      orderAmount={getPrice(confirmPkg)}
+                      packageIds={[confirmPkg.id]}
+                      appliedCoupon={appliedCoupon}
+                      onApply={(c) => setAppliedCoupon(c)}
+                      onRemove={() => setAppliedCoupon(null)}
+                    />
+                  </div>
+
+                  <div className="flex justify-between pt-2 border-t border-gray-200">
+                    <span className="text-gray-900 font-bold text-sm">Total Payable</span>
+                    <span className="text-xl font-extrabold text-[#D32F2F]">
+                      ₹{Math.max(0, getPrice(confirmPkg) - (appliedCoupon?.discount_amount || 0)).toLocaleString('en-IN')}
+                    </span>
+                  </div>
                 </div>
               </div>
 

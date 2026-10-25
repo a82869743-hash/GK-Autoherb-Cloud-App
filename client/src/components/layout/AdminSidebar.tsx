@@ -101,6 +101,7 @@ const navCategories: NavCategory[] = [
       { to: '/admin/chatbot', icon: Bot, label: 'AI Bot Monitoring', badge: 'Live', permission: 'notifications.send' },
       { to: '/admin/messages', icon: MessageSquare, label: 'Messages', permission: 'notifications.send' },
       { to: '/admin/whatsapp', icon: MessageSquare, label: 'WhatsApp', badge: 'New', permission: 'notifications.send' },
+      { to: '/admin/greetings', icon: Gift, label: 'Birthday & Anniversary', badge: 'New', permission: 'notifications.send' },
       { to: '/admin/inquiries', icon: HelpCircle, label: 'Inquiries', permission: 'notifications.send' },
       { to: '/admin/feedback', icon: Star, label: 'Feedback', badge: 'New', permission: 'feedback.view' },
     ],
@@ -140,7 +141,7 @@ function CollapsibleCategory({
     <div className="mb-1">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-6 py-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-500 hover:text-gray-300 transition-colors"
+        className="w-full px-5 py-1.5 flex items-center justify-between text-[10px] font-medium uppercase tracking-[0.12em] text-gray-500 hover:text-gray-300 transition-colors"
       >
         <span>{category.label}</span>
         {isOpen
@@ -169,24 +170,25 @@ function SidebarNavLink({ item, onClick }: { item: NavItem; onClick: () => void 
       end={item.end}
       onClick={onClick}
       className={({ isActive }) =>
-        `px-6 py-2.5 flex items-center gap-3 transition-all duration-200 active:scale-[0.98] ${
+        `px-5 py-2 flex items-center gap-2.5 transition-all duration-150 active:scale-[0.98] ${
           isActive
-            ? 'text-white border-l-4 border-[#D32F2F] bg-white/5 font-semibold'
-            : 'text-gray-400 hover:text-white hover:bg-white/[0.06] border-l-4 border-transparent'
+            ? 'text-white border-l-2 border-[#D32F2F] bg-white/5 font-medium'
+            : 'text-gray-400 hover:text-white hover:bg-white/[0.05] border-l-2 border-transparent'
         }`
       }
     >
       {({ isActive }) => (
         <>
           <item.icon
-            size={18}
-            className={`transition-all duration-200 shrink-0 ${
-              isActive ? 'text-[#D32F2F] drop-shadow-[0_0_6px_rgba(211,47,47,0.4)]' : ''
+            size={16}
+            strokeWidth={1.75}
+            className={`transition-all duration-150 shrink-0 ${
+              isActive ? 'text-[#D32F2F]' : ''
             }`}
           />
-          <span className="text-sm font-medium truncate">{item.label}</span>
+          <span className="text-[13px] truncate">{item.label}</span>
           {item.badge && (
-            <span className="ml-auto text-[9px] font-bold bg-[#D32F2F] text-white px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+            <span className="ml-auto text-[9px] font-medium bg-[#D32F2F] text-white px-1.5 py-0.2 rounded-full">
               {item.badge}
             </span>
           )}

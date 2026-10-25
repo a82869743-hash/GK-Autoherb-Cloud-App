@@ -313,17 +313,21 @@ exports._renewPackageInternal = async (conn, { user_package_id, package_id, paym
       console.warn('Failed to log renewal event (non-blocking):', renewLogErr.message);
     }
 
-    // Trigger non-blocking WhatsApp/SMS confirmations
+    // Trigger non-blocking "package renewed" message (editable template PACKAGE_RENEWED)
     try {
       const messagingService = require('../services/messagingService');
-      const [custRows] = await conn.query('SELECT name, mobile FROM users WHERE id = ?', [currentPkg.user_id]);
-      if (custRows.length && custRows[0].mobile) {
-        const vehicleStr = currentPkg.vehicle_segment ? ` for your vehicle segment ${currentPkg.vehicle_segment.replace(/_/g, ' ')}` : '';
-        const body = `✅ *Package Renewed Successfully!*\n\nHi ${custRows[0].name},\nYour *${packageName}* package${vehicleStr} has been renewed successfully!\n\nThank you for choosing GK AutoHerb! 💎`;
-        messagingService.sendWhatsApp(`91${custRows[0].mobile}`, null, { body }).catch(() => {});
-      }
+      const [upRows] = await conn.query('SELECT start_date, end_date FROM user_packages WHERE id = ?', [newUserPackageId]);
+      const fmt = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : '');
+      messagingService
+        .notify(
+          currentPkg.user_id,
+          'PACKAGE_RENEWED',
+          { package_name: packageName, valid_from: fmt(upRows[0]?.start_date), valid_till: fmt(upRows[0]?.end_date) },
+          { type: 'package', id: newUserPackageId }
+        )
+        .catch(() => {});
     } catch (msgErr) {
-      console.warn('Failed to send renewal WhatsApp message:', msgErr.message);
+      console.warn('Failed to send renewal message:', msgErr.message);
     }
 
     return {
@@ -691,8 +695,9 @@ exports.consumeService = async (req, res) => {
       return res.status(404).json({ success: false, error: 'No reserved usage found' });
     }
 
+    // (no consumed_at: that column does not exist on the live package_usage table)
     await conn.query(
-      `UPDATE package_usage SET usage_status = 'consumed', consumed_at = NOW(),
+      `UPDATE package_usage SET usage_status = 'consumed',
        booking_id = ?, job_card_id = ? WHERE id = ?`,
       [booking_id || null, job_card_id || null, usage[0].id]
     );
@@ -983,7 +988,7 @@ exports.getDashboardPackageData = async (userId) => {
     } catch (e) { /* ignore */ }
   }
 
-  const [activePackages] = await pool.query(`
+  const [activePackagesRaw] = await pool.query(`
     SELECT up.id, up.package_id, up.start_date, up.end_date,
            up.package_status, up.price_paid, up.vehicle_id,
            p.name AS package_name, p.description,
@@ -995,6 +1000,17 @@ exports.getDashboardPackageData = async (userId) => {
       AND (up.end_date IS NULL OR up.end_date > NOW())
     ORDER BY up.start_date DESC
   `, [userId]);
+
+  // Deduplicate: if multiple identical active package records exist for user, keep latest
+  const seenPackages = new Set();
+  const activePackages = [];
+  for (const p of activePackagesRaw) {
+    const key = `${p.package_id}_${p.package_name}`;
+    if (!seenPackages.has(key)) {
+      seenPackages.add(key);
+      activePackages.push(p);
+    }
+  }
 
   const processedPackages = [];
   for (const pkg of activePackages) {

@@ -43,6 +43,33 @@ export function useReplyFeedback() {
   });
 }
 
+export function usePublishFeedback() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, is_public }: { id: number; is_public: boolean }) => {
+      const { data } = await api.patch(`/feedback/${id}/publish`, { is_public });
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['feedback'] });
+      qc.invalidateQueries({ queryKey: ['feedback-stats'] });
+    },
+  });
+}
+
+export function useRequestFeedback() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { customer_id: number; job_cart_id?: number; booking_id?: number }) => {
+      const { data } = await api.post('/feedback/request', payload);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['feedback-stats'] });
+    },
+  });
+}
+
 export function useReferralStats() {
   return useQuery({
     queryKey: ['referral-stats'],

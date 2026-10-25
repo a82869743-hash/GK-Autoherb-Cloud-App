@@ -37,13 +37,13 @@ export default function DataTable<T extends Record<string, any>>({
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg overflow-hidden shadow-sm">
+      <div className="bg-white rounded-lg overflow-hidden border border-gray-200/80 shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/50">
+              <tr className="border-b border-gray-100 bg-gray-50/70">
                 {columns.map((col) => (
-                  <th key={col.key} className="text-left px-5 py-4 text-[10px] font-extrabold uppercase tracking-widest text-[#5f5e5e]">
+                  <th key={col.key} className="text-left px-3.5 py-2.5 text-xs font-semibold text-[#5f5e5e]">
                     {col.header}
                   </th>
                 ))}
@@ -53,8 +53,8 @@ export default function DataTable<T extends Record<string, any>>({
               {Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b border-gray-50">
                   {columns.map((col) => (
-                    <td key={col.key} className="px-5 py-4">
-                      <div className="skeleton h-4 rounded w-3/4" />
+                    <td key={col.key} className="px-3.5 py-2.5">
+                      <div className="skeleton h-3.5 rounded w-3/4" />
                     </td>
                   ))}
                 </tr>
@@ -68,39 +68,39 @@ export default function DataTable<T extends Record<string, any>>({
 
   if (!data.length) {
     return (
-      <div className="bg-white rounded-lg p-12 text-center shadow-sm">
-        <p className="text-[#5f5e5e] font-medium">{emptyMessage}</p>
+      <div className="bg-white rounded-lg p-8 text-center border border-gray-200/80 shadow-sm">
+        <p className="text-sm text-[#5f5e5e] font-normal">{emptyMessage}</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-lg overflow-hidden shadow-sm">
+    <div className="bg-white rounded-lg overflow-hidden border border-gray-200/80 shadow-sm">
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full text-left">
           <thead>
-            <tr className="border-b-2 border-gray-100 bg-gray-50/50">
+            <tr className="border-b border-gray-200/70 bg-gray-50/70">
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`text-left px-5 py-4 text-[10px] font-extrabold uppercase tracking-widest text-[#5f5e5e] whitespace-nowrap ${col.className || ''}`}
+                  className={`text-left px-3.5 py-2.5 text-xs font-semibold text-[#5f5e5e] whitespace-nowrap ${col.className || ''}`}
                 >
                   {col.header}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-gray-100">
             {data.map((row, idx) => (
               <tr
                 key={keyExtractor ? keyExtractor(row) : idx}
-                className={`border-b border-gray-50 last:border-b-0 hover:bg-[#faf8f7] transition-all duration-150 group ${
+                className={`hover:bg-[#faf8f7] transition-all duration-100 group ${
                   onRowClick ? 'cursor-pointer' : ''
                 }`}
                 onClick={() => onRowClick?.(row)}
               >
                 {columns.map((col, colIdx) => (
-                  <td key={col.key} className={`px-5 py-4 text-sm text-[#1c1b1b] font-medium ${colIdx === 0 ? 'border-l-2 border-transparent group-hover:border-[#D32F2F] transition-colors' : ''} ${col.className || ''}`}>
+                  <td key={col.key} className={`px-3.5 py-2.5 text-[13px] text-[#1c1b1b] font-normal ${colIdx === 0 ? 'border-l-2 border-transparent group-hover:border-[#D32F2F] transition-colors' : ''} ${col.className || ''}`}>
                     {col.render ? col.render(row) : row[col.key]}
                   </td>
                 ))}

@@ -1,197 +1,89 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { 
-  LayoutGrid, Wrench, Calendar, CalendarPlus, 
-  MoreHorizontal, Plus, Droplets, Receipt, X, Sparkles 
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Home, CalendarCheck, ClipboardList, LayoutGrid, Plus, CalendarPlus, Droplets, Receipt, UserPlus, FileText, Truck } from 'lucide-react';
+import { BottomSheet } from '../customer/ui';
+import { ActionTile } from '../ops/ui';
 
 interface AdminMobileDockProps {
   onOpenLauncher: () => void;
   isLauncherOpen: boolean;
 }
 
+const TABS = [
+  { to: '/admin', label: 'Home', icon: Home, end: true },
+  { to: '/admin/customer-bookings', label: 'Bookings', icon: CalendarCheck },
+  { to: '/admin/job-carts', label: 'Jobs', icon: ClipboardList },
+];
+
+const QUICK = [
+  { label: 'Book slot', icon: CalendarPlus, to: '/admin/slots', tone: 'red' },
+  { label: 'Job card', icon: ClipboardList, to: '/admin/job-carts/new', tone: 'red' },
+  { label: 'Quick wash', icon: Droplets, to: '/admin/quick-wash', tone: 'blue' },
+  { label: 'Quick bill', icon: Receipt, to: '/admin/billing', tone: 'green' },
+  { label: 'Add customer', icon: UserPlus, to: '/admin/add-customer', tone: 'purple' },
+  { label: 'Quotation', icon: FileText, to: '/admin/quotations/new', tone: 'amber' },
+  { label: 'Deliveries', icon: Truck, to: '/admin/deliveries', tone: 'slate' },
+];
+
+/** White bottom tab bar, same as the customer app, with a centre "+" for quick actions. */
 export default function AdminMobileDock({ onOpenLauncher, isLauncherOpen }: AdminMobileDockProps) {
-  const [quickFabOpen, setQuickFabOpen] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
   const navigate = useNavigate();
 
-  const handleFabAction = (path: string) => {
-    setQuickFabOpen(false);
-    navigate(path);
-  };
+  const tab = (t: (typeof TABS)[number]) => (
+    <NavLink key={t.to} to={t.to} end={t.end} className="flex flex-col items-center justify-center gap-0.5 touch-manipulation">
+      {({ isActive }) => (
+        <>
+          <span className={`h-8 w-12 rounded-full flex items-center justify-center transition-colors ${isActive ? 'bg-red-50 text-[#D32F2F]' : 'text-slate-400'}`}>
+            <t.icon size={21} strokeWidth={isActive ? 2.4 : 1.9} />
+          </span>
+          <span className={`text-[11px] font-display ${isActive ? 'font-extrabold text-slate-900' : 'font-semibold text-slate-400'}`}>{t.label}</span>
+        </>
+      )}
+    </NavLink>
+  );
 
   return (
     <>
-      {/* ── Quick FAB Action Popover Menu ─────────────────── */}
-      <AnimatePresence>
-        {quickFabOpen && (
-          <div 
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[85] lg:hidden flex items-end justify-center pb-24 px-4"
-            onClick={() => setQuickFabOpen(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 30, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 20, scale: 0.95 }}
-              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm bg-white/95 backdrop-blur-2xl border border-slate-200/90 rounded-3xl p-5 shadow-2xl space-y-3 text-slate-900"
-            >
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <Sparkles size={16} className="text-[#D32F2F]" />
-                  <span className="text-xs font-black uppercase tracking-wider text-slate-800">Quick Studio Booking & Jobs</span>
-                </div>
-                <button 
-                  onClick={() => setQuickFabOpen(false)}
-                  className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2.5 pt-1">
-                <button
-                  onClick={() => handleFabAction('/admin/slots')}
-                  className="p-3 bg-red-50 hover:bg-red-100/70 border border-red-100 rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-all active:scale-95 text-center group"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-[#D32F2F] text-white flex items-center justify-center shadow-md shadow-red-500/30 group-hover:scale-105 transition-transform">
-                    <CalendarPlus size={20} />
-                  </div>
-                  <span className="text-[10px] font-black text-slate-800 leading-tight">Book Bay</span>
-                </button>
-
-                <button
-                  onClick={() => handleFabAction('/admin/job-carts/new')}
-                  className="p-3 bg-red-50 hover:bg-red-100/70 border border-red-100 rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-all active:scale-95 text-center group"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-[#D32F2F] text-white flex items-center justify-center shadow-md shadow-red-500/30 group-hover:scale-105 transition-transform">
-                    <Plus size={20} />
-                  </div>
-                  <span className="text-[10px] font-black text-slate-800 leading-tight">Job Card</span>
-                </button>
-
-                <button
-                  onClick={() => handleFabAction('/admin/quick-wash')}
-                  className="p-3 bg-red-50 hover:bg-red-100/70 border border-red-100 rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-all active:scale-95 text-center group"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-[#D32F2F] text-white flex items-center justify-center shadow-md shadow-red-500/30 group-hover:scale-105 transition-transform">
-                    <Droplets size={20} />
-                  </div>
-                  <span className="text-[10px] font-black text-slate-800 leading-tight">Quick Wash</span>
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Floating Capsule Bottom Nav (Matches Provided Screenshot) ── */}
-      <nav className="fixed bottom-4 inset-x-0 mx-auto w-fit z-[80] safe-bottom-dock px-3">
-        <div className="bg-white/95 backdrop-blur-2xl border border-slate-200/90 shadow-[0_12px_40px_rgba(0,0,0,0.14)] rounded-full px-5 py-2 flex items-center justify-between gap-3 sm:gap-7 relative">
-          
-          {/* Tab 1: Home (Red with indicator pill when active) */}
-          <NavLink
-            to="/admin"
-            end
-            className={({ isActive }) =>
-              `flex flex-col items-center justify-center min-w-[56px] transition-all duration-200 ${
-                isActive ? 'text-[#D32F2F]' : 'text-slate-400 hover:text-slate-600'
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <LayoutGrid size={22} strokeWidth={isActive ? 2.3 : 1.8} />
-                <span className={`text-[11px] mt-0.5 tracking-tight ${isActive ? 'font-black' : 'font-medium'}`}>
-                  Home
-                </span>
-                {isActive && (
-                  <div className="w-4 h-1 bg-[#D32F2F] rounded-full mt-0.5" />
-                )}
-              </>
-            )}
-          </NavLink>
-
-          {/* Tab 2: Services */}
-          <NavLink
-            to="/admin/services"
-            className={({ isActive }) =>
-              `flex flex-col items-center justify-center min-w-[56px] transition-all duration-200 ${
-                isActive ? 'text-[#D32F2F]' : 'text-slate-400 hover:text-slate-600'
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Wrench size={22} strokeWidth={isActive ? 2.3 : 1.8} />
-                <span className={`text-[11px] mt-0.5 tracking-tight ${isActive ? 'font-black' : 'font-medium'}`}>
-                  Services
-                </span>
-                {isActive && (
-                  <div className="w-4 h-1 bg-[#D32F2F] rounded-full mt-0.5" />
-                )}
-              </>
-            )}
-          </NavLink>
-
-          {/* Center Elevated Action: BOOK (Popping out circle with red gradient + glow) */}
-          <div className="relative -top-5 flex flex-col items-center px-1">
+      <nav className="fixed bottom-0 inset-x-0 z-[80] bg-white border-t border-slate-200/80 pb-safe select-none">
+        <div className="mx-auto max-w-xl grid grid-cols-5 h-16">
+          {tab(TABS[0])}
+          {tab(TABS[1])}
+          <div className="flex items-center justify-center">
             <button
-              onClick={() => setQuickFabOpen(!quickFabOpen)}
-              className="w-14 h-14 rounded-full bg-gradient-to-b from-[#E53935] to-[#B71C1C] text-white flex items-center justify-center shadow-[0_8px_25px_rgba(211,47,47,0.45)] border-2 border-white active:scale-95 transition-all duration-300 group"
-              aria-label="Book Slot or Job Card"
+              onClick={() => setQuickOpen(true)}
+              className="-mt-6 h-14 w-14 rounded-full bg-gradient-to-b from-[#e53935] to-[#b71c1c] text-white flex items-center justify-center shadow-[0_8px_20px_rgba(211,47,47,0.4)] ring-4 ring-[#f3f4f6] active:scale-95 transition-transform"
+              aria-label="Quick actions"
             >
-              <CalendarPlus 
-                size={23} 
-                className={`transition-transform duration-300 ${quickFabOpen ? 'rotate-45' : 'group-hover:scale-110'}`} 
-              />
+              <Plus size={26} strokeWidth={2.6} />
             </button>
-            <span className="text-[10px] font-black text-slate-800 uppercase tracking-wider mt-1 select-none">
-              BOOK
-            </span>
           </div>
-
-          {/* Tab 4: Bookings */}
-          <NavLink
-            to="/admin/customer-bookings"
-            className={({ isActive }) =>
-              `flex flex-col items-center justify-center min-w-[56px] transition-all duration-200 ${
-                isActive ? 'text-[#D32F2F]' : 'text-slate-400 hover:text-slate-600'
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Calendar size={22} strokeWidth={isActive ? 2.3 : 1.8} />
-                <span className={`text-[11px] mt-0.5 tracking-tight ${isActive ? 'font-black' : 'font-medium'}`}>
-                  Bookings
-                </span>
-                {isActive && (
-                  <div className="w-4 h-1 bg-[#D32F2F] rounded-full mt-0.5" />
-                )}
-              </>
-            )}
-          </NavLink>
-
-          {/* Tab 5: Menu */}
-          <button
-            onClick={onOpenLauncher}
-            className={`flex flex-col items-center justify-center min-w-[56px] transition-all duration-200 ${
-              isLauncherOpen ? 'text-[#D32F2F]' : 'text-slate-400 hover:text-slate-600'
-            }`}
-          >
-            <MoreHorizontal size={24} strokeWidth={isLauncherOpen ? 2.5 : 2} />
-            <span className={`text-[11px] mt-0.5 tracking-tight ${isLauncherOpen ? 'font-black' : 'font-medium'}`}>
-              Menu
+          {tab(TABS[2])}
+          <button onClick={onOpenLauncher} className="flex flex-col items-center justify-center gap-0.5">
+            <span className={`h-8 w-12 rounded-full flex items-center justify-center transition-colors ${isLauncherOpen ? 'bg-red-50 text-[#D32F2F]' : 'text-slate-400'}`}>
+              <LayoutGrid size={21} strokeWidth={isLauncherOpen ? 2.4 : 1.9} />
             </span>
-            {isLauncherOpen && (
-              <div className="w-4 h-1 bg-[#D32F2F] rounded-full mt-0.5" />
-            )}
+            <span className={`text-[11px] font-display ${isLauncherOpen ? 'font-extrabold text-slate-900' : 'font-semibold text-slate-400'}`}>All apps</span>
           </button>
-
         </div>
       </nav>
+
+      <BottomSheet open={quickOpen} onClose={() => setQuickOpen(false)} title="Quick actions">
+        <div className="grid grid-cols-4 gap-y-5 gap-x-2 pt-1 pb-2">
+          {QUICK.map((q) => (
+            <ActionTile
+              key={q.to}
+              label={q.label}
+              icon={q.icon}
+              tone={q.tone}
+              onClick={() => {
+                setQuickOpen(false);
+                navigate(q.to);
+              }}
+            />
+          ))}
+        </div>
+      </BottomSheet>
     </>
   );
 }

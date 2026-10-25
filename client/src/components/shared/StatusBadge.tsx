@@ -10,7 +10,7 @@ export default function StatusBadge({ status, className = '' }: StatusBadgeProps
   const label = (status || '').replace(/_/g, ' ');
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded text-[10px] font-extrabold uppercase tracking-widest border ${colorClass} ${className}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium capitalize border ${colorClass} ${className}`}>
       {label}
     </span>
   );

@@ -17,15 +17,15 @@ export default function Tabs({ tabs, activeTab, onTabChange }: TabsProps) {
         <button
           key={tab.key}
           onClick={() => onTabChange(tab.key)}
-          className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 whitespace-nowrap relative ${
+          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-150 whitespace-nowrap relative ${
             activeTab === tab.key
-              ? 'bg-gradient-to-br from-[#af101a] to-[#D32F2F] text-white shadow-md shadow-[#D32F2F]/20'
+              ? 'bg-gradient-to-br from-[#af101a] to-[#D32F2F] text-white shadow-sm shadow-[#D32F2F]/20'
               : 'bg-[#f6f3f2] text-[#5f5e5e] hover:bg-[#ebe7e7] hover:text-[#1c1b1b]'
           }`}
         >
           {tab.label}
           {tab.count !== undefined && (
-            <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+            <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${
               activeTab === tab.key ? 'bg-white/20' : 'bg-black/5'
             }`}>
               {tab.count}

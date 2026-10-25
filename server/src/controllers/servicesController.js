@@ -295,3 +295,173 @@ exports.deleteAddon = async (req, res) => {
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };
+
+// ─── SERVICE MEDIA & VIDEOS ─────────────────
+const cloudinary = require('../config/cloudinary');
+
+exports.listMedia = async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      'SELECT * FROM service_media WHERE service_id = ? AND is_active = 1 ORDER BY sort_order ASC, created_at ASC',
+      [req.params.id]
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('List service media error:', err);
+    res.status(500).json({ success: false, error: 'Failed to fetch media' });
+  }
+};
+
+exports.addMedia = async (req, res) => {
+  try {
+    const serviceId = req.params.id;
+    const [svc] = await pool.query('SELECT id FROM services WHERE id = ?', [serviceId]);
+    if (!svc.length) return res.status(404).json({ success: false, error: 'Service not found' });
+
+    let url = req.body.url;
+    let public_id = req.body.public_id || null;
+    let thumbnail_url = req.body.thumbnail_url || null;
+    let media_type = req.body.media_type || 'image';
+    let external_url = req.body.external_url || null;
+    let sort_order = parseInt(req.body.sort_order || 0);
+    const media_role = ['gallery', 'before', 'after', 'process'].includes(req.body.media_role) ? req.body.media_role : 'gallery';
+
+    // If uploaded via multer
+    if (req.file) {
+      url = req.file.path || req.file.secure_url;
+      public_id = req.file.filename || req.file.public_id;
+      if (req.file.mimetype && req.file.mimetype.startsWith('video/')) {
+        media_type = 'video';
+        // Auto-generate video thumbnail url if Cloudinary
+        if (public_id) {
+          thumbnail_url = cloudinary.url(public_id, { resource_type: 'video', format: 'jpg', transformation: [{ width: 480, crop: 'scale' }] });
+        }
+      }
+    }
+
+    if (!url && !external_url) {
+      return res.status(400).json({ success: false, error: 'Media file or external URL is required' });
+    }
+
+    const [result] = await pool.query(
+      `INSERT INTO service_media (service_id, media_type, media_role, url, public_id, thumbnail_url, external_url, sort_order, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      [serviceId, media_type, media_role, url || external_url, public_id, thumbnail_url, external_url, sort_order]
+    );
+
+    // If this is a video and service video_url is null, set as primary video_url
+    if (media_type === 'video') {
+      await pool.query('UPDATE services SET video_url = IFNULL(video_url, ?) WHERE id = ?', [url || external_url, serviceId]);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `${media_type === 'video' ? 'Video' : 'Media'} added successfully`,
+      data: { id: result.insertId, url: url || external_url, media_type, media_role, thumbnail_url }
+    });
+  } catch (err) {
+    console.error('Add service media error:', err);
+    res.status(500).json({ success: false, error: 'Failed to upload media' });
+  }
+};
+
+exports.deleteMedia = async (req, res) => {
+  try {
+    const { id, mediaId } = req.params;
+    const [rows] = await pool.query('SELECT * FROM service_media WHERE id = ? AND service_id = ?', [mediaId, id]);
+    if (!rows.length) return res.status(404).json({ success: false, error: 'Media not found' });
+
+    const media = rows[0];
+
+    // Delete from Cloudinary if public_id exists
+    if (media.public_id) {
+      try {
+        await cloudinary.uploader.destroy(media.public_id, {
+          resource_type: media.media_type === 'video' ? 'video' : 'image'
+        });
+      } catch (cloudErr) {
+        console.warn('Cloudinary asset delete warning:', cloudErr.message);
+      }
+    }
+
+    await pool.query('DELETE FROM service_media WHERE id = ?', [mediaId]);
+    // Clear the service's main video link if it pointed at this item
+    if (media.media_type === 'video') {
+      await pool.query('UPDATE services SET video_url = NULL WHERE id = ? AND video_url = ?', [id, media.url]);
+    }
+    res.json({ success: true, message: 'Media removed' });
+  } catch (err) {
+    console.error('Delete service media error:', err);
+    res.status(500).json({ success: false, error: 'Failed to remove media' });
+  }
+};
+
+// ─── MAIN SERVICE IMAGE REPLACE ─────────────
+exports.updateMainImage = async (req, res) => {
+  try {
+    const serviceId = req.params.id;
+    const [svc] = await pool.query('SELECT id, image_url, image_public_id FROM services WHERE id = ?', [serviceId]);
+    if (!svc.length) return res.status(404).json({ success: false, error: 'Service not found' });
+
+    let newImageUrl = req.body.image_url;
+    let newPublicId = req.body.image_public_id || null;
+
+    if (req.file) {
+      newImageUrl = req.file.path || req.file.secure_url;
+      newPublicId = req.file.filename || req.file.public_id;
+    }
+
+    if (!newImageUrl) {
+      return res.status(400).json({ success: false, error: 'Image file or image_url is required' });
+    }
+
+    // Delete old Cloudinary asset if public_id was tracked
+    const oldPublicId = svc[0].image_public_id;
+    if (oldPublicId && oldPublicId !== newPublicId) {
+      try {
+        await cloudinary.uploader.destroy(oldPublicId, { resource_type: 'image' });
+      } catch (cloudErr) {
+        console.warn('Old Cloudinary image cleanup warning:', cloudErr.message);
+      }
+    }
+
+    await pool.query(
+      'UPDATE services SET image_url = ?, image_public_id = ? WHERE id = ?',
+      [newImageUrl, newPublicId, serviceId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Service primary image updated',
+      data: { image_url: newImageUrl, image_public_id: newPublicId }
+    });
+  } catch (err) {
+    console.error('Update main image error:', err);
+    res.status(500).json({ success: false, error: 'Failed to update image' });
+  }
+};
+
+// ─── BULK IMAGE UPDATE HELPER ───────────────
+exports.bulkUpdateImages = async (req, res) => {
+  try {
+    const { updates } = req.body; // Array of { service_id, image_url, image_public_id }
+    if (!Array.isArray(updates) || !updates.length) {
+      return res.status(400).json({ success: false, error: 'Array of updates required' });
+    }
+
+    for (const item of updates) {
+      if (item.service_id && item.image_url) {
+        await pool.query(
+          'UPDATE services SET image_url = ?, image_public_id = ? WHERE id = ?',
+          [item.image_url, item.image_public_id || null, item.service_id]
+        );
+      }
+    }
+
+    res.json({ success: true, message: `Updated images for ${updates.length} services` });
+  } catch (err) {
+    console.error('Bulk update images error:', err);
+    res.status(500).json({ success: false, error: 'Bulk image update failed' });
+  }
+};
+

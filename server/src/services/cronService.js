@@ -3,6 +3,164 @@ const pool = require('../config/db');
 const messagingService = require('./messagingService');
 
 /**
+ * Executes or previews Service Reminders with configurable intervals,
+ * idempotency safeguards, and Admin Daily Digest alerts.
+ */
+async function runServiceReminders(options = { isManual: false, isPreview: false, io: null }) {
+  try {
+    // 1. Fetch configurable reminder settings
+    const [settingsRows] = await pool.query(
+      "SELECT key_name, value FROM settings WHERE key_name IN ('service_reminders_enabled', 'service_reminder_interval_days', 'service_reminder_wash_days', 'service_reminder_template', 'admin_whatsapp_number', 'admin_daily_digest_enabled')"
+    );
+    const settings = settingsRows.reduce((acc, curr) => {
+      acc[curr.key_name] = curr.value;
+      return acc;
+    }, {});
+
+    const isEnabled = settings.service_reminders_enabled !== '0';
+    if (!isEnabled && !options.isManual && !options.isPreview) {
+      console.log('[CRON] Service reminders disabled in settings. Skipping.');
+      return { success: true, skipped: true, reason: 'Reminders disabled in settings' };
+    }
+
+    const intervalDays = parseInt(settings.service_reminder_interval_days || '90', 10);
+    const adminMobile = settings.admin_whatsapp_number || '9408424541';
+    const baseUrl = process.env.CLIENT_URL || 'https://gkautobook.cloud';
+    const bookingUrl = `${baseUrl}/customer/booking`;
+
+    // 2. Query vehicles whose last service was intervalDays ago or more
+    const [dueVehicles] = await pool.query(`
+      SELECT v.id as vehicle_id, v.brand, v.model, v.registration_no,
+             u.id as customer_id, u.name as customer_name, u.mobile,
+             MAX(jc.completed_at) as last_visit,
+             DATEDIFF(CURDATE(), MAX(jc.completed_at)) as days_since_last_visit
+      FROM vehicles v
+      JOIN users u ON v.customer_id = u.id
+      JOIN job_carts jc ON jc.vehicle_id = v.id
+      WHERE jc.status = 'complete'
+        AND u.is_active = 1
+        AND (u.opt_out_promotional IS NULL OR u.opt_out_promotional = 0)
+        AND u.mobile IS NOT NULL
+      GROUP BY v.id
+      HAVING days_since_last_visit >= ?
+      ORDER BY days_since_last_visit DESC
+      LIMIT 100
+    `, [intervalDays]);
+
+    // 3. Query vehicles Due Soon (interval - 7 days to interval)
+    const [dueSoonVehicles] = await pool.query(`
+      SELECT v.id as vehicle_id, v.brand, v.model, v.registration_no,
+             u.id as customer_id, u.name as customer_name, u.mobile,
+             MAX(jc.completed_at) as last_visit,
+             DATEDIFF(CURDATE(), MAX(jc.completed_at)) as days_since_last_visit
+      FROM vehicles v
+      JOIN users u ON v.customer_id = u.id
+      JOIN job_carts jc ON jc.vehicle_id = v.id
+      WHERE jc.status = 'complete'
+        AND u.is_active = 1
+        AND u.mobile IS NOT NULL
+      GROUP BY v.id
+      HAVING days_since_last_visit >= (? - 7) AND days_since_last_visit < ?
+      LIMIT 100
+    `, [intervalDays, intervalDays]);
+
+    // 4. Query Open Job Carts
+    const [openJobs] = await pool.query("SELECT COUNT(*) as open_count FROM job_carts WHERE status = 'open'");
+    const openJobsCount = openJobs[0]?.open_count || 0;
+
+    let sentCount = 0;
+    const candidates = [];
+
+    for (const veh of dueVehicles) {
+      const vehName = veh.registration_no || `${veh.brand} ${veh.model}`;
+
+      // Idempotency check: don't send duplicate reminder if sent within last 14 days
+      const [recentReminder] = await pool.query(`
+        SELECT id FROM v2_notification_logs
+        WHERE customer_id = ?
+          AND reference_type = 'service_reminder'
+          AND reference_id = ?
+          AND created_at >= DATE_SUB(NOW(), INTERVAL 14 DAY)
+        LIMIT 1
+      `, [veh.customer_id, veh.vehicle_id]);
+
+      const alreadyReminded = recentReminder.length > 0;
+
+      candidates.push({
+        customer_id: veh.customer_id,
+        customer_name: veh.customer_name,
+        mobile: veh.mobile,
+        vehicle_id: veh.vehicle_id,
+        vehicle_name: vehName,
+        days_since_last_visit: veh.days_since_last_visit,
+        already_reminded_recently: alreadyReminded
+      });
+
+      if (!alreadyReminded && !options.isPreview) {
+        // Send WhatsApp with SMS fallback
+        await messagingService.notify(
+          veh.customer_id,
+          'SERVICE_REMINDER',
+          {
+            customer_name: veh.customer_name,
+            vehicle_name: vehName,
+            booking_url: bookingUrl
+          },
+          { type: 'service_reminder', id: veh.vehicle_id }
+        ).catch(e => console.warn(`Service reminder error for vehicle ${veh.vehicle_id}:`, e.message));
+
+        sentCount++;
+      }
+    }
+
+    // 5. Admin Notifications (Daily Digest)
+    if (!options.isPreview) {
+      // In-app Socket.io notification
+      const io = options.io || (global.app && global.app.get('io'));
+      if (io) {
+        io.emit('admin_notification', {
+          type: 'service_reminders',
+          title: 'Daily Service Reminders Dispatched',
+          message: `${sentCount} service reminders sent. ${dueSoonVehicles.length} due soon. ${openJobsCount} bay jobs active.`,
+          count: sentCount,
+          due_soon: dueSoonVehicles.length,
+          created_at: new Date()
+        });
+      }
+
+      // WhatsApp Daily Digest to Admin
+      if (settings.admin_daily_digest_enabled !== '0' && adminMobile) {
+        await messagingService.sendWhatsApp(
+          adminMobile,
+          'ADMIN_DAILY_DIGEST',
+          {
+            body: `🚗 *GK AutoHerb Morning Digest*\n• Reminders sent today: ${sentCount}\n• Due for service soon: ${dueSoonVehicles.length}\n• Open workshop jobs: ${openJobsCount}\nStudio portal: ${baseUrl}/admin`
+          }
+        ).catch(() => {});
+      }
+    }
+
+    console.log(`[SERVICE REMINDERS] Completed: Sent ${sentCount} reminders, ${dueSoonVehicles.length} due soon`);
+
+    return {
+      success: true,
+      reminded_count: sentCount,
+      total_candidates: dueVehicles.length,
+      due_soon_count: dueSoonVehicles.length,
+      open_jobs_count: openJobsCount,
+      interval_days: intervalDays,
+      candidates
+    };
+
+  } catch (err) {
+    console.error('[SERVICE REMINDERS] Error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+exports.runServiceReminders = runServiceReminders;
+
+/**
  * Initializes all cron jobs for the application.
  */
 exports.initCronJobs = () => {
@@ -10,33 +168,7 @@ exports.initCronJobs = () => {
   // Runs at 9:00 AM every day
   cron.schedule('0 9 * * *', async () => {
     console.log('[CRON] Running daily morning task: Service Reminders');
-    try {
-      // Find customers whose last service visit was exactly 90 days ago
-      const [rows] = await pool.query(`
-        SELECT v.id, v.brand, v.model, v.registration_no, u.mobile, u.name 
-        FROM vehicles v
-        JOIN users u ON v.customer_id = u.id
-        JOIN job_carts jc ON jc.vehicle_id = v.id
-        WHERE jc.status = 'complete'
-          AND jc.completed_at = DATE_SUB(CURDATE(), INTERVAL 90 DAY)
-          AND u.is_active = 1
-          AND u.mobile IS NOT NULL
-        GROUP BY v.id
-      `);
-
-      for (const vehicle of rows) {
-        if (vehicle.mobile) {
-          await messagingService.sendWhatsApp(
-            `91${vehicle.mobile}`, 
-            'service_reminder', 
-            { body: `Hi ${vehicle.name}, your ${vehicle.brand} ${vehicle.model} (${vehicle.registration_no}) is due for service! Visit GK AutoHerb.` }
-          ).catch(() => {});
-        }
-      }
-      console.log(`[CRON] Sent ${rows.length} service reminders`);
-    } catch (err) {
-      console.error('[CRON] Error in service reminder task:', err);
-    }
+    await runServiceReminders({ isManual: false });
   });
 
   // 2. Daily evening task: Mark absentees for staff who didn't clock in
@@ -236,5 +368,15 @@ exports.initCronJobs = () => {
     }
   });
   
+  // 8. CUSTOMER AUTOMATIONS (IST): day-before reminders, birthday/anniversary wishes, warranty alerts
+  const automation = require('./automationJobs');
+  const IST = { timezone: 'Asia/Kolkata' };
+  cron.schedule('*/30 * * * *', () => automation.runBookingReminders().catch((e) => console.error('[CRON] reminders:', e.message)), IST);
+  cron.schedule('0 9 * * *', () => automation.runGreetings().catch((e) => console.error('[CRON] greetings:', e.message)), IST);
+  cron.schedule('30 10 * * *', () => automation.runWarrantyJobs().catch((e) => console.error('[CRON] warranty:', e.message)), IST);
+  cron.schedule('0 8 * * *', () => automation.runMorningReminders().catch((e) => console.error('[CRON] morning reminders:', e.message)), IST);
+  cron.schedule('0 10 * * *', () => automation.runPackageJobs().catch((e) => console.error('[CRON] package jobs:', e.message)), IST);
+  cron.schedule('*/5 * * * *', () => automation.runFestivalCampaigns().catch((e) => console.error('[CRON] festival:', e.message)), IST);
+
   console.log('[CRON] Jobs initialized successfully');
 };

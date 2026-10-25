@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Car } from 'lucide-react';
 import { getPreloadedCarImage, markCarImageFailed } from '../../utils/carImageService';
+import { brandLogo } from '../../utils/brandLogos';
 
 interface VehicleBrandBadgeProps {
   brand?: string;
@@ -40,7 +41,15 @@ export default function VehicleBrandBadge({
     setImgFailed(true);
   };
 
+  const logo = brandLogo(brand);
   const renderIcon = () => {
+    if (logo) {
+      return (
+        <div className={`${sizeClasses} rounded-full bg-white border border-slate-200 p-[3px] flex items-center justify-center shrink-0 shadow-xs`}>
+          <img src={logo} alt={brand} className="w-full h-full object-contain" loading="lazy" />
+        </div>
+      );
+    }
     if (b.includes('bmw')) {
       return (
         <div className={`${sizeClasses} rounded-full bg-slate-900 border border-slate-700 p-0.5 flex items-center justify-center shrink-0 shadow-xs`}>

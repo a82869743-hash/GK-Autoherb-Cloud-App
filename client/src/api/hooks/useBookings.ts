@@ -7,6 +7,7 @@ export const useBookings = (params: {
   status?: string;
   search?: string;
   slot_id?: number;
+  date?: string;
 }) =>
   useQuery({
     queryKey: ['bookings', params],
@@ -50,6 +51,9 @@ export const useCreateBooking = () => {
       pay_advance?: boolean | 'full' | 'part' | 'none';
       pickup_type?: string;
       pickup_address_details?: any;
+      coupon_id?: number;
+      coupon_discount?: number;
+      reward_voucher_code?: string;
     }) => {
       const res = await api.post('/bookings', payload);
       return res.data;

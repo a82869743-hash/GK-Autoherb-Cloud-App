@@ -35,7 +35,7 @@ export default function SearchInput({
 
   return (
     <div className={`relative ${className}`}>
-      <Search size={16} className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors duration-200 ${isFocused ? 'text-[#D32F2F]' : 'text-[#8f6f6c]'}`} />
+      <Search size={15} className={`absolute left-3 top-1/2 -translate-y-1/2 transition-colors duration-150 ${isFocused ? 'text-[#D32F2F]' : 'text-gray-400'}`} />
       <input
         type="text"
         value={localValue}
@@ -43,7 +43,7 @@ export default function SearchInput({
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
         placeholder={placeholder}
-        className="w-full pl-11 pr-10 py-3 bg-[#f6f3f2] border border-transparent rounded-lg text-sm font-medium text-[#1c1b1b] focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white focus:border-[#D32F2F]/30 focus:shadow-sm placeholder:text-[#8f6f6c]/60 transition-all duration-200"
+        className="w-full h-9 pl-8 pr-8 bg-white border border-gray-200 rounded-lg text-sm font-normal text-[#1c1b1b] focus:outline-none focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] placeholder:text-gray-400 transition-all duration-150"
       />
       {localValue && (
         <button

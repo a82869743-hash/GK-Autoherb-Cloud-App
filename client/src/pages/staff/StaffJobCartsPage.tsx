@@ -1,17 +1,36 @@
 import { useState, useMemo } from 'react';
 import { useJobCarts } from '../../api/hooks/useJobCarts';
-import { SkeletonCard } from '../../components/ui/SkeletonLoader';
-import EmptyState from '../../components/shared/EmptyState';
+import { useStaffTasks, useUpdateTaskStatus } from '../../api/hooks/useStaffHR';
+import { useUIStore } from '../../store/uiStore';
 import ErrorState from '../../components/shared/ErrorState';
-import { Briefcase, Clock, ChevronRight, PlusCircle, Search, Sparkles, Filter } from 'lucide-react';
+import { Briefcase, Clock, PlusCircle, Sparkles, ListTodo, CheckCircle2, Play, Check, Calendar, Car, Wrench, Timer } from 'lucide-react';
+import { OpsHero, StatTile, SearchBar, ChipRow, EmptyBlock, Skeleton, SectionTitle, StatusPill } from '../../components/ops/ui';
 import { Link } from 'react-router-dom';
 
 export default function StaffJobCartsPage() {
   const { data, isLoading, isError, refetch } = useJobCarts({});
   const jobs = data?.data || [];
 
+  const toast = useUIStore((s) => s.toast);
+  const { data: myTasks = [], isLoading: isTasksLoading } = useStaffTasks();
+  const updateStatusMutation = useUpdateTaskStatus();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'in_progress' | 'open' | 'complete'>('all');
+  const [showTasks, setShowTasks] = useState(true);
+
+  const pendingTasksCount = useMemo(() => {
+    return (myTasks || []).filter((t: any) => t.status === 'pending' || t.status === 'in_progress').length;
+  }, [myTasks]);
+
+  const handleTaskStatusChange = async (taskId: number, newStatus: string) => {
+    try {
+      await updateStatusMutation.mutateAsync({ id: taskId, status: newStatus });
+      toast('success', `Task marked as ${newStatus.replace('_', ' ')}`);
+    } catch (err: any) {
+      toast('error', err?.response?.data?.error || 'Failed to update task status');
+    }
+  };
 
   const filteredJobs = useMemo(() => {
     return jobs.filter((job: any) => {
@@ -42,148 +61,169 @@ export default function StaffJobCartsPage() {
     };
   }, [jobs]);
 
+  const PRIORITY: Record<string, string> = {
+    urgent: 'bg-rose-50 text-rose-700',
+    high: 'bg-amber-50 text-amber-700',
+    medium: 'bg-sky-50 text-sky-700',
+    low: 'bg-slate-100 text-slate-600',
+  };
+  const STATUS_BAR: Record<string, string> = {
+    in_progress: 'bg-sky-500', washing: 'bg-sky-500', repairing: 'bg-sky-500',
+    open: 'bg-amber-500', draft: 'bg-amber-500', pending: 'bg-amber-500',
+    complete: 'bg-emerald-500', delivered: 'bg-emerald-500',
+  };
+
   return (
-    <div className="space-y-6 pb-12 font-sans">
-      {/* ── Staff Header Bar ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full bg-red-50 border border-red-100 text-[#D32F2F] text-[10px] font-black uppercase tracking-wider">
-              Workshop Bays
-            </span>
-            <span className="text-xs text-slate-400 font-bold">• Today's Floor</span>
-          </div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-1">
-            Today's Job Queue
-          </h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            {jobs.length} vehicle{jobs.length === 1 ? '' : 's'} registered on the workshop floor today
-          </p>
+    <div className="space-y-5">
+      <OpsHero
+        kicker="Workshop floor"
+        title={<>{counts.in_progress} in bay · {counts.open} waiting</>}
+        subtitle={`${jobs.length} vehicle${jobs.length === 1 ? '' : 's'} on the floor today`}
+      >
+        <div className="flex gap-2">
+          <Link to="/staff/job-carts/new" className="app-btn h-11 px-4 bg-white text-slate-900">
+            <PlusCircle size={17} /> New job cart
+          </Link>
+          <Link to="/staff/quick-wash" className="app-btn h-11 px-4 bg-white/15 text-white border border-white/20">
+            <Sparkles size={16} /> Quick wash
+          </Link>
         </div>
+      </OpsHero>
 
-        <Link
-          to="/staff/job-carts/new"
-          className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-[#af101a] to-[#D32F2F] hover:from-[#b71c1c] hover:to-[#991b1b] text-white font-bold rounded-2xl shadow-lg shadow-red-600/20 hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] transition-all text-xs uppercase tracking-wider shrink-0 self-start sm:self-center"
+      <div className="grid grid-cols-3 gap-2.5">
+        <StatTile label="In bay" value={counts.in_progress} icon={Wrench} tone="blue" onClick={() => setStatusFilter('in_progress')} />
+        <StatTile label="Queued" value={counts.open} icon={Timer} tone="amber" onClick={() => setStatusFilter('open')} />
+        <StatTile label="Done" value={counts.complete} icon={CheckCircle2} tone="green" onClick={() => setStatusFilter('complete')} />
+      </div>
+
+      {/* ── My tasks ── */}
+      <section>
+        <SectionTitle
+          action={
+            (myTasks || []).length > 0 ? (
+              <button onClick={() => setShowTasks(!showTasks)} className="text-[13px] font-bold text-[#D32F2F]">
+                {showTasks ? 'Hide' : `Show (${(myTasks || []).length})`}
+              </button>
+            ) : undefined
+          }
         >
-          <PlusCircle size={16} />
-          <span>New Job Cart</span>
-        </Link>
-      </div>
+          <span className="inline-flex items-center gap-2">
+            My tasks
+            {pendingTasksCount > 0 && <span className="rounded-full bg-[#D32F2F] px-2 py-0.5 text-[11px] font-bold text-white">{pendingTasksCount}</span>}
+          </span>
+        </SectionTitle>
 
-      {/* ── Filter & Search Controls ── */}
-      <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
-        {/* Search */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-          <input
-            type="text"
-            placeholder="Search by license plate, car brand, or model..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F] shadow-2xs transition-all"
+        {showTasks &&
+          (isTasksLoading ? (
+            <Skeleton className="h-24" />
+          ) : (myTasks || []).length === 0 ? (
+            <div className="app-card p-4 flex items-center gap-3">
+              <span className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><CheckCircle2 size={20} /></span>
+              <div>
+                <p className="font-display font-bold text-slate-900 text-[14px]">All caught up</p>
+                <p className="text-xs text-slate-500">No pending tasks assigned to you.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="-mx-4 px-4 flex gap-3 overflow-x-auto no-scrollbar snap-x lg:mx-0 lg:px-0 lg:grid lg:grid-cols-2 lg:overflow-visible">
+              {(myTasks || []).map((t: any) => {
+                const isCompleted = t.status === 'completed';
+                return (
+                  <div key={t.id} className={`app-card snap-start shrink-0 w-[80%] lg:w-auto p-4 flex flex-col ${isCompleted ? 'opacity-60' : ''}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold capitalize ${PRIORITY[t.priority] || PRIORITY.low}`}>{t.priority}</span>
+                      {t.job_cart_id && (
+                        <Link to={`/staff/job-carts/${t.job_cart_id}`} className="text-[12px] font-bold text-[#D32F2F]">JC #{t.job_cart_id}</Link>
+                      )}
+                    </div>
+                    <h4 className={`mt-2 font-display font-extrabold text-[15px] leading-snug text-slate-900 ${isCompleted ? 'line-through' : ''}`}>{t.title}</h4>
+                    {t.description && <p className="mt-1 text-[12.5px] text-slate-500 line-clamp-2">{t.description}</p>}
+                    <div className="mt-auto pt-3 flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-1 text-[12px] text-slate-400">
+                        <Calendar size={13} />
+                        {t.due_date ? new Date(t.due_date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : 'No due date'}
+                      </span>
+                      {t.status === 'pending' && (
+                        <button onClick={() => handleTaskStatusChange(t.id, 'in_progress')} disabled={updateStatusMutation.isPending} className="app-btn h-9 px-3.5 bg-[#111] text-white text-[13px]">
+                          <Play size={13} /> Start
+                        </button>
+                      )}
+                      {t.status === 'in_progress' && (
+                        <button onClick={() => handleTaskStatusChange(t.id, 'completed')} disabled={updateStatusMutation.isPending} className="app-btn h-9 px-3.5 bg-emerald-600 text-white text-[13px]">
+                          <Check size={14} /> Mark done
+                        </button>
+                      )}
+                      {isCompleted && (
+                        <span className="flex items-center gap-1 text-[12px] font-bold text-emerald-600"><CheckCircle2 size={14} /> Done</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+      </section>
+
+      {/* ── Job queue ── */}
+      <section className="space-y-3">
+        <SectionTitle>
+          <span className="inline-flex items-center gap-2"><ListTodo size={18} className="text-[#D32F2F]" /> Job queue</span>
+        </SectionTitle>
+        <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search number plate, car or customer" />
+        <ChipRow
+          value={statusFilter}
+          onChange={setStatusFilter}
+          items={[
+            { key: 'all', label: 'All', count: counts.all },
+            { key: 'in_progress', label: 'In bay', count: counts.in_progress },
+            { key: 'open', label: 'Queued', count: counts.open },
+            { key: 'complete', label: 'Completed', count: counts.complete },
+          ]}
+        />
+
+        {isError ? (
+          <ErrorState message="Failed to load today's job queue. Please check your connection and try again." onRetry={() => refetch()} />
+        ) : isLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-28" />
+            <Skeleton className="h-28" />
+          </div>
+        ) : !filteredJobs.length ? (
+          <EmptyBlock
+            icon={<Briefcase size={26} />}
+            title={searchQuery || statusFilter !== 'all' ? 'No matching jobs' : 'No cars in the queue'}
+            text={searchQuery || statusFilter !== 'all' ? 'Try another search or filter.' : 'No job carts have been created today yet.'}
           />
-        </div>
-
-        {/* Status Filter Chips */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-          {[
-            { key: 'all' as const, label: 'All Jobs', count: counts.all },
-            { key: 'in_progress' as const, label: 'In Progress', count: counts.in_progress },
-            { key: 'open' as const, label: 'Intake / Queued', count: counts.open },
-            { key: 'complete' as const, label: 'Completed', count: counts.complete },
-          ].map((chip) => (
-            <button
-              key={chip.key}
-              onClick={() => setStatusFilter(chip.key)}
-              className={`px-3.5 py-2 rounded-2xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
-                statusFilter === chip.key
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'bg-white hover:bg-slate-50 border border-slate-200/80 text-slate-600'
-              }`}
-            >
-              <span>{chip.label}</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                statusFilter === chip.key ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {chip.count}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Content Deck ── */}
-      {isError ? (
-        <ErrorState
-          message="Failed to load today's job queue. Please check your connection and try again."
-          onRetry={() => refetch()}
-        />
-      ) : isLoading ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-        </div>
-      ) : !filteredJobs.length ? (
-        <EmptyState 
-          icon={Briefcase} 
-          title={searchQuery || statusFilter !== 'all' ? "No Matching Jobs" : "No Carts in Queue"} 
-          description={searchQuery || statusFilter !== 'all' ? "Try adjusting your search terms or filter." : "No job carts have been created for today yet."} 
-        />
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredJobs.map((job: any, idx: number) => (
-            <Link
-              key={job.id}
-              to={`/staff/job-carts/${job.id}`}
-              className="bg-white rounded-2xl shadow-xs hover:shadow-md border border-slate-200/80 p-5 block group relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5 opacity-0 animate-fade-in-up"
-              style={{ animationDelay: `${idx * 0.04}s`, animationFillMode: 'forwards' }}
-            >
-              {/* Status color indicator bar */}
-              <div className={`absolute top-0 left-0 w-1.5 h-full rounded-r ${
-                job.status === 'in_progress' ? 'bg-blue-500' :
-                job.status === 'open' ? 'bg-amber-500' :
-                job.status === 'complete' || job.status === 'delivered' ? 'bg-emerald-500' : 'bg-slate-300'
-              }`} />
-              
-              <div className="flex justify-between items-start mb-3 ml-2">
-                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
-                  job.status === 'in_progress' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                  job.status === 'complete' || job.status === 'delivered' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                  'bg-amber-50 text-amber-700 border-amber-200'
-                 }`}>
-                   {job.status.replace('_', ' ')}
-                 </span>
-                 <span className="text-slate-400 text-xs font-semibold group-hover:text-[#D32F2F] flex items-center gap-1 transition-colors">
-                   View Sheet <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
-                 </span>
-              </div>
-
-              <div className="ml-2">
-                <h3 className="font-black text-slate-900 text-lg mb-0.5 group-hover:text-[#D32F2F] transition-colors tracking-tight">
-                  {job.registration_no}
-                </h3>
-                <p className="text-xs font-semibold text-slate-500 mb-3">{job.brand} {job.model}</p>
-
-                <div className="bg-slate-50 p-3 rounded-xl text-xs text-slate-700 mb-3 border border-slate-100">
-                  <span className="font-bold text-slate-900 block mb-1 text-[10px] uppercase tracking-wider text-slate-400">Assigned Services</span>
-                  <span className="line-clamp-2 font-medium">
-                    {job.services_count ? `${job.services_count} Service(s) in progress` : 'No services assigned yet'}
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {filteredJobs.map((job: any) => (
+              <Link key={job.id} to={`/staff/job-carts/${job.id}`} className="app-card relative overflow-hidden p-4 pl-5 block active:scale-[0.99] transition-transform">
+                <span className={`absolute left-0 top-0 h-full w-1.5 ${STATUS_BAR[job.status] || 'bg-slate-300'}`} />
+                <div className="flex items-start gap-3">
+                  <span className="h-11 w-11 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0"><Car size={21} /></span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="font-display font-extrabold text-[17px] tracking-tight text-slate-900 truncate">{job.registration_no}</h3>
+                      <StatusPill status={job.status} />
+                    </div>
+                    <p className="text-[13px] text-slate-500 truncate">
+                      {[job.brand, job.model].filter(Boolean).join(' ')}
+                      {job.customer_name ? ` · ${job.customer_name}` : ''}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center justify-between text-[12px] text-slate-500">
+                  <span className="font-semibold">{job.services_count ? `${job.services_count} service${job.services_count > 1 ? 's' : ''}` : 'No services yet'}</span>
+                  <span className="flex items-center gap-1">
+                    <Clock size={13} />
+                    {new Date(job.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} · #JC-{job.id}
                   </span>
                 </div>
-
-                <div className="flex items-center justify-between text-xs text-slate-400 font-medium pt-1">
-                  <span className="flex items-center gap-1.5">
-                    <Clock size={13} className="text-slate-400" />
-                    Intake: {new Date(job.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-400">#JC-{job.id}</span>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

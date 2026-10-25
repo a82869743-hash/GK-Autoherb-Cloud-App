@@ -11,7 +11,9 @@ router.post('/', ctrl.submitFeedback);
 router.get('/', auth, role(['admin']), ctrl.getFeedback);
 router.get('/stats', auth, role(['admin']), ctrl.getFeedbackStats);
 router.patch('/:id/reply', auth, role(['admin']), ctrl.replyToFeedback);
+router.put('/:id/reply', auth, role(['admin']), ctrl.replyToFeedback);
 router.patch('/:id/publish', auth, role(['admin']), ctrl.publishFeedback);
+router.put('/:id/publish', auth, role(['admin']), ctrl.publishFeedback);
 router.post('/request', auth, role(['admin']), ctrl.requestFeedbackManual);
 
 // Referral Codes & Programs (Authentication Required)

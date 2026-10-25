@@ -1,23 +1,44 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Star, MessageSquare, ThumbsUp, ThumbsDown, Reply, BarChart3, Sparkles, ShieldCheck } from 'lucide-react';
-import { useFeedback, useFeedbackStats, useReplyFeedback } from '../../api/hooks/useFeedback';
+import { Star, MessageSquare, ThumbsUp, ThumbsDown, Reply, BarChart3, Sparkles, ShieldCheck, Globe, Eye, EyeOff, FileText, CheckCircle2, Filter } from 'lucide-react';
+import { useFeedback, useFeedbackStats, useReplyFeedback, usePublishFeedback } from '../../api/hooks/useFeedback';
+import { useUIStore } from '../../store/uiStore';
 import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
 import AdminMetricCard from '../../components/admin/AdminMetricCard';
 import { AnimatedModal, RippleButton } from '../../components/ui/Animations';
 
 export default function FeedbackPage() {
+  const toast = useUIStore((s) => s.toast);
   const [replyModal, setReplyModal] = useState<{ id: number; name: string } | null>(null);
   const [replyText, setReplyText] = useState('');
+  const [filterRating, setFilterRating] = useState<string>('all');
+
   const { data: feedbackData, isLoading } = useFeedback();
   const { data: stats } = useFeedbackStats();
   const replyMutation = useReplyFeedback();
+  const publishMutation = usePublishFeedback();
 
   const handleReply = () => {
     if (replyModal) {
       replyMutation.mutate({ id: replyModal.id, admin_reply: replyText }, {
-        onSuccess: () => { setReplyModal(null); setReplyText(''); }
+        onSuccess: () => { 
+          toast('success', 'Official studio reply posted successfully');
+          setReplyModal(null); 
+          setReplyText(''); 
+        },
+        onError: (err: any) => {
+          toast('error', err?.response?.data?.error || 'Failed to submit reply');
+        }
       });
+    }
+  };
+
+  const handleTogglePublish = async (id: number, currentPublic: boolean) => {
+    try {
+      await publishMutation.mutateAsync({ id, is_public: !currentPublic });
+      toast('success', !currentPublic ? 'Review published to website showcase' : 'Review unshared from public showcase');
+    } catch (err: any) {
+      toast('error', err?.response?.data?.error || 'Failed to update visibility');
     }
   };
 
@@ -25,6 +46,18 @@ export default function FeedbackPage() {
     Array.from({ length: 5 }, (_, i) => (
       <Star key={i} size={14} className={i < rating ? 'text-amber-400 fill-amber-400' : 'text-slate-200'} />
     ));
+
+  const allReviews = feedbackData?.data || [];
+  const filteredReviews = allReviews.filter((fb: any) => {
+    const r = fb.overall_rating || fb.rating || 0;
+    if (filterRating === 'all') return true;
+    if (filterRating === '5') return r === 5;
+    if (filterRating === '4') return r === 4;
+    if (filterRating === '3') return r === 3;
+    if (filterRating === 'needs_followup') return r <= 2;
+    if (filterRating === 'public') return fb.is_public === 1 || fb.is_public === true;
+    return true;
+  });
 
   return (
     <div className="space-y-6 pb-28 lg:pb-12 max-w-[1600px] mx-auto font-sans">
@@ -66,84 +99,216 @@ export default function FeedbackPage() {
         />
       </div>
 
-      {/* Rating Distribution */}
-      {stats?.distribution && (
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-[0_4px_24px_rgba(0,0,0,0.03)]">
-          <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
-            <BarChart3 size={18} className="text-[#D32F2F]" />
-            <span>Rating Distribution Breakdown</span>
-          </h3>
-          <div className="space-y-3">
-            {[5, 4, 3, 2, 1].map(r => {
-              const count = stats.distribution.find((d: any) => d.rating === r)?.count || 0;
-              const pct = stats.total_reviews > 0 ? (count / stats.total_reviews) * 100 : 0;
-              return (
-                <div key={r} className="flex items-center gap-3">
-                  <div className="flex items-center gap-1 w-16 text-xs font-bold text-slate-700">
-                    {r} <Star size={12} className="text-amber-400 fill-amber-400" />
-                  </div>
-                  <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      style={{ width: `${pct}%` }}
-                      className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-500"
-                    />
-                  </div>
-                  <span className="text-xs font-bold text-slate-400 w-12 text-right">{count} ({Math.round(pct)}%)</span>
-                </div>
-              );
-            })}
+      {/* Google Review Funnel & Rating Distribution Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Google Review Funnel */}
+        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-[0_4px_24px_rgba(0,0,0,0.03)] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Sparkles size={18} className="text-amber-500" />
+                <span>Google Review Conversion Funnel</span>
+              </h3>
+              <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                Threshold: ≥{stats?.settings?.feedback_google_threshold || 4} ★
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mb-5 leading-relaxed">
+              Automated review invitations sent via WhatsApp post-service delivery, filtered to route 4★ & 5★ ratings to your public Google Business profile.
+            </p>
+
+            <div className="grid grid-cols-3 gap-3 text-center mb-5">
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Invites Sent</p>
+                <p className="text-lg font-black text-slate-900 mt-1">{stats?.funnel?.sent || 0}</p>
+              </div>
+              <div className="p-3 bg-indigo-50 rounded-2xl border border-indigo-100">
+                <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">Responded</p>
+                <p className="text-lg font-black text-indigo-700 mt-1">{stats?.funnel?.responded || 0}</p>
+                <p className="text-[9px] text-indigo-400 font-bold mt-0.5">{stats?.funnel?.conversion_rate || 0}% Response</p>
+              </div>
+              <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-100">
+                <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Pushed to Google</p>
+                <p className="text-lg font-black text-emerald-700 mt-1">{stats?.funnel?.pushed_to_google || 0}</p>
+                <p className="text-[9px] text-emerald-500 font-bold mt-0.5">High Satisfaction</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200/80 flex items-center justify-between text-xs">
+            <span className="text-slate-600 font-medium truncate max-w-[240px]">
+              Destination: {stats?.settings?.google_review_url ? 'Google Business Place Profile' : 'Default Studio Link'}
+            </span>
+            <a
+              href={stats?.settings?.google_review_url || 'https://search.google.com/local/writereview?placeid=ChIJn8N3wS1wXzkR8W6_m4gq5uU'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold text-[#D32F2F] hover:underline shrink-0"
+            >
+              Test Link ↗
+            </a>
           </div>
         </div>
-      )}
+
+        {/* Rating Distribution */}
+        {stats?.distribution && (
+          <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-[0_4px_24px_rgba(0,0,0,0.03)]">
+            <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <BarChart3 size={18} className="text-[#D32F2F]" />
+              <span>Rating Distribution Breakdown</span>
+            </h3>
+            <div className="space-y-3">
+              {[5, 4, 3, 2, 1].map(r => {
+                const count = stats.distribution.find((d: any) => d.rating === r)?.count || 0;
+                const pct = stats.total_reviews > 0 ? (count / stats.total_reviews) * 100 : 0;
+                return (
+                  <div key={r} className="flex items-center gap-3">
+                    <div className="flex items-center gap-1 w-16 text-xs font-bold text-slate-700">
+                      {r} <Star size={12} className="text-amber-400 fill-amber-400" />
+                    </div>
+                    <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        style={{ width: `${pct}%` }}
+                        className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-500"
+                      />
+                    </div>
+                    <span className="text-xs font-bold text-slate-400 w-12 text-right">{count} ({Math.round(pct)}%)</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Reviews List */}
-      <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-[0_4px_24px_rgba(0,0,0,0.03)]">
-        <div className="flex items-center justify-between mb-5">
-          <h3 className="text-base font-bold text-slate-900">Recent Customer Reviews</h3>
-          <span className="text-xs font-bold text-slate-400">Showing latest feedbacks</span>
+      <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-[0_4px_24px_rgba(0,0,0,0.03)] space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div>
+            <h3 className="text-base font-bold text-slate-900">Recent Customer Reviews</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Showing feedback submitted across completed job carts and bookings</p>
+          </div>
+
+          {/* Filter Chips */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+            {[
+              { key: 'all', label: `All (${allReviews.length})` },
+              { key: '5', label: '5 ★' },
+              { key: '4', label: '4 ★' },
+              { key: '3', label: '3 ★' },
+              { key: 'needs_followup', label: '1-2 ★ (Follow-up)' },
+              { key: 'public', label: 'Public Only' },
+            ].map((chip) => (
+              <button
+                key={chip.key}
+                onClick={() => setFilterRating(chip.key)}
+                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                  filterRating === chip.key
+                    ? 'bg-slate-900 text-white shadow-2xs'
+                    : 'bg-slate-100 hover:bg-slate-200/70 text-slate-600'
+                }`}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="space-y-4">
           {isLoading ? (
             [...Array(3)].map((_, i) => <div key={i} className="h-28 bg-slate-100 rounded-2xl animate-pulse" />)
-          ) : (feedbackData?.data || []).map((fb: any) => (
-            <div 
-              key={fb.id} 
-              className="p-5 rounded-2xl border border-slate-200/80 hover:border-red-200 bg-slate-50/40 hover:bg-white transition-all space-y-3"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-3 mb-1">
-                    <span className="font-bold text-sm text-slate-900">{fb.customer_name || 'Customer'}</span>
-                    <div className="flex items-center gap-0.5">{renderStars(fb.rating)}</div>
-                  </div>
-                  <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium mt-2">{fb.review_text || 'No comment provided'}</p>
-                  <p className="text-[11px] text-slate-400 font-medium mt-2">
-                    {new Date(fb.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </p>
-                  {fb.admin_reply && (
-                    <div className="mt-3 pl-3.5 border-l-2 border-[#D32F2F] bg-red-50/50 p-3 rounded-r-xl">
-                      <p className="text-xs text-slate-600">
-                        <span className="font-bold text-[#b71c1c] mr-1.5">AutoHerb Response:</span> 
-                        {fb.admin_reply}
-                      </p>
+          ) : filteredReviews.map((fb: any) => {
+            const overallRating = fb.overall_rating || fb.rating || 0;
+            const reviewComment = fb.comments || fb.review_text;
+            const isPublic = fb.is_public === 1 || fb.is_public === true;
+
+            return (
+              <div 
+                key={fb.id} 
+                className="p-5 rounded-2xl border border-slate-200/80 hover:border-red-200 bg-slate-50/40 hover:bg-white transition-all space-y-3"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                      <span className="font-bold text-sm text-slate-900">{fb.customer_name || 'Customer'}</span>
+                      <div className="flex items-center gap-0.5">{renderStars(overallRating)}</div>
+
+                      {fb.invoice_number && (
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200">
+                          Inv: {fb.invoice_number}
+                        </span>
+                      )}
+
+                      {isPublic ? (
+                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+                          <Globe size={10} />
+                          <span>Showcased on Web</span>
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold">
+                          Internal Only
+                        </span>
+                      )}
                     </div>
-                  )}
+
+                    {/* Sub-ratings row if available */}
+                    {(fb.service_rating || fb.staff_rating || fb.cleanliness_rating) && (
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 my-1 font-medium">
+                        {fb.service_rating && <span>Service: <strong>{fb.service_rating}★</strong></span>}
+                        {fb.staff_rating && <span>• Staff: <strong>{fb.staff_rating}★</strong></span>}
+                        {fb.cleanliness_rating && <span>• Detailing: <strong>{fb.cleanliness_rating}★</strong></span>}
+                      </div>
+                    )}
+
+                    <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium mt-1">
+                      {reviewComment || <span className="text-slate-400 italic">No comment provided</span>}
+                    </p>
+
+                    <p className="text-[11px] text-slate-400 font-medium mt-2">
+                      {fb.created_at ? new Date(fb.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recent'}
+                    </p>
+
+                    {fb.admin_reply && (
+                      <div className="mt-3 pl-3.5 border-l-2 border-[#D32F2F] bg-red-50/50 p-3 rounded-r-xl">
+                        <p className="text-xs text-slate-600">
+                          <span className="font-bold text-[#b71c1c] mr-1.5">AutoHerb Response:</span> 
+                          {fb.admin_reply}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => handleTogglePublish(fb.id, isPublic)}
+                      disabled={publishMutation.isPending}
+                      title={isPublic ? 'Unshare from website' : 'Make visible on customer website'}
+                      className={`p-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-1 ${
+                        isPublic
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {isPublic ? <Eye size={13} /> : <EyeOff size={13} />}
+                      <span className="hidden sm:inline">{isPublic ? 'Public' : 'Hidden'}</span>
+                    </button>
+
+                    {!fb.admin_reply && (
+                      <button 
+                        onClick={() => setReplyModal({ id: fb.id, name: fb.customer_name })}
+                        className="px-3.5 py-1.5 rounded-xl border border-slate-200 hover:border-red-300 hover:bg-red-50 text-[#D32F2F] text-xs font-bold transition-all flex items-center gap-1.5"
+                      >
+                        <Reply size={13} />
+                        <span>Reply</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
-                {!fb.admin_reply && (
-                  <button 
-                    onClick={() => setReplyModal({ id: fb.id, name: fb.customer_name })}
-                    className="px-3.5 py-1.5 rounded-xl border border-slate-200 hover:border-red-300 hover:bg-red-50 text-[#D32F2F] text-xs font-bold transition-all flex items-center gap-1.5 shrink-0"
-                  >
-                    <Reply size={13} />
-                    <span>Reply</span>
-                  </button>
-                )}
               </div>
-            </div>
-          ))}
-          {!feedbackData?.data?.length && !isLoading && (
-            <p className="text-center text-slate-400 py-12 text-xs font-bold">No feedback entries recorded yet.</p>
+            );
+          })}
+          {!filteredReviews.length && !isLoading && (
+            <p className="text-center text-slate-400 py-12 text-xs font-bold">No feedback entries match this filter.</p>
           )}
         </div>
       </div>

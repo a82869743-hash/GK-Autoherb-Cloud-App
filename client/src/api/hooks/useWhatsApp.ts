@@ -39,3 +39,64 @@ export const useSendWhatsApp = () => {
     },
   });
 };
+
+export const useWhatsAppTemplates = () => {
+  return useQuery({
+    queryKey: ['whatsapp-templates'],
+    queryFn: async () => {
+      const { data } = await api.get('/whatsapp/templates');
+      return data.data || [];
+    },
+  });
+};
+
+export const useUpdateWhatsAppTemplate = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, body, ...rest }: { id: number; body?: string; is_active?: boolean; provider_template_name?: string; send_sms?: boolean }) => {
+      // The API field is message_body (sending "body" silently saved nothing)
+      const { data } = await api.put(`/whatsapp/templates/${id}`, { ...rest, ...(body !== undefined ? { message_body: body } : {}) });
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('Template updated successfully');
+      qc.invalidateQueries({ queryKey: ['whatsapp-templates'] });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Failed to update template');
+    },
+  });
+};
+
+export const useTestWhatsAppTemplate = () => {
+  return useMutation({
+    mutationFn: async ({ id, recipient_number, variables }: { id: number; recipient_number: string; variables?: Record<string, string> }) => {
+      const { data } = await api.post('/whatsapp/templates/test-send', { phone: recipient_number, template_id: id, variables });
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('Test message dispatched successfully');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Failed to send test message');
+    },
+  });
+};
+
+export const useRetryWhatsAppNotification = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const { data } = await api.post(`/whatsapp/notifications/${id}/retry`);
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('Notification retry queued');
+      qc.invalidateQueries({ queryKey: ['whatsapp-messages'] });
+      qc.invalidateQueries({ queryKey: ['whatsapp-stats'] });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Failed to retry notification');
+    },
+  });
+};

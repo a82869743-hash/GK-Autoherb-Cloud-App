@@ -19,7 +19,7 @@ exports.list = async (req, res) => {
     const { status } = req.query;
     let where = '1=1';
     const params = [];
-    
+
     // Filter by role
     if (req.user.role === 'customer') {
       where += ' AND d.customer_id = ?';
@@ -55,7 +55,7 @@ exports.getOne = async (req, res) => {
     );
 
     if (!rows.length) return res.status(404).json({ success: false, error: 'Delivery not found' });
-    
+
     const delivery = rows[0];
 
     // Auth check
@@ -106,8 +106,12 @@ exports.getMyDelivery = async (req, res) => {
 // ─── START DELIVERY (Staff only) ───────
 exports.startDelivery = async (req, res) => {
   try {
-    const { job_cart_id } = req.body;
-    
+    const { job_cart_id, lat, lng } = req.body;
+    // Admin assigns a driver; staff starting their own delivery are the driver
+    const driverId = req.user.role === 'admin' && req.body.staff_id ? Number(req.body.staff_id) : req.user.id;
+    const startLat = Number.isFinite(Number(lat)) && lat !== null && lat !== '' ? Number(lat) : null;
+    const startLng = Number.isFinite(Number(lng)) && lng !== null && lng !== '' ? Number(lng) : null;
+
     // Check if job cart exists and get customer_id from vehicles join
     const [jobRows] = await pool.query(
       `SELECT jc.id, v.customer_id, v.registration_no, v.brand, v.model 
@@ -117,9 +121,9 @@ exports.startDelivery = async (req, res) => {
       [job_cart_id]
     );
     if (!jobRows.length) return res.status(404).json({ success: false, error: 'Job cart not found' });
-    
+
     const job = jobRows[0];
-    
+
     // Check for existing active delivery
     const [existing] = await pool.query(
       'SELECT id FROM deliveries WHERE job_cart_id = ? AND status = "in_transit"',
@@ -131,15 +135,15 @@ exports.startDelivery = async (req, res) => {
 
     const [result] = await pool.query(`
       INSERT INTO deliveries (job_cart_id, staff_id, customer_id, status, last_lat, last_lng, location_updated_at)
-      VALUES (?, ?, ?, 'in_transit', 22.3072, 73.1812, NOW())
-    `, [job.id, req.user.id, job.customer_id]);
+      VALUES (?, ?, ?, 'in_transit', ?, ?, IF(? IS NULL, NULL, NOW()))
+    `, [job.id, driverId, job.customer_id, startLat, startLng, startLat]);
 
     const deliveryId = result.insertId;
 
     // Trigger Delivery Started Notification
     try {
       const messagingService = require('../services/messagingService');
-      const [staffRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [req.user.id]);
+      const [staffRows] = await pool.query('SELECT name, mobile FROM users WHERE id = ?', [driverId]);
       const driverName = staffRows[0]?.name || 'Staff';
       const driverMobile = staffRows[0]?.mobile || '';
       const baseUrl = process.env.APP_BASE_URL || 'https://gkautobook.cloud';
@@ -151,7 +155,7 @@ exports.startDelivery = async (req, res) => {
           vehicle_number: job.registration_no || `${job.brand} ${job.model}`,
           driver_name: driverName,
           driver_mobile: driverMobile,
-          tracking_url: `${baseUrl}/track/delivery/${deliveryId}`
+          tracking_url: `${baseUrl}/customer/delivery/${deliveryId}`
         },
         { type: 'delivery', id: deliveryId }
       );
@@ -171,7 +175,7 @@ exports.completeDelivery = async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM deliveries WHERE id = ?', [req.params.id]);
     if (!rows.length) return res.status(404).json({ success: false, error: 'Delivery not found' });
-    
+
     const delivery = rows[0];
 
     if (delivery.staff_id !== req.user.id && req.user.role !== 'admin') {
@@ -224,8 +228,13 @@ exports.completeDelivery = async (req, res) => {
 // ─── UPDATE LOCATION (Staff → live tracking) ────
 exports.updateLocation = async (req, res) => {
   try {
-    const { lat, lng } = req.body;
+    const { lat, lng, accuracy, heading, speed } = req.body;
     const { id } = req.params;
+    const nLat = Number(lat);
+    const nLng = Number(lng);
+    if (!Number.isFinite(nLat) || !Number.isFinite(nLng) || Math.abs(nLat) > 90 || Math.abs(nLng) > 180 || (nLat === 0 && nLng === 0)) {
+      return res.status(400).json({ success: false, error: 'Invalid coordinates' });
+    }
 
     const [rows] = await pool.query('SELECT * FROM deliveries WHERE id = ? AND status = "in_transit"', [id]);
     if (!rows.length) return res.status(404).json({ success: false, error: 'No active delivery found' });
@@ -237,7 +246,7 @@ exports.updateLocation = async (req, res) => {
 
     await pool.query(
       'UPDATE deliveries SET last_lat = ?, last_lng = ?, location_updated_at = NOW() WHERE id = ?',
-      [lat, lng, id]
+      [nLat, nLng, id]
     );
 
     // Emit to Socket.io room for live tracking
@@ -245,8 +254,11 @@ exports.updateLocation = async (req, res) => {
     if (io) {
       io.to(`delivery_${id}`).emit('location_update', {
         delivery_id: parseInt(id),
-        lat: parseFloat(lat),
-        lng: parseFloat(lng),
+        lat: nLat,
+        lng: nLng,
+        accuracy: Number(accuracy) || null,
+        heading: Number.isFinite(Number(heading)) ? Number(heading) : null,
+        speed: Number.isFinite(Number(speed)) ? Number(speed) : null,
         timestamp: new Date().toISOString(),
       });
     }

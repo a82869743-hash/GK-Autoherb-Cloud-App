@@ -38,36 +38,36 @@ export default function Pagination({
   };
 
   return (
-    <div className={`flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-gray-50/50 ${className}`}>
-      <p className="text-[11px] text-[#5f5e5e] font-medium">
+    <div className={`flex items-center justify-between px-3.5 py-2 border-t border-gray-100 bg-gray-50/70 ${className}`}>
+      <p className="text-[11px] text-[#5f5e5e] font-normal">
         Showing {start}–{end} of {total}
       </p>
       <div className="flex items-center gap-1">
         <button
           onClick={() => onPageChange(1)}
           disabled={page === 1}
-          className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          className="p-1 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           title="First page"
         >
-          <ChevronsLeft size={14} />
+          <ChevronsLeft size={13} />
         </button>
         <button
           onClick={() => onPageChange(page - 1)}
           disabled={page === 1}
-          className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          className="p-1 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           title="Previous page"
         >
-          <ChevronLeft size={14} />
+          <ChevronLeft size={13} />
         </button>
 
         {getPageNumbers().map((p) => (
           <button
             key={p}
             onClick={() => onPageChange(p)}
-            className={`w-7 h-7 rounded text-xs font-semibold transition-colors ${
+            className={`w-6 h-6 rounded text-xs font-medium transition-colors ${
               p === page
                 ? 'bg-[#1c1b1b] text-white'
-                : 'text-[#5f5e5e] hover:bg-gray-200'
+                : 'text-[#5f5e5e] hover:bg-gray-100'
             }`}
           >
             {p}

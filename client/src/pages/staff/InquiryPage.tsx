@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { Send, UserPlus } from 'lucide-react';
+import { Send, UserPlus, Loader2 } from 'lucide-react';
 import { useCreateInquiry } from '../../api/hooks/useInquiries';
-import AdminTopBar from '../../components/layout/AdminTopBar';
-import Button from '../../components/ui/Button';
-import Input from '../../components/ui/Input';
-import Textarea from '../../components/ui/Textarea';
 import { useUIStore } from '../../store/uiStore';
+import { OpsPageTitle } from '../../components/ops/ui';
+
+const QUICK_SERVICES = ['Foam wash', 'Ceramic coating', 'PPF', 'Interior detailing', 'Rubbing & polish', 'Package'];
 
 export default function StaffInquiryPage() {
   const toast = useUIStore((s) => s.toast);
@@ -17,7 +16,7 @@ export default function StaffInquiryPage() {
     email: '',
     vehicle_brand: '',
     vehicle_model: '',
-    services_interested: ''
+    services_interested: '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,92 +29,83 @@ export default function StaffInquiryPage() {
     try {
       await createMut.mutateAsync({ ...form, source: 'staff' });
       toast('success', 'Walk-in inquiry recorded successfully');
-      setForm({
-        name: '', mobile: '', email: '',
-        vehicle_brand: '', vehicle_model: '', services_interested: ''
-      });
+      setForm({ name: '', mobile: '', email: '', vehicle_brand: '', vehicle_model: '', services_interested: '' });
     } catch (err: any) {
       toast('error', err?.response?.data?.error || 'Failed to submit inquiry');
     }
   };
 
-  return (
-    <>
-      <AdminTopBar
-        title="Walk-in Inquiries"
-        subtitle="Record leads who visit the studio"
-      />
+  const addService = (s: string) => {
+    const cur = form.services_interested.trim();
+    if (cur.toLowerCase().includes(s.toLowerCase())) return;
+    setForm({ ...form, services_interested: cur ? `${cur}, ${s}` : s });
+  };
 
-      <div className="max-w-2xl mx-auto">
-        <div className="flex flex-col items-center justify-center p-6 bg-gradient-to-br from-[#D32F2F]/5 to-[#D32F2F]/10 rounded-xl border border-[#D32F2F]/20 mb-6 relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#af101a] to-[#D32F2F]" />
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#D32F2F]/20 to-[#D32F2F]/10 flex items-center justify-center mb-3">
-            <UserPlus size={28} className="text-[#D32F2F]" />
+  return (
+    <div className="space-y-5">
+      <OpsPageTitle kicker="Walk-in lead" title="New inquiry" subtitle="Save visitors and callers so the team can follow up." />
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="app-card p-4 space-y-4">
+          <div className="flex items-center gap-3">
+            <span className="h-11 w-11 rounded-xl bg-red-50 text-[#D32F2F] flex items-center justify-center"><UserPlus size={21} /></span>
+            <p className="font-display font-extrabold text-slate-900">Customer</p>
           </div>
-          <h2 className="text-xl font-black text-[#1c1b1b] mb-1">New Customer Lead</h2>
-          <p className="text-sm text-[#5f5e5e] text-center max-w-md">
-            Record details for walk-in customers or callers so the admin team can follow up later.
-          </p>
+          <div>
+            <label className="app-label">Name *</label>
+            <input className="app-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Full name" />
+          </div>
+          <div>
+            <label className="app-label">Mobile number *</label>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[15px] font-semibold text-slate-500">+91</span>
+              <input
+                className="app-input pl-14"
+                inputMode="numeric"
+                value={form.mobile}
+                onChange={(e) => setForm({ ...form, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                placeholder="10 digit number"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="app-label">Email (optional)</label>
+            <input className="app-input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#af101a] via-[#D32F2F] to-transparent" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 mt-2">
-            <Input 
-              label="Customer Name *" 
-              value={form.name} 
-              onChange={e => setForm({...form, name: e.target.value})} 
-              placeholder="Full name" 
-            />
-            <Input 
-              label="Mobile Number *" 
-              value={form.mobile} 
-              onChange={e => setForm({...form, mobile: e.target.value.replace(/\D/g, '').slice(0,10)})} 
-              placeholder="10 digit number" 
-            />
+        <div className="app-card p-4 space-y-4">
+          <p className="font-display font-extrabold text-slate-900">Vehicle & interest</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="app-label">Brand</label>
+              <input className="app-input" value={form.vehicle_brand} onChange={(e) => setForm({ ...form, vehicle_brand: e.target.value })} placeholder="Hyundai" />
+            </div>
+            <div>
+              <label className="app-label">Model</label>
+              <input className="app-input" value={form.vehicle_model} onChange={(e) => setForm({ ...form, vehicle_model: e.target.value })} placeholder="i20" />
+            </div>
           </div>
-          
-          <div className="mb-4">
-            <Input 
-              label="Email Address (Optional)" 
-              type="email"
-              value={form.email} 
-              onChange={e => setForm({...form, email: e.target.value})} 
-            />
+          <div className="flex flex-wrap gap-2">
+            {QUICK_SERVICES.map((s) => (
+              <button type="button" key={s} onClick={() => addService(s)} className="app-chip app-chip-off h-8 text-[12px]">+ {s}</button>
+            ))}
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <Input 
-              label="Vehicle Brand (Optional)" 
-              value={form.vehicle_brand} 
-              onChange={e => setForm({...form, vehicle_brand: e.target.value})} 
-              placeholder="e.g. Hyundai" 
-            />
-            <Input 
-              label="Vehicle Model (Optional)" 
-              value={form.vehicle_model} 
-              onChange={e => setForm({...form, vehicle_model: e.target.value})} 
-              placeholder="e.g. i20 Elite" 
-            />
-          </div>
-
-          <div className="mb-8">
-            <Textarea
-              label="Services Interested In / Notes (Optional)"
+          <div>
+            <label className="app-label">Services / notes</label>
+            <textarea
+              className="app-input h-24 py-3 resize-none"
               value={form.services_interested}
-              onChange={e => setForm({...form, services_interested: e.target.value})}
-              placeholder="E.g., wants quotation for ceramic coating next week."
-              className="h-24"
+              onChange={(e) => setForm({ ...form, services_interested: e.target.value })}
+              placeholder="E.g. wants a quotation for ceramic coating next week"
             />
           </div>
+        </div>
 
-          <div className="flex justify-end">
-            <Button type="submit" loading={createMut.isPending} icon={<Send size={16} />}>
-              Submit Lead
-            </Button>
-          </div>
-        </form>
-      </div>
-    </>
+        <button type="submit" disabled={createMut.isPending} className="app-btn-primary w-full">
+          {createMut.isPending ? <Loader2 size={18} className="animate-spin" /> : <Send size={17} />} Save lead
+        </button>
+      </form>
+    </div>
   );
 }

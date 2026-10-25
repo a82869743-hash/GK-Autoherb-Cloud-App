@@ -27,6 +27,7 @@ const io = new Server(server, {
 });
 
 app.set('io', io);
+global.__gkIo = io; // lets services (messaging, WhatsApp bot) push live events
 
 // ─── Middleware ──────────────────────────────────────
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
@@ -39,6 +40,10 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), (re
   // Let it be handled by payments controller
   require('./controllers/paymentsController').webhook(req, res, next);
 });
+// WhatsApp Cloud API webhook — public, needs the raw body for signature checks
+const whatsappCtrl = require('./controllers/whatsappController');
+app.get('/api/whatsapp/webhook', whatsappCtrl.webhookVerify);
+app.post('/api/whatsapp/webhook', express.raw({ type: '*/*', limit: '2mb' }), whatsappCtrl.webhookReceive);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -80,12 +85,15 @@ app.get('/api/v1/health', async (req, res) => {
 
 // ─── Routes ─────────────────────────────────────────
 const authRoutes = require('./routes/auth');
+app.get('/api/public/job/:id', require('./controllers/publicTrackingController').trackJob);
 app.use('/api/auth', authRoutes);
 app.use('/api/job-carts',  require('./routes/jobCarts'));
 app.use('/api/inventory',  require('./routes/inventory'));
 app.use('/api/slots',      require('./routes/slots'));
 app.use('/api/bookings',   require('./routes/bookings'));
 app.use('/api/services',   require('./routes/services'));
+app.use('/api/product-brands', require('./routes/productBrands'));
+app.use('/api/festival-campaigns', require('./routes/festivalCampaigns'));
 app.use('/api/packages',   require('./routes/packages'));
 app.use('/api/loyalty',    require('./routes/loyalty'));
 app.use('/api/staff',      require('./routes/staff'));
@@ -133,6 +141,9 @@ app.use('/api/pickup-requests', require('./routes/pickup'));
 app.use('/api/products',      require('./routes/products'));
 app.use('/api/wallets',       require('./routes/wallets'));
 app.use('/api/chatbot',       require('./routes/chatbot'));
+app.use('/api/coupons',       require('./routes/coupons'));
+app.use('/api/customer-profile', require('./routes/customerProfile'));
+app.use('/api/greetings',     require('./routes/greetings'));
 
 // ─── Socket.io Auth + GPS ───────────────────────────
 const jwt = require('jsonwebtoken');

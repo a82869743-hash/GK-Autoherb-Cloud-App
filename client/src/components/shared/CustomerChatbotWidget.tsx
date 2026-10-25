@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Bot, X, Send, Sparkles, Phone, ExternalLink, ChevronDown,
   Car, Shield, Package, ShoppingBag, Calendar, HelpCircle, Loader2, RefreshCw
@@ -7,9 +7,30 @@ import {
 import { useAuthStore } from '../../store/authStore';
 import { useChatbotSession, useSendChatMessage, ChatMessage } from '../../api/hooks/useChatbot';
 
+function renderFormattedMessage(text: string) {
+  if (!text) return null;
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <span className="whitespace-pre-wrap leading-relaxed">
+      {parts.map((part, index) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return (
+            <strong key={index} className="font-extrabold text-slate-900">
+              {part.slice(2, -2)}
+            </strong>
+          );
+        }
+        return part;
+      })}
+    </span>
+  );
+}
+
 export default function CustomerChatbotWidget() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuthStore();
+  const firstName = user?.name?.split(' ')[0] || 'Member';
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [inputText, setInputText] = useState('');
@@ -30,12 +51,30 @@ export default function CustomerChatbotWidget() {
   const { data: sessionData, isLoading: loadingSession } = useChatbotSession(sessionId);
   const sendMut = useSendChatMessage();
 
-  // Load initial messages from server
+  // Load initial messages from server or show friendly greeting
   useEffect(() => {
-    if (sessionData?.messages) {
+    if (sessionData?.messages && sessionData.messages.length > 0) {
       setMessages(sessionData.messages);
+    } else {
+      setMessages([
+        {
+          sender: 'bot',
+          message: `Hello ${firstName}! 👋 Welcome to GK AutoHerb Concierge AI.\n\nI can provide instant answers on:\n• 🚗 Live status & tracking for your vehicle in bay\n• 💎 Ceramic coating vs PPF recommendations & pricing\n• 📦 Annual membership package savings\n• 🛍️ Genuine detailing store products & car accessories\n\nHow can I help you today?`,
+          metadata: {
+            chips: [
+              '🏎️ Track My Car',
+              '💎 Detailing Packages',
+              '🛡️ Ceramic vs PPF',
+              '💰 Wash & Detailing Rates',
+              '🛍️ Store Products',
+              '📞 Call Studio'
+            ]
+          },
+          created_at: new Date().toISOString()
+        }
+      ]);
     }
-  }, [sessionData]);
+  }, [sessionData, firstName]);
 
   // Auto-scroll to bottom on new message
   useEffect(() => {
@@ -87,8 +126,8 @@ export default function CustomerChatbotWidget() {
           sender: 'bot',
           message: 'I encountered a brief connection issue. Please feel free to retry or call our studio helpline directly!',
           metadata: {
-            actionUrl: 'tel:+919876543210',
-            actionLabel: 'Call Studio (+91 98765 43210)',
+            actionUrl: 'tel:+919408424541',
+            actionLabel: 'Call Studio (+91 94084 24541)',
             chips: ['Helpline Number', 'Book a Slot', 'Packages']
           }
         }
@@ -109,81 +148,71 @@ export default function CustomerChatbotWidget() {
   };
 
   return (
-    <div className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-50 font-sans">
-      {/* ─── Floating Launcher Pill (When Closed) ─── */}
+    <div className="fixed bottom-[88px] right-4 z-50 font-sans">
+      {/* ─── Floating chat bubble (When Closed) ─── */}
       {!isOpen && (
         <button
           onClick={() => { setIsOpen(true); setIsMinimized(false); }}
-          className="group relative flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-[#111111] via-[#1c1917] to-[#262626] hover:to-[#D32F2F] text-white rounded-full shadow-2xl border border-white/10 hover:border-red-500/40 transition-all duration-300 active:scale-95 animate-bounce-short"
+          aria-label="Chat with GK Concierge"
+          className="relative h-14 w-14 rounded-full bg-gradient-to-br from-[#e53935] to-[#b71c1c] text-white shadow-[0_10px_24px_rgba(211,47,47,0.35)] flex items-center justify-center active:scale-95 transition-transform"
         >
-          {/* Pulsing indicator */}
-          <span className="relative flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-[#D32F2F]" />
+          <Bot size={26} />
+          <span className="absolute top-1 right-1 flex h-3 w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75" />
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-400 border-2 border-white" />
           </span>
-
-          <div className="w-7 h-7 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center">
-            <Bot size={18} />
-          </div>
-
-          <div className="text-left pr-1 hidden sm:block">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-none">Studio Assistant</p>
-            <p className="text-xs font-black text-white mt-0.5">Ask GK Concierge</p>
-          </div>
-
-          <div className="sm:hidden text-xs font-bold">Ask AI</div>
         </button>
       )}
 
       {/* ─── Chat Window (When Open) ─── */}
       {isOpen && (
-        <div className={`w-[92vw] sm:w-[410px] bg-white rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden flex flex-col transition-all duration-300 ${
+        <div className={`w-[calc(100vw-2rem)] max-w-[410px] bg-white rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden flex flex-col transition-all duration-300 ${
           isMinimized ? 'h-16' : 'h-[580px] max-h-[82vh]'
         }`}>
           {/* Header */}
-          <div className="relative bg-gradient-to-r from-[#111111] via-[#1a1a1a] to-[#242424] px-5 py-3.5 text-white flex items-center justify-between shrink-0 shadow-sm">
+          <div className="relative bg-gradient-to-r from-slate-50 via-white to-red-50/40 px-5 py-3.5 border-b border-slate-200/80 text-slate-900 flex items-center justify-between shrink-0 shadow-2xs">
             <div className="flex items-center gap-3">
               <div className="relative">
-                <div className="w-10 h-10 rounded-2xl bg-red-500/20 border border-red-500/40 text-red-500 flex items-center justify-center font-bold">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#D32F2F] to-[#b71c1c] text-white flex items-center justify-center font-bold shadow-md shadow-red-600/20">
                   <Bot size={20} />
                 </div>
-                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#111]" />
+                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white" />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <h4 className="text-sm font-black text-white tracking-wide">GK Studio Concierge</h4>
-                  <span className="px-1.5 py-0.2 bg-red-500/20 border border-red-500/30 text-red-400 rounded text-[9px] font-bold uppercase">
+                  <h4 className="text-sm font-black text-slate-900 tracking-wide">GK Studio Concierge</h4>
+                  <span className="px-1.5 py-0.2 bg-red-50 border border-red-200 text-[#D32F2F] rounded text-[9px] font-black uppercase">
                     AI Live
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-400">Services, Packages, Tracking & Support</p>
+                <p className="text-[11px] text-slate-500 font-medium">Services, Packages, Tracking & Support</p>
               </div>
             </div>
 
             <div className="flex items-center gap-1">
               <a
-                href="tel:+919876543210"
-                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-colors"
+                href="tel:+919408424541"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 border border-slate-200/70 flex items-center justify-center transition-colors"
                 title="Call Studio Helpline"
               >
                 <Phone size={14} />
               </a>
               <button
                 onClick={handleResetSession}
-                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-colors"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border border-slate-200/70 flex items-center justify-center transition-colors"
                 title="New Chat Session"
               >
                 <RefreshCw size={14} />
               </button>
               <button
                 onClick={() => setIsMinimized(!isMinimized)}
-                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-colors"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border border-slate-200/70 flex items-center justify-center transition-colors"
               >
                 <ChevronDown size={16} className={`transition-transform duration-200 ${isMinimized ? 'rotate-180' : ''}`} />
               </button>
               <button
                 onClick={() => setIsOpen(false)}
-                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-colors"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-700 border border-slate-200/70 flex items-center justify-center transition-colors"
               >
                 <X size={16} />
               </button>
@@ -221,7 +250,7 @@ export default function CustomerChatbotWidget() {
                           ? 'bg-white text-slate-800 border border-slate-200/80 shadow-xs rounded-tl-sm'
                           : 'bg-[#D32F2F] text-white font-medium shadow-md shadow-red-600/10 rounded-tr-sm'
                       }`}>
-                        <div className="whitespace-pre-wrap">{m.message}</div>
+                        {renderFormattedMessage(m.message)}
 
                         {/* Interactive Action Link (if provided by bot) */}
                         {meta?.actionUrl && (

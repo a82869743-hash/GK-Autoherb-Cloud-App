@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { Smartphone, Lock, ArrowRight, ShieldCheck, RefreshCw, Sparkles, User, Car } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/axiosInstance';
 import { useAuthStore } from '../../store/authStore';
@@ -17,13 +18,37 @@ type LoginForm = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuthStore();
+  const [activeTab, setActiveTab] = useState<'password' | 'otp'>('otp');
   const [showPassword, setShowPassword] = useState(false);
   const [isPending, setIsPending] = useState(false);
+
+  // ─── OTP Login State ─────────────────────────────────
+  const [otpMobile, setOtpMobile] = useState('');
+  const [otpStep, setOtpStep] = useState<'send' | 'verify'>('send');
+  const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
+  const [countdown, setCountdown] = useState(0);
+  const [customerName, setCustomerName] = useState('');
+  const [vehicleBrand, setVehicleBrand] = useState('');
+  const [vehicleModel, setVehicleModel] = useState('');
+  const [vehicleNumber, setVehicleNumber] = useState('');
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const otpInputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
   const { register, handleSubmit, setValue, formState: { errors } } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
   });
 
+  // Countdown timer effect
+  useEffect(() => {
+    let timer: any;
+    if (countdown > 0) {
+      timer = setInterval(() => setCountdown(c => c - 1), 1000);
+    }
+    return () => clearInterval(timer);
+  }, [countdown]);
+
+  // Handle standard password login
   const onSubmit = async (data: LoginForm) => {
     try {
       setIsPending(true);
@@ -33,8 +58,6 @@ export default function LoginPage() {
       });
 
       const result = response.data.data || response.data;
-
-
       login(result.token, result.user);
 
       toast.success(`Welcome back, ${result.user?.name || 'User'}!`);
@@ -53,226 +76,275 @@ export default function LoginPage() {
   };
 
   const handleQuickLogin = async (mobile: string, pass: string) => {
+    setActiveTab('password');
     setValue('mobile', mobile);
     setValue('password', pass);
     await onSubmit({ mobile, password: pass });
   };
 
+  // ─── OTP FLOW HANDLERS ────────────────────────────────
+  const handleSendOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanMobile = otpMobile.replace(/\D/g, '').slice(-10);
+    if (cleanMobile.length !== 10) {
+      toast.error('Please enter a valid 10-digit mobile number');
+      return;
+    }
+
+    try {
+      setIsSendingOtp(true);
+      const res = await api.post('/auth/otp/send', { mobile: cleanMobile, purpose: 'login' });
+      toast.success(res.data?.message || 'Verification code sent via SMS');
+      setOtpStep('verify');
+      setCountdown(res.data?.cooldown_seconds || 45);
+      setOtpDigits(['', '', '', '', '', '']);
+      setTimeout(() => otpInputsRef.current[0]?.focus(), 100);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Failed to send OTP code');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const handleOtpDigitChange = (index: number, val: string) => {
+    const cleanChar = val.replace(/\D/g, '').slice(-1);
+    const newDigits = [...otpDigits];
+    newDigits[index] = cleanChar;
+    setOtpDigits(newDigits);
+
+    // Auto advance
+    if (cleanChar && index < 5) {
+      otpInputsRef.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !otpDigits[index] && index > 0) {
+      otpInputsRef.current[index - 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (pasted.length > 0) {
+      const newDigits = [...otpDigits];
+      for (let i = 0; i < 6; i++) {
+        newDigits[i] = pasted[i] || '';
+      }
+      setOtpDigits(newDigits);
+      const focusIndex = Math.min(pasted.length, 5);
+      otpInputsRef.current[focusIndex]?.focus();
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const fullOtp = otpDigits.join('');
+    if (fullOtp.length !== 6) {
+      toast.error('Please enter complete 6-digit verification code');
+      return;
+    }
+
+    try {
+      setIsVerifyingOtp(true);
+      const res = await api.post('/auth/otp/verify', {
+        mobile: otpMobile,
+        otp: fullOtp,
+        name: customerName,
+        vehicle_brand: vehicleBrand,
+        vehicle_model: vehicleModel,
+        vehicle_number: vehicleNumber,
+      });
+
+      const result = res.data?.data;
+      if (result && result.token) {
+        login(result.token, result.user);
+        toast.success(result.is_new_customer
+          ? `Welcome to GK AutoHerb, ${result.user.name}!`
+          : `Welcome back, ${result.user.name}!`
+        );
+        navigate('/customer');
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Verification failed. Please check code.');
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[#faf7f5] flex">
-      {/* Left — brand panel */}
-      <div className="hidden lg:flex w-1/2 bg-[#111111] relative overflow-hidden items-center justify-center pattern-overlay">
-        <div className="absolute inset-0 bg-gradient-to-br from-[#D32F2F]/15 via-transparent to-[#D32F2F]/5 animate-gradient-shift" />
-        <div className="relative z-10 px-16 max-w-md">
-          <div className="mb-6">
-            <img src="/assets/logo.png" alt="GK Auto Herb" className="w-48 h-auto drop-shadow-lg" />
+    <div className="min-h-[100dvh] bg-white lg:bg-[#f3f4f6] lg:flex">
+      {/* Hero (top on phones, left half on desktop) */}
+      <div className="relative h-[42dvh] min-h-[280px] lg:h-auto lg:min-h-[100dvh] lg:w-1/2 overflow-hidden">
+        <img src="/services/gk/foam_wash_premium.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/20 to-black/90" />
+        <div className="relative z-10 h-full flex flex-col justify-between p-6 pt-safe text-white">
+          <div className="flex items-center gap-2 pt-4">
+            <img src="/assets/logo.png" alt="GK AutoHerb" className="h-10 w-10 rounded-xl bg-white p-1" />
+            <span className="font-display text-lg font-extrabold">GK AutoHerb</span>
           </div>
-          <h1 className="text-4xl font-black text-white tracking-tight leading-tight">
-            GK AutoHerb
-          </h1>
-          <div className="w-16 h-1 bg-gradient-to-r from-[#D32F2F] to-[#FF5252] mt-6 mb-6 rounded-full" />
-          <p className="text-gray-400 text-sm leading-relaxed font-medium">
-            Premium car detailing studio management. Track jobs, manage inventory,
-            book appointments, and delight customers — all from one command center.
-          </p>
-          <div className="mt-10 space-y-3">
-            {['Track jobs & invoices in real-time', 'Manage inventory & staff efficiently', 'Delight customers with premium service'].map((item, i) => (
-              <div key={i} className="flex items-center gap-3 opacity-0 animate-fade-in-up" style={{ animationDelay: `${0.5 + i * 0.15}s`, animationFillMode: 'forwards' }}>
-                <div className="w-8 h-8 rounded-full bg-[#D32F2F]/20 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-4 h-4 text-[#D32F2F]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <span className="text-gray-400 text-sm">{item}</span>
-              </div>
-            ))}
+          <div className="pb-10 lg:pb-16">
+            <p className="text-[12px] font-bold uppercase tracking-[0.18em] text-[#ff8a80]">Car detailing studio · Vadodara</p>
+            <h1 className="font-display text-[32px] lg:text-[44px] font-extrabold leading-[1.05] mt-2">At your time.<br />At your place.</h1>
+            <p className="text-sm text-white/75 mt-2 max-w-sm">Book washes, coatings & PPF, track your car live, and earn 10% back on every service.</p>
           </div>
-          <p className="text-[10px] text-gray-600 uppercase tracking-[0.2em] mt-10 font-bold">
-            Vadodara, Gujarat
-          </p>
         </div>
-        {/* Decorative elements */}
-        <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#D32F2F] via-[#D32F2F]/50 to-transparent" />
-        <div className="absolute top-10 right-10 w-40 h-40 rounded-full border border-white/5 animate-float" />
-        <div className="absolute bottom-20 right-20 w-24 h-24 rounded-full border border-[#D32F2F]/10" />
-        <div className="absolute top-1/4 right-1/4 w-2 h-2 rounded-full bg-[#D32F2F]/30 animate-pulse-glow" />
       </div>
 
-      {/* Right — login form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
-        <div className="w-full max-w-md animate-fade-in-up">
-          {/* Mobile brand header */}
-          <div className="lg:hidden text-center mb-8">
-            <img src="/assets/logo.png" alt="GK Auto Herb" className="w-36 h-auto mx-auto mb-3" />
-            <h1 className="text-3xl font-black text-[#1c1b1b] tracking-tight">GK AutoHerb</h1>
-            <div className="w-12 h-1 bg-[#D32F2F] mx-auto mt-3 rounded-full" />
-          </div>
+      {/* Sign-in sheet */}
+      <div className="relative -mt-7 lg:mt-0 lg:w-1/2 lg:flex lg:items-center lg:justify-center">
+        <div className="bg-white rounded-t-[28px] lg:rounded-3xl lg:shadow-app-lg min-h-[60dvh] lg:min-h-0 w-full lg:max-w-md px-5 pt-6 pb-10 lg:p-8 animate-fade-in-up">
+          <h2 className="font-display text-[22px] font-extrabold text-slate-900">Log in or sign up</h2>
+          <p className="text-sm text-slate-500 mt-0.5">New here? Your account is created automatically with OTP.</p>
 
-          <div className="mb-6">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#D32F2F] mb-2">
-              Welcome Back
-            </p>
-            <h2 className="text-3xl font-extrabold text-[#1c1b1b] tracking-tight">
-              Sign In
-            </h2>
-            <p className="text-sm text-[#5f5e5e] mt-1 font-medium">
-              Enter your credentials to access your dashboard
-            </p>
-          </div>
-
-          {/* 1-Click Quick Demo Login Switcher */}
-          <div className="mb-6 p-3.5 bg-white/90 backdrop-blur rounded-xl border border-gray-200/80 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#5f5e5e] flex items-center gap-1.5">
-                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                ⚡ 1-Click Quick Demo Login
-              </span>
-              <span className="text-[10px] text-gray-400 font-medium">Auto-login</span>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={() => handleQuickLogin('9000000001', 'admin123')}
-                title="Login as Admin (Mobile: 9000000001, Pass: admin123)"
-                className="px-2 py-2 rounded-lg bg-red-50 hover:bg-red-100/80 border border-red-200/80 text-[#D32F2F] transition-all flex flex-col items-center justify-center text-center group active:scale-95 disabled:opacity-50"
-              >
-                <span className="text-base group-hover:scale-110 transition-transform">👑</span>
-                <span className="text-xs font-bold mt-0.5">Admin</span>
-                <span className="text-[9px] text-gray-600 font-mono font-semibold">9000000001</span>
-                <span className="text-[8px] text-gray-400 font-mono">admin123</span>
-              </button>
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={() => handleQuickLogin('9876543210', 'staff123')}
-                title="Login as Staff (Mobile: 9876543210 / 9000000003, Pass: staff123)"
-                className="px-2 py-2 rounded-lg bg-blue-50 hover:bg-blue-100/80 border border-blue-200/80 text-blue-700 transition-all flex flex-col items-center justify-center text-center group active:scale-95 disabled:opacity-50"
-              >
-                <span className="text-base group-hover:scale-110 transition-transform">🔧</span>
-                <span className="text-xs font-bold mt-0.5">Staff</span>
-                <span className="text-[9px] text-gray-600 font-mono font-semibold">9876543210</span>
-                <span className="text-[8px] text-gray-400 font-mono">staff123</span>
-              </button>
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={() => handleQuickLogin('9000000002', 'customer123')}
-                title="Login as Customer (Mobile: 9000000002, Pass: customer123)"
-                className="px-2 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/80 text-emerald-700 transition-all flex flex-col items-center justify-center text-center group active:scale-95 disabled:opacity-50"
-              >
-                <span className="text-base group-hover:scale-110 transition-transform">🚗</span>
-                <span className="text-xs font-bold mt-0.5">Customer</span>
-                <span className="text-[9px] text-gray-600 font-mono font-semibold">9000000002</span>
-                <span className="text-[8px] text-gray-400 font-mono">customer123</span>
-              </button>
-            </div>
-          </div>
-
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            {/* Mobile Number */}
-            <div>
-              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#5f5e5e] mb-2">
-                Mobile Number
-              </label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#5f5e5e] text-sm font-semibold">
-                  +91
-                </span>
-                <input
-                  {...register('mobile')}
-                  type="tel"
-                  maxLength={10}
-                  placeholder="Enter 10-digit mobile"
-                  className={`w-full pl-14 pr-4 py-4 bg-[#f6f3f2] border border-transparent rounded-lg text-[#1c1b1b] font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white focus:border-[#D32F2F]/30 placeholder:text-[#8f6f6c]/60 transition-all duration-200 ${
-                    errors.mobile ? 'ring-2 ring-red-400 border-red-400' : ''
-                  }`}
-                  autoComplete="tel"
-                />
-              </div>
-              {errors.mobile && (
-                <p className="text-[11px] text-red-600 mt-1.5 font-medium">{errors.mobile.message}</p>
-              )}
-            </div>
-
-            {/* Password */}
-            <div>
-              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#5f5e5e] mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  {...register('password')}
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter password"
-                  className={`w-full px-4 py-4 bg-[#f6f3f2] border border-transparent rounded-lg text-[#1c1b1b] font-medium focus:ring-2 focus:ring-[#D32F2F]/20 focus:bg-white focus:border-[#D32F2F]/30 placeholder:text-[#8f6f6c]/60 transition-all duration-200 pr-12 ${
-                    errors.password ? 'ring-2 ring-red-400 border-red-400' : ''
-                  }`}
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[#5f5e5e] hover:text-[#1c1b1b] transition-colors"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    {showPassword ? (
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L6.462 6.462M9.878 9.878l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
-                    ) : (
-                      <>
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                      </>
-                    )}
-                  </svg>
-                </button>
-              </div>
-              {errors.password && (
-                <p className="text-[11px] text-red-600 mt-1.5 font-medium">{errors.password.message}</p>
-              )}
-              <div className="flex justify-end mt-1.5">
-                <Link to="/forgot-password" className="text-xs text-[#D32F2F] font-bold hover:underline">
-                  Forgot Password?
-                </Link>
-              </div>
-            </div>
-
-            {/* Submit */}
+          <div className="flex rounded-2xl bg-slate-100 p-1 mt-5 mb-5">
             <button
-              type="submit"
-              disabled={isPending}
-              className="w-full py-4 bg-gradient-to-br from-[#af101a] to-[#D32F2F] text-white font-bold rounded-lg shadow-lg shadow-[#D32F2F]/20 hover:shadow-xl hover:shadow-[#D32F2F]/30 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 uppercase tracking-wider text-sm"
+              type="button"
+              onClick={() => setActiveTab('otp')}
+              className={`flex-1 h-10 text-[13px] font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 font-display ${activeTab === 'otp' ? 'bg-white text-slate-900 shadow-app' : 'text-slate-500'}`}
             >
-              {isPending ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Signing In...
-                </span>
-              ) : (
-                'Sign In'
-              )}
+              <Smartphone size={15} /> Mobile OTP
             </button>
-          </form>
-
-          {/* Register link */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-[#5f5e5e] font-medium">
-              New customer?{' '}
-              <Link to="/register" className="text-[#D32F2F] font-bold hover:underline">
-                Create Account
-              </Link>
-            </p>
+            <button
+              type="button"
+              onClick={() => setActiveTab('password')}
+              className={`flex-1 h-10 text-[13px] font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 font-display ${activeTab === 'password' ? 'bg-white text-slate-900 shadow-app' : 'text-slate-500'}`}
+            >
+              <Lock size={15} /> Password
+            </button>
           </div>
 
-          {/* Footer */}
-          <div className="mt-8 text-center">
-            <p className="text-[10px] text-[#5f5e5e] font-medium">
-              GK AutoHerb v1.0 · Vadodara, Gujarat
-            </p>
-          </div>
+          {/* Demo accounts — local development only, never shown in the live app */}
+          {import.meta.env.DEV && activeTab === 'password' && (
+            <div className="mb-4 rounded-2xl border border-dashed border-slate-300 p-3">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Dev quick login</p>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: 'Admin', m: '9000000001', p: 'admin123' },
+                  { label: 'Staff', m: '9876543210', p: 'staff123' },
+                  { label: 'Customer', m: '9000000002', p: 'customer123' },
+                ].map((d) => (
+                  <button key={d.label} type="button" disabled={isPending} onClick={() => handleQuickLogin(d.m, d.p)} className="h-9 rounded-xl bg-slate-100 text-xs font-bold text-slate-700">
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'password' && (
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              <div>
+                <label className="app-label">Mobile number</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-[15px] font-semibold">+91</span>
+                  <input {...register('mobile')} type="tel" inputMode="numeric" maxLength={10} placeholder="10-digit mobile" className="app-input pl-14" />
+                </div>
+                {errors.mobile && <p className="text-xs text-red-600 mt-1">{errors.mobile.message}</p>}
+              </div>
+              <div>
+                <label className="app-label">Password</label>
+                <div className="relative">
+                  <input {...register('password')} type={showPassword ? 'text' : 'password'} placeholder="Your password" className="app-input pr-16" />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                {errors.password && <p className="text-xs text-red-600 mt-1">{errors.password.message}</p>}
+                <div className="flex justify-end mt-2">
+                  <Link to="/forgot-password" className="text-[13px] text-[#D32F2F] font-bold">Forgot password?</Link>
+                </div>
+              </div>
+              <button type="submit" disabled={isPending} className="app-btn-primary w-full">
+                {isPending ? 'Signing in…' : 'Log in'}
+              </button>
+            </form>
+          )}
+
+          {activeTab === 'otp' && (
+            <div className="space-y-4">
+              {otpStep === 'send' ? (
+                <form onSubmit={handleSendOtp} className="space-y-4">
+                  <div>
+                    <label className="app-label">Mobile number</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-[15px] font-semibold">+91</span>
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        maxLength={10}
+                        required
+                        autoFocus
+                        placeholder="10-digit mobile"
+                        value={otpMobile}
+                        onChange={(e) => setOtpMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                        className="app-input pl-14 text-[17px] tracking-wide"
+                      />
+                    </div>
+                  </div>
+                  <button type="submit" disabled={isSendingOtp || otpMobile.length !== 10} className="app-btn-primary w-full">
+                    {isSendingOtp ? 'Sending code…' : <>Continue <ArrowRight size={17} /></>}
+                  </button>
+                  <p className="text-[11px] text-slate-400 text-center">We'll send a 6-digit code by SMS. By continuing you agree to our terms & privacy policy.</p>
+                </form>
+              ) : (
+                <form onSubmit={handleVerifyOtp} className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-display font-bold text-slate-900">Enter the 6-digit code</p>
+                      <p className="text-xs text-slate-500">Sent to +91 {otpMobile}</p>
+                    </div>
+                    <button type="button" onClick={() => setOtpStep('send')} className="text-[13px] text-[#D32F2F] font-bold">Change</button>
+                  </div>
+
+                  <div className="flex justify-between gap-2" onPaste={handleOtpPaste}>
+                    {otpDigits.map((digit, i) => (
+                      <input
+                        key={i}
+                        ref={(el) => (otpInputsRef.current[i] = el)}
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete={i === 0 ? 'one-time-code' : 'off'}
+                        maxLength={1}
+                        value={digit}
+                        onChange={(e) => handleOtpDigitChange(i, e.target.value)}
+                        onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                        className="w-12 h-14 text-center text-xl font-display font-extrabold rounded-xl border border-slate-200 bg-white focus:border-[#D32F2F] focus:ring-2 focus:ring-red-500/15 outline-none"
+                      />
+                    ))}
+                  </div>
+
+                  <input
+                    placeholder="Your name (for new customers)"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    className="app-input"
+                  />
+
+                  <button type="submit" disabled={isVerifyingOtp || otpDigits.join('').length !== 6} className="app-btn-primary w-full">
+                    {isVerifyingOtp ? 'Verifying…' : 'Verify & continue'}
+                  </button>
+
+                  <div className="flex items-center justify-between text-[13px]">
+                    <span className="text-slate-400">Didn't get it?</span>
+                    {countdown > 0 ? (
+                      <span className="text-slate-500 font-medium">Resend in {countdown}s</span>
+                    ) : (
+                      <button type="button" onClick={() => handleSendOtp()} className="text-[#D32F2F] font-bold flex items-center gap-1">
+                        <RefreshCw size={13} /> Resend code
+                      </button>
+                    )}
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+
+          <p className="mt-6 text-center text-[13px] text-slate-500">
+            Prefer a password?{' '}
+            <Link to="/register" className="text-[#D32F2F] font-bold">Create an account</Link>
+          </p>
         </div>
       </div>
     </div>

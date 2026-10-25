@@ -11,6 +11,8 @@ import EmptyState from '../../components/shared/EmptyState';
 import { SkeletonCard } from '../../components/ui/SkeletonLoader';
 import { useUIStore } from '../../store/uiStore';
 import { formatINR } from '../../utils/formatters';
+import ServiceMediaManager from '../../components/admin/ServiceMediaManager';
+import ProductBrandsManager from '../../components/admin/ProductBrandsManager';
 
 const CATEGORY_LABELS = [
   { key: 'price_hatchback', short: 'Hatch', label: 'Hatchback ₹' },
@@ -184,6 +186,8 @@ export default function ServicesPage() {
           />
         </div>
 
+        <ProductBrandsManager />
+
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <SkeletonCard /><SkeletonCard /><SkeletonCard />
@@ -319,6 +323,12 @@ export default function ServicesPage() {
               className="w-full text-xs font-medium p-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-red-500/20 focus:border-[#D32F2F] outline-none"
             />
           </div>
+
+          {editItem ? (
+            <ServiceMediaManager serviceId={editItem.id} />
+          ) : (
+            <p className="rounded-2xl bg-slate-50 p-3 text-[12px] text-slate-500">Save the service first, then open it again to add before/after photos and the process video.</p>
+          )}
 
           <Input label="Duration (Minutes) *" type="number" value={durationMinutes || ''} onChange={e => setDurationMinutes(parseInt(e.target.value) || 0)} placeholder="60" />
           

@@ -27,3 +27,6 @@ set_*.js
 seed_*.js
 update-*.js
 api-test.js
+
+# Needed for deploys (safe: reads credentials from .env only)
+!server/scripts/run_migration_files.js

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import api from '../../api/axiosInstance';
 import { IndianRupee, TrendingUp, TrendingDown, Clock, Download, Package, Calendar, Briefcase, RefreshCw, CheckCircle2, ChevronRight, BarChart3, Receipt, FileText, Plus, Trash2 } from 'lucide-react';
-import { useAccountSummary, useTransactions, useExportReport, useAccountKPIs, usePurchaseBills, useCreatePurchaseBill, useGstReport, useReturns, useCreateReturn } from '../../api/hooks/useAccounts';
+import { useAccountSummary, useTransactions, useExportReport, useAccountKPIs, usePurchaseBills, useCreatePurchaseBill, useGstReport, useReturns, useCreateReturn, downloadGstReport } from '../../api/hooks/useAccounts';
 import { useVendors } from '../../api/hooks/useVendors';
 import { useUIStore } from '../../store/uiStore';
 import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
@@ -259,9 +259,18 @@ export default function AccountsPage() {
     }
   };
 
-  const downloadGstCsv = () => {
-    const url = `${api.defaults.baseURL || ''}/api/gst-reports?month=${gstMonth}&year=${gstYear}&format=csv`;
-    window.open(url, '_blank');
+  const [downloadingGst, setDownloadingGst] = useState<'csv' | 'xlsx' | null>(null);
+
+  const handleDownloadGst = async (format: 'csv' | 'xlsx') => {
+    setDownloadingGst(format);
+    try {
+      await downloadGstReport(gstMonth, gstYear, format);
+      toast('success', `GSTR Compliance Report (${format.toUpperCase()}) exported successfully`);
+    } catch (err) {
+      toast('error', 'Failed to export GST report');
+    } finally {
+      setDownloadingGst(null);
+    }
   };
 
   return (
@@ -333,28 +342,28 @@ export default function AccountsPage() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <AdminMetricCard
                   label="Today's Revenue"
-                  value={`₹${formatINR(summary?.today_revenue || 0)}`}
+                  value={`${formatINR(summary?.today_revenue || 0)}`}
                   trend={{ text: 'Daily collections', positive: true }}
                   icon={<IndianRupee size={20} />}
                   accentColor="emerald"
                 />
                 <AdminMetricCard
                   label="Period Revenue"
-                  value={`₹${formatINR(summary?.month_revenue || 0)}`}
+                  value={`${formatINR(summary?.month_revenue || 0)}`}
                   trend={{ text: 'Filtered interval turnover', positive: true }}
                   icon={<TrendingUp size={20} />}
                   accentColor="indigo"
                 />
                 <AdminMetricCard
                   label="Period Procurements"
-                  value={`₹${formatINR(summary?.total_purchases_month || 0)}`}
+                  value={`${formatINR(summary?.total_purchases_month || 0)}`}
                   trend={{ text: 'Inventory & supplies spend', positive: false }}
                   icon={<TrendingDown size={20} />}
                   accentColor="rose"
                 />
                 <AdminMetricCard
                   label="Pending Salaries"
-                  value={`₹${formatINR(summary?.pending_staff_payments || 0)}`}
+                  value={`${formatINR(summary?.pending_staff_payments || 0)}`}
                   trend={{ text: 'Payroll obligations', positive: false }}
                   icon={<Clock size={20} />}
                   accentColor="amber"
@@ -365,14 +374,14 @@ export default function AccountsPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <AdminMetricCard
                   label="B2B Bulk Sales"
-                  value={`₹${formatINR(summary?.total_b2b_sales_month || 0)}`}
+                  value={`${formatINR(summary?.total_b2b_sales_month || 0)}`}
                   trend={{ text: 'Wholesale client ledger', positive: true }}
                   icon={<TrendingUp size={20} />}
                   accentColor="purple"
                 />
                 <AdminMetricCard
                   label="B2C Retail Sales"
-                  value={`₹${formatINR(summary?.total_b2c_sales_month || 0)}`}
+                  value={`${formatINR(summary?.total_b2c_sales_month || 0)}`}
                   trend={{ text: 'Counter customer sales', positive: true }}
                   icon={<TrendingUp size={20} />}
                   accentColor="sky"
@@ -914,10 +923,18 @@ export default function AccountsPage() {
                 ))}
               </select>
               <button
-                onClick={downloadGstCsv}
-                className="px-3.5 py-1.5 border border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-xs font-bold rounded-xl transition flex items-center gap-1 shadow-sm"
+                onClick={() => handleDownloadGst('csv')}
+                disabled={!!downloadingGst}
+                className="px-3 py-1.5 border border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-xs font-bold rounded-xl transition flex items-center gap-1 shadow-sm disabled:opacity-60 active:scale-95"
               >
-                <Download size={13} /> Export CSV
+                <Download size={13} /> {downloadingGst === 'csv' ? 'Exporting...' : 'Export CSV'}
+              </button>
+              <button
+                onClick={() => handleDownloadGst('xlsx')}
+                disabled={!!downloadingGst}
+                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl transition flex items-center gap-1 shadow-sm disabled:opacity-60 active:scale-95"
+              >
+                <Download size={13} /> {downloadingGst === 'xlsx' ? 'Exporting...' : 'Export Excel'}
               </button>
             </div>
           </div>

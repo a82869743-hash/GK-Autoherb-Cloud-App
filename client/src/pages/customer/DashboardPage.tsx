@@ -1,846 +1,362 @@
-import { useState, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { 
-  Calendar, Clock, Car, Sparkles, Gift, ArrowRight, ChevronRight,
-  Shield, CalendarCheck, Wrench, Plus, Package, ChevronLeft,
-  CheckCircle2, Award, Zap, Truck, Navigation, Bot, ArrowUpDown
-} from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { MapPin, ChevronDown, ChevronRight, Truck, Gift, Clock, CalendarClock, ShieldCheck, Sparkles, Package, CheckCircle2, Navigation } from 'lucide-react';
 import { useCustomerDashboard } from '../../api/hooks/useDashboard';
-import { useAuthStore } from '../../store/authStore';
-import ErrorState from '../../components/shared/ErrorState';
-import { formatDate, formatTime, formatINR } from '../../utils/formatters';
-import AddCarModal from '../../components/shared/AddCarModal';
-import { useCarImage, getSafeCarImage, getStudioFallback, markCarImageFailed } from '../../utils/carImageService';
-import { getCategoryForModel } from '../../utils/carData';
-import { OWNER_STUDIO_LOCATION } from '../../utils/locationService';
+import { useServices } from '../../api/hooks/useServices';
+import { usePublicSettings } from '../../api/hooks/useSettings';
+import { useActiveVehicle, useCustomerProfile, useConfirmAttendance } from '../../api/hooks/useCustomerApp';
+import { VehicleChip } from '../../components/customer/VehicleSheet';
+import AddressSheet, { addressTitle, addressLine } from '../../components/customer/AddressSheet';
+import { CancelBookingSheet, RescheduleSheet } from '../../components/customer/BookingActionSheets';
+import { SectionTitle, Skeleton, StatusPill } from '../../components/customer/ui';
+import ServiceImage from '../../components/customer/ServiceImage';
+import { BrandCard } from '../../components/customer/ServiceMediaShowcase';
+import { useProductBrands } from '../../api/hooks/useServiceExtras';
+import { SEGMENT_LABEL, priceForSegment, formatPrice } from '../../utils/pricing';
+import { calculateHaversineDistance, estimateDriveMinutes, resolveStudioLocation } from '../../utils/locationService';
+import { formatTime } from '../../utils/formatters';
+import { useUIStore } from '../../store/uiStore';
 
-function computeJobTimeline(status?: string) {
-  const s = (status || '').toLowerCase();
-  if (s === 'delivered' || s === 'completed' || s === 'complete') {
-    return [
-      { label: 'Check-In', done: true },
-      { label: 'Wash & Prep', done: true },
-      { label: 'Detailing', done: true },
-      { label: 'Delivered', done: true },
-    ];
-  }
-  if (s === 'ready' || s === 'qc') {
-    return [
-      { label: 'Check-In', done: true },
-      { label: 'Wash & Prep', done: true },
-      { label: 'Detailing', done: true },
-      { label: 'Ready / QC', active: true },
-    ];
-  }
-  if (s === 'in_progress' || s === 'washing' || s === 'repairing') {
-    return [
-      { label: 'Check-In', done: true },
-      { label: 'Wash & Prep', done: true },
-      { label: 'Detailing Bay', active: true },
-      { label: 'Quality Check', done: false },
-    ];
-  }
-  return [
-    { label: 'Check-In', done: true },
-    { label: 'Wash Bay Intake', active: true },
-    { label: 'Detailing Bay', done: false },
-    { label: 'Quality Check', done: false },
-  ];
+const STAGES = ['received', 'inspection', 'washing', 'detailing', 'curing', 'quality_check', 'ready', 'delivered'];
+const STAGE_LABEL: Record<string, string> = {
+  received: 'Vehicle received', inspection: 'Inspection', washing: 'Washing', detailing: 'Detailing',
+  curing: 'Coating & curing', quality_check: 'Quality check', ready: 'Ready for pickup', delivered: 'Delivered',
+};
+
+// Home category tiles → services page filters (category names from Admin → Services)
+const BIG_TILES = [
+  { title: 'Washing & Detailing', to: '/customer/services?cat=Washing', img: '/services/gk/foam_wash.jpg' },
+  { title: 'Coating & PPF', to: '/customer/services?cat=Coating', img: '/services/gk/ceramic_coating.jpg' },
+  { title: 'Car Accessories', to: '/customer/products', img: '/products/white/car_vacuum.jpg', white: true },
+];
+const SMALL_TILES = [
+  { title: 'Interior Care', to: '/customer/services?cat=Interior', img: '/services/gk/interior_detailing.jpg' },
+  { title: 'Paint & Polish', to: '/customer/services?cat=Detailing', img: '/services/gk/rubbing_compounding.jpg' },
+  { title: 'Bike Care', to: '/customer/services?type=bike', img: '/services/gk/two_wheeler_wash.jpg' },
+  { title: 'Packages', to: '/customer/buy-packages', img: '/services/gk/premium_spa_wash.jpg' },
+];
+
+function slotDateLabel(dateStr: string) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diff = Math.round((d.getTime() - today.getTime()) / 864e5);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Tomorrow';
+  return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 export default function CustomerDashboardPage() {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
-  const { data, isLoading, isError, refetch } = useCustomerDashboard();
-  
-  const [showAddCar, setShowAddCar] = useState(false);
-  const [selectedCarIndex, setSelectedCarIndex] = useState(0);
+  const toast = useUIStore((s) => s.toast);
+  const { data, isLoading } = useCustomerDashboard();
+  const { data: profile } = useCustomerProfile();
+  const { active, segment } = useActiveVehicle();
+  const { data: servicesRes } = useServices({ active_only: true });
+  const { data: settingsRes } = usePublicSettings();
+  const confirmAttendance = useConfirmAttendance();
+  const { data: coatingBrands = [] } = useProductBrands();
+  const [addressOpen, setAddressOpen] = useState(false);
+  const [cancelFor, setCancelFor] = useState<any>(null);
+  const [rescheduleFor, setRescheduleFor] = useState<any>(null);
+  const [slide, setSlide] = useState(0);
 
-  const firstName = user?.name?.split(' ')[0] || 'Member';
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
+  const d = data?.data || data || {};
+  const loyalty = d.loyalty || {};
+  const upcoming: any[] = d.upcoming_bookings || [];
+  const activeJob = (d.recent_jobs || []).find((j: any) => j.status === 'open' || j.status === 'draft');
+  const defaultAddress = profile?.addresses?.find((a) => a.is_default) || profile?.addresses?.[0];
+  const studio = useMemo(() => resolveStudioLocation(settingsRes?.data), [settingsRes]);
 
-  const loyalty = data?.loyalty || { credits: 0, free_washes: 0, wax_count: 0 };
-  const vehicles = data?.vehicles || [];
-  const upcomingBookings = data?.upcoming_bookings || [];
-  const recentJobs = data?.recent_jobs || [];
-  const totalVisits = data?.total_visits || 0;
-  const activePackage = data?.active_package || null;
-  const activePackages = data?.active_packages || (activePackage ? [activePackage] : []);
+  const distanceKm = useMemo(() => {
+    const lat = Number(defaultAddress?.latitude);
+    const lng = Number(defaultAddress?.longitude);
+    if (!lat || !lng) return null;
+    return calculateHaversineDistance(lat, lng, studio.lat, studio.lng);
+  }, [defaultAddress, studio]);
 
-  // Showcase vehicles (user's vehicles or curated studio cars)
-  const displayCars = vehicles.length > 0 ? vehicles : [
-    {
-      id: 'demo-1',
-      brand: 'BMW',
-      model: '7-Series',
-      registration_no: 'GJ 06 BK 7777',
-      car_year: 2025,
-      is_demo: true,
-    },
-    {
-      id: 'demo-2',
-      brand: 'Porsche',
-      model: '911 Carrera GT3',
-      registration_no: 'DL 01 AB 9911',
-      car_year: 2024,
-      is_demo: true,
-    },
-    {
-      id: 'demo-3',
-      brand: 'Range Rover',
-      model: 'Autobiography',
-      registration_no: 'MH 04 RR 0007',
-      car_year: 2025,
-      is_demo: true,
+  const services: any[] = (servicesRes?.data || []).filter((s: any) => s.vehicle_type !== 'bike');
+  const popular = services.slice(0, 8);
+
+  const slides = useMemo(() => {
+    const list = [
+      {
+        img: '/services/gk/foam_wash_premium.jpg',
+        kicker: 'GK AutoHerb Studio',
+        title: 'Showroom shine,\nat your time',
+        cta: 'Book a wash',
+        to: '/customer/services?cat=Washing',
+      },
+      {
+        img: '/services/gk/ceramic_coating.jpg',
+        kicker: 'Up to 3-year warranty',
+        title: 'Ceramic coating\n& PPF protection',
+        cta: 'Explore coatings',
+        to: '/customer/services?cat=Coating',
+      },
+      {
+        img: '/services/gk/premium_spa_wash.jpg',
+        kicker: 'GK Rewards',
+        title: `Get 10% back\nas GK points`,
+        cta: 'See rewards',
+        to: '/customer/loyalty',
+      },
+    ];
+    if (d.first_wash_eligible) {
+      list.unshift({
+        img: '/services/gk/exterior_body_wash.jpg',
+        kicker: 'Welcome offer',
+        title: '50% OFF\nyour first wash',
+        cta: 'Claim now',
+        to: '/customer/services?cat=Washing',
+      });
     }
-  ];
+    return list;
+  }, [d.first_wash_eligible]);
 
-  const currentCar = displayCars[selectedCarIndex % displayCars.length];
-  const { imageUrl: realCarPhoto } = useCarImage(currentCar?.brand, currentCar?.model);
+  useEffect(() => {
+    const t = setInterval(() => setSlide((s) => (s + 1) % slides.length), 4500);
+    return () => clearInterval(t);
+  }, [slides.length]);
 
-  if (isError) {
-    return (
-      <div className="pt-4">
-        <ErrorState
-          message="Failed to load dashboard. Please check your connection and try again."
-          onRetry={() => refetch()}
-        />
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="pt-2 space-y-5">
-        <div className="skeleton h-56 rounded-3xl" />
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[1, 2, 3, 4].map(i => <div key={i} className="skeleton h-24 rounded-2xl" />)}
-        </div>
-        <div className="skeleton h-44 rounded-3xl" />
-      </div>
-    );
-  }
-
-  // Helper to pick verified real car photo or guaranteed studio fallback
-  const getCarImage = (car: any) => {
-    return getSafeCarImage(car?.brand, car?.model);
-  };
-
-  const handlePrevCar = () => {
-    setSelectedCarIndex(prev => (prev === 0 ? displayCars.length - 1 : prev - 1));
-  };
-
-  const handleNextCar = () => {
-    setSelectedCarIndex(prev => (prev + 1) % displayCars.length);
-  };
-
-  // Find active job in progress
-  const activeJob = recentJobs.find((j: any) => j.status === 'open' || j.status === 'in_progress' || j.status === 'draft');
-  const nextBooking = upcomingBookings[0];
+  const current = slides[slide % slides.length];
 
   return (
-    <div className="space-y-6 pt-1 text-slate-900">
-      {/* ── Sub-header / Studio Status Bar ───────────── */}
-      <div className="flex items-center justify-between text-xs px-1">
-        <a 
-          href={`https://www.google.com/maps?q=${OWNER_STUDIO_LOCATION.lat},${OWNER_STUDIO_LOCATION.lng}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 hover:opacity-85 transition-opacity group"
-          title="Open Studio Location in Google Maps"
-        >
-          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-          <span className="text-slate-600 font-semibold tracking-wide flex items-center gap-1">
-            Studio Live • <span className="font-bold text-slate-800">Gotri - Vasna - Bhayli Road</span>
-            <span className="text-[10px] text-red-600 font-bold bg-red-50 group-hover:bg-red-100 px-1.5 py-0.5 rounded transition-colors">Vadodara 📍</span>
-          </span>
-        </a>
-        <Link 
-          to="/customer/vehicles" 
-          className="text-slate-500 hover:text-slate-900 flex items-center gap-1 font-bold text-[11px] transition-colors"
-        >
-          <span>Your Garage ({vehicles.length})</span>
-          <ChevronRight size={12} className="text-red-500" />
-        </Link>
-      </div>
+    <div className="-mx-4">
+      {/* ── Hero: location + vehicle chip over a promo banner (Hoora style) ── */}
+      <div className="relative h-[330px] overflow-hidden bg-black">
+        {slides.map((s, i) => (
+          <img
+            key={s.img}
+            src={s.img}
+            alt=""
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${i === slide % slides.length ? 'opacity-100' : 'opacity-0'}`}
+          />
+        ))}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/75 via-black/20 to-black/80" />
 
-      {/* ── 50% OFF First Wash Promo Ribbon ─────────── */}
-      {data?.first_wash_eligible && (
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-red-600 via-rose-600 to-amber-500 p-4 sm:p-5 text-white shadow-[0_10px_25px_rgba(211,47,47,0.25)] group">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 relative z-10">
-            <div className="flex items-center gap-3.5">
-              <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-amber-200 shrink-0 shadow-inner">
-                <Sparkles size={22} className="animate-pulse" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 bg-amber-400 text-red-950 text-[9px] font-black uppercase tracking-wider rounded-md">
-                    Special Welcome Offer
-                  </span>
-                  <span className="text-[10px] text-red-100 font-bold uppercase tracking-wider">Limited Period</span>
-                </div>
-                <h3 className="text-base sm:text-lg font-black text-white mt-1 leading-tight">
-                  Get 50% OFF Your First Detailing Wash! 🎉
-                </h3>
-              </div>
-            </div>
-            <Link
-              to="/customer/bookings/new"
-              className="px-4 py-2.5 bg-white hover:bg-amber-50 text-red-700 font-black text-xs rounded-xl shadow-md transition-all hover:scale-105 flex items-center gap-1.5 shrink-0 self-end sm:self-center"
-            >
-              <span>Claim 50% OFF</span>
-              <ArrowRight size={14} />
-            </Link>
-          </div>
-          {/* Subtle decoration */}
-          <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-white/10 rounded-full blur-xl pointer-events-none" />
-        </div>
-      )}
-
-      {/* ── Active Delivery Live Tracking Banner ─────────────── */}
-      {data?.active_delivery && (
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-950 via-slate-900 to-red-950 p-5 text-white shadow-xl border border-red-500/30 group">
-          <div className="absolute top-0 right-0 w-48 h-48 bg-red-600/20 rounded-full blur-3xl pointer-events-none" />
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
-            <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-red-600 to-rose-700 flex items-center justify-center text-white shadow-lg shadow-red-600/30 shrink-0">
-                <Truck size={24} className="animate-bounce" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 bg-red-500/20 border border-red-500/40 text-red-400 text-[9px] font-black uppercase tracking-wider rounded-md inline-flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
-                    Out For Delivery
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-mono font-semibold">
-                    {data.active_delivery.registration_no}
-                  </span>
-                </div>
-                <h3 className="text-base sm:text-lg font-black text-white mt-1 leading-tight">
-                  Your vehicle is on the way!
-                </h3>
-                <p className="text-xs text-slate-300 font-medium mt-0.5">
-                  Driver: <strong className="text-white">{data.active_delivery.driver_name}</strong>
-                  {data.active_delivery.driver_mobile && ` (${data.active_delivery.driver_mobile})`}
-                  {data.active_delivery.destination_address && ` • To: ${data.active_delivery.destination_address}`}
-                </p>
-              </div>
-            </div>
-
-            <Link
-              to={`/customer/delivery/${data.active_delivery.id}`}
-              className="px-4 py-2.5 bg-gradient-to-r from-[#D32F2F] to-[#b71c1c] hover:from-[#b71c1c] hover:to-[#8b0000] text-white font-black text-xs rounded-xl shadow-lg shadow-red-600/30 transition-all hover:scale-105 flex items-center gap-2 shrink-0 self-stretch sm:self-center justify-center"
-            >
-              <Navigation size={14} />
-              <span>Track Live Delivery</span>
-              <ArrowRight size={14} />
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {/* ── Live Active Status Tracker ── */}
-      {activeJob ? (
-        <div className="bg-white rounded-3xl p-5 border border-red-200 shadow-sm relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-500 via-amber-400 to-emerald-500" />
-          <div className="flex items-center justify-between gap-2 mb-3">
-            <div className="flex items-center gap-2.5">
-              <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+        <div className="relative z-10 px-4 pt-safe">
+          <div className="flex items-start justify-between gap-3 pt-3">
+            <button onClick={() => setAddressOpen(true)} className="min-w-0 text-left text-white">
+              <span className="flex items-center gap-1.5 font-display text-[17px] font-extrabold">
+                <MapPin size={18} className="text-[#ff5252]" />
+                {defaultAddress ? addressTitle(defaultAddress) : 'Set location'}
+                <ChevronDown size={16} />
               </span>
-              <div>
-                <span className="text-[10px] font-black tracking-widest uppercase text-red-600">Live Service Status</span>
-                <h4 className="text-sm font-extrabold text-slate-900 leading-none mt-0.5">
-                  Detailing In Progress ({activeJob.brand} {activeJob.model})
-                </h4>
-              </div>
-            </div>
-            <span className="px-2.5 py-1 bg-red-50 text-red-700 border border-red-200 text-[9px] font-black uppercase tracking-wider rounded-lg">
-              Visit #{activeJob.visit_number || '1'}
-            </span>
+              <span className="block text-[13px] text-white/80 truncate max-w-[200px]">{addressLine(defaultAddress)}</span>
+              {distanceKm !== null && (
+                <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-semibold text-white/90">
+                  <Navigation size={11} /> {distanceKm} km from studio · ~{estimateDriveMinutes(distanceKm)} min
+                </span>
+              )}
+            </button>
+            <VehicleChip dark />
           </div>
 
-          {/* Service Stage Timeline */}
-          <div className="grid grid-cols-4 gap-2 mt-4 text-center">
-            {computeJobTimeline(activeJob.status).map((step, idx) => (
-              <div key={idx} className="flex flex-col items-center">
-                <div className={`w-full h-1.5 rounded-full mb-1.5 ${
-                  step.done ? 'bg-emerald-500' : step.active ? 'bg-amber-500 animate-pulse' : 'bg-slate-200'
-                }`} />
-                <span className={`text-[9px] font-bold tracking-tight ${
-                  step.done ? 'text-emerald-600' : step.active ? 'text-amber-700 font-black' : 'text-slate-400'
-                }`}>
-                  {step.label}
-                </span>
-              </div>
+          <div className="mt-10 text-white">
+            <p className="text-[12px] font-bold uppercase tracking-[0.18em] text-[#ff8a80]">{current.kicker}</p>
+            <h1 className="font-display text-[30px] leading-[1.08] font-extrabold whitespace-pre-line mt-1.5">{current.title}</h1>
+            <button onClick={() => navigate(current.to)} className="mt-4 app-btn h-10 px-4 bg-white text-slate-900">
+              {current.cta} <ChevronRight size={16} />
+            </button>
+          </div>
+          <div className="absolute bottom-10 right-4 flex gap-1.5">
+            {slides.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setSlide(i)}
+                className={`h-1.5 rounded-full transition-all ${i === slide % slides.length ? 'w-6 bg-white' : 'w-1.5 bg-white/50'}`}
+                aria-label={`Banner ${i + 1}`}
+              />
             ))}
           </div>
+        </div>
+      </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-xs text-slate-500 font-medium">
-              Plate: <strong className="text-slate-800">{activeJob.registration_no || 'In Bay'}</strong>
+      {/* ── Content sheet ── */}
+      <div className="relative -mt-6 rounded-t-[28px] bg-[#f3f4f6] px-4 pt-5 space-y-6">
+        {/* Live delivery */}
+        {d.active_delivery && (
+          <Link to={`/customer/delivery/${d.active_delivery.id}`} className="app-card flex items-center gap-3 p-4 border border-red-100">
+            <span className="h-11 w-11 rounded-xl bg-[#D32F2F] text-white flex items-center justify-center"><Truck size={22} /></span>
+            <span className="flex-1 min-w-0">
+              <span className="block font-display font-extrabold text-slate-900">Your car is on the way</span>
+              <span className="block text-xs text-slate-500 truncate">{d.active_delivery.driver_name} · {d.active_delivery.registration_no}</span>
             </span>
-            <Link
-              to="/customer/job-carts"
-              className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1 uppercase tracking-wider"
-            >
-              <span>View Job Sheet</span>
-              <ChevronRight size={14} />
-            </Link>
-          </div>
-        </div>
-      ) : nextBooking ? (
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-              <CalendarCheck size={18} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-600">Next Scheduled Visit</span>
-                <span className="text-[10px] text-slate-400">• {nextBooking.status}</span>
-              </div>
-              <p className="text-xs sm:text-sm font-bold text-slate-900 mt-0.5">
-                {nextBooking.service_name || 'Vehicle Detailing'} — {formatDate(nextBooking.slot_date)}
-              </p>
-            </div>
-          </div>
-          <Link
-            to="/customer/bookings"
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 transition-all shrink-0"
-          >
-            <span>Details</span>
-            <ChevronRight size={14} />
+            <span className="text-xs font-bold text-[#D32F2F] flex items-center gap-1">Track live <ChevronRight size={14} /></span>
           </Link>
-        </div>
-      ) : null}
+        )}
 
-      {/* ── GK AI Workshop Concierge Interactive Banner ─────────── */}
-      <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-[#121212] via-[#1a1818] to-[#221f1f] p-5 sm:p-6 text-white border border-white/10 shadow-xl">
-        <div className="absolute top-0 right-0 w-60 h-60 bg-red-600/15 rounded-full blur-3xl pointer-events-none" />
-        
-        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#D32F2F] to-[#af101a] text-white flex items-center justify-center shadow-lg shadow-red-600/30 shrink-0">
-              <Bot size={24} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-black text-white">Ask GK Studio AI Concierge</h3>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold inline-flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  Live Assistant
-                </span>
+        {/* Live job tracker */}
+        {activeJob && (
+          <div className="app-card p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-[#D32F2F] flex items-center gap-1.5">
+                  <span className="relative flex h-2 w-2"><span className="animate-ping absolute h-full w-full rounded-full bg-red-400 opacity-75" /><span className="relative h-2 w-2 rounded-full bg-[#D32F2F]" /></span>
+                  Live in studio
+                </p>
+                <p className="font-display font-extrabold text-slate-900 mt-0.5">{STAGE_LABEL[activeJob.stage || 'received']}</p>
+                <p className="text-xs text-slate-500">{activeJob.brand} {activeJob.model} · {activeJob.registration_no}</p>
               </div>
-              <p className="text-xs text-slate-300 mt-1 max-w-lg leading-relaxed">
-                Need instant pricing for your car, package comparisons, live car tracking, or genuine accessories? Click any question below to chat live.
-              </p>
+              {activeJob.tracking_url && (
+                <Link to={activeJob.tracking_url} className="app-btn h-9 px-3 bg-[#111] text-white text-xs">Track</Link>
+              )}
+            </div>
+            <div className="mt-3 flex gap-1">
+              {STAGES.slice(0, 7).map((s, i) => (
+                <span key={s} className={`h-1.5 flex-1 rounded-full ${i <= STAGES.indexOf(activeJob.stage || 'received') ? 'bg-[#D32F2F]' : 'bg-slate-200'}`} />
+              ))}
             </div>
           </div>
+        )}
 
-          <button
-            onClick={() => window.dispatchEvent(new CustomEvent('gk-open-chatbot'))}
-            className="px-4 py-2.5 bg-gradient-to-r from-[#D32F2F] to-[#b71c1c] hover:from-[#b71c1c] hover:to-[#8b0000] text-white text-xs font-bold rounded-2xl shadow-md transition-all flex items-center gap-2 shrink-0 active:scale-95"
-          >
-            <Sparkles size={15} />
-            <span>Open AI Chat</span>
-          </button>
+        {/* Next booking with cancel / reschedule */}
+        {upcoming[0] && (
+          <div className="app-card p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Upcoming visit</p>
+                <p className="font-display font-extrabold text-slate-900 mt-0.5 truncate">{upcoming[0].service_name || upcoming[0].package_name || 'Car care service'}</p>
+                <p className="text-[13px] text-slate-600 flex items-center gap-1.5 mt-1">
+                  <CalendarClock size={14} className="text-[#D32F2F]" />
+                  {slotDateLabel(upcoming[0].slot_date)} · {formatTime(upcoming[0].start_time)}
+                </p>
+              </div>
+              <StatusPill status={upcoming[0].status} />
+            </div>
+            {upcoming[0].customer_confirmation === 'pending' && (
+              <button
+                onClick={async () => {
+                  await confirmAttendance.mutateAsync(upcoming[0].id);
+                  toast('success', "Thanks! We'll be ready for you.");
+                }}
+                className="mt-3 w-full rounded-xl bg-emerald-50 text-emerald-700 font-bold text-sm h-10 flex items-center justify-center gap-1.5"
+              >
+                <CheckCircle2 size={16} /> Yes, I'll be there
+              </button>
+            )}
+            {upcoming[0].customer_confirmation === 'confirmed' && (
+              <p className="mt-3 text-xs font-semibold text-emerald-700 flex items-center gap-1"><CheckCircle2 size={14} /> You confirmed this visit</p>
+            )}
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button onClick={() => setRescheduleFor(upcoming[0])} className="app-btn h-10 bg-slate-100 text-slate-800">Reschedule</button>
+              <button onClick={() => setCancelFor(upcoming[0])} className="app-btn h-10 bg-white border border-slate-200 text-red-600">Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {/* Category tiles */}
+        <div>
+          <div className="grid grid-cols-3 gap-2.5">
+            {BIG_TILES.map((t) => (
+              <Link key={t.title} to={t.to} className="app-card overflow-hidden flex flex-col h-[148px]">
+                <span className="px-3 pt-2.5 font-display text-[13px] font-bold leading-tight text-slate-900">{t.title}</span>
+                <span className="mt-auto h-[86px] overflow-hidden">
+                  <img src={t.img} alt="" loading="lazy" className={`h-full w-full ${t.white ? 'object-contain p-1' : 'object-cover rounded-tl-2xl'}`} />
+                </span>
+              </Link>
+            ))}
+          </div>
+          <div className="grid grid-cols-4 gap-2.5 mt-2.5">
+            {SMALL_TILES.map((t) => (
+              <Link key={t.title} to={t.to} className="app-card overflow-hidden flex flex-col h-[112px]">
+                <span className="px-2.5 pt-2 font-display text-[12px] font-bold leading-tight text-slate-900">{t.title}</span>
+                <img src={t.img} alt="" loading="lazy" className="mt-auto h-[58px] w-full object-cover" />
+              </Link>
+            ))}
+          </div>
         </div>
 
-        {/* Quick Question Trigger Chips */}
-        <div className="relative z-10 mt-4 pt-3.5 border-t border-white/10 flex flex-wrap gap-2">
-          {[
-            { label: '🏎️ Track My Car Progress', prompt: 'Where is my car and what is the job status?' },
-            { label: '💎 Which Package Saves Most?', prompt: 'What are the membership packages and savings?' },
-            { label: '🛡️ Ceramic vs PPF Difference', prompt: 'What is the difference between ceramic coating and PPF?' },
-            { label: '🛍️ Check Store Accessories', prompt: 'What genuine car accessories do you have in stock?' },
-            { label: '📞 Studio Helpline & Valet', prompt: 'Please give me the studio phone number, location, and doorstep pickup details' },
-          ].map((item, i) => (
-            <button
-              key={i}
-              onClick={() => window.dispatchEvent(new CustomEvent('gk-open-chatbot', { detail: { prompt: item.prompt } }))}
-              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/10 hover:border-red-500/40 text-slate-200 hover:text-white rounded-xl text-[11px] font-medium transition-all active:scale-95 text-left"
+        {/* Popular services for this car */}
+        <div>
+          <SectionTitle
+            action={<Link to="/customer/services" className="text-[13px] font-bold text-[#D32F2F] flex items-center">View all <ChevronRight size={15} /></Link>}
+          >
+            {active ? `Popular for your ${SEGMENT_LABEL[segment]}` : 'Popular services'}
+          </SectionTitle>
+          {isLoading && !servicesRes ? (
+            <div className="flex gap-3"><Skeleton className="h-52 w-44" /><Skeleton className="h-52 w-44" /></div>
+          ) : (
+            <div className="flex gap-3 overflow-x-auto no-scrollbar -mx-4 px-4 pb-1">
+              {popular.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => navigate(`/customer/services?service=${s.id}`)}
+                  className="app-card w-44 shrink-0 overflow-hidden text-left"
+                >
+                  <ServiceImage service={s} className="h-28 w-full" />
+                  <span className="block p-3">
+                    <span className="block font-display text-[14px] font-bold text-slate-900 leading-tight line-clamp-2 min-h-[36px]">{s.name}</span>
+                    <span className="block mt-1.5 font-display font-extrabold text-[#C62828]">{formatPrice(priceForSegment(s, segment))}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* PPF & ceramic brands the studio uses */}
+        {coatingBrands.length > 0 && (
+          <div>
+            <SectionTitle
+              action={<Link to="/customer/services?cat=Coating" className="text-[13px] font-bold text-[#D32F2F] flex items-center">Coatings <ChevronRight size={15} /></Link>}
             >
-              {item.label}
-            </button>
+              PPF & ceramic brands we use
+            </SectionTitle>
+            <div className="space-y-2.5">
+              {coatingBrands.map((b) => (
+                <Link key={b.id} to={`/customer/services?cat=Coating`} className="block">
+                  <BrandCard brand={b} />
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Rewards banner */}
+        <Link to="/customer/loyalty" className="block rounded-2xl overflow-hidden bg-gradient-to-r from-[#111] via-[#1d1d1d] to-[#7f0000] p-4 text-white shadow-app-lg">
+          <div className="flex items-center gap-3">
+            <span className="h-12 w-12 rounded-2xl bg-white/10 flex items-center justify-center"><Gift size={24} className="text-[#ff8a80]" /></span>
+            <span className="flex-1">
+              <span className="block text-[11px] font-bold uppercase tracking-wider text-white/60">GK Rewards</span>
+              <span className="block font-display text-lg font-extrabold">{Math.floor(Number(loyalty.points || 0))} points</span>
+              <span className="block text-xs text-white/70">Earn 10% back on every service · redeem free washes</span>
+            </span>
+            <ChevronRight className="text-white/60" />
+          </div>
+        </Link>
+
+        {/* Active package */}
+        {d.active_package && (
+          <Link to="/customer/buy-packages" className="app-card flex items-center gap-3 p-4">
+            <span className="h-11 w-11 rounded-xl bg-violet-50 text-violet-700 flex items-center justify-center"><Package size={22} /></span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-[11px] font-bold uppercase tracking-wider text-violet-600">Active membership</span>
+              <span className="block font-display font-bold text-slate-900 truncate">{d.active_package.package_name}</span>
+            </span>
+            <ChevronRight className="text-slate-400" />
+          </Link>
+        )}
+
+        {/* Trust strip */}
+        <div className="grid grid-cols-3 gap-2.5 pb-2">
+          {[
+            { icon: ShieldCheck, label: 'Warranty on coatings' },
+            { icon: Clock, label: 'On-time delivery' },
+            { icon: Sparkles, label: 'Trained detailers' },
+          ].map(({ icon: Icon, label }) => (
+            <div key={label} className="app-card p-3 text-center">
+              <Icon size={20} className="mx-auto text-[#D32F2F]" />
+              <p className="mt-1.5 text-[11px] font-semibold text-slate-600 leading-tight">{label}</p>
+            </div>
           ))}
         </div>
       </div>
 
-      {/* ── Vehicle Hero Showcase Carousel (Clean Light Studio Mode) ── */}
-      <div className="bg-white rounded-3xl p-5 sm:p-7 border border-slate-200/80 shadow-[0_10px_30px_rgba(0,0,0,0.04)] relative overflow-hidden group">
-        {/* Top Car Header */}
-        <div className="flex items-start justify-between relative z-10">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-red-600">Active Vehicle</span>
-              {currentCar?.car_year && (
-                <span className="px-2 py-0.5 bg-slate-100 rounded-md text-[10px] font-bold text-slate-600">
-                  {currentCar.car_year}
-                </span>
-              )}
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1">
-              {currentCar?.model || 'Studio Vehicle'}
-            </h2>
-            <p className="text-xs text-slate-500 font-semibold tracking-wide mt-0.5">
-              {currentCar?.brand || 'Luxury Automotive'} {currentCar?.registration_no ? `• ${currentCar.registration_no}` : ''}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Add Car Button */}
-            <button
-              onClick={() => setShowAddCar(true)}
-              className="p-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200 text-slate-700 hover:text-slate-900 transition-all flex items-center gap-1.5"
-              title="Add New Vehicle"
-            >
-              <Plus size={16} className="text-red-600" />
-              <span className="text-xs font-bold hidden sm:inline">Add Car</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Big Car Cutout Display with Studio Lighting & Reflection */}
-        <div className="relative mt-2 sm:mt-4 flex items-center justify-center min-h-[190px] sm:min-h-[260px]">
-          {/* Soft ambient ground shadow for clean light studio */}
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-100/80 via-transparent to-transparent rounded-full blur-2xl pointer-events-none" />
-          
-          <img
-            key={currentCar?.id || `${currentCar?.brand}-${currentCar?.model}-${selectedCarIndex}`}
-            src={realCarPhoto || getCarImage(currentCar)}
-            alt={`${currentCar?.brand || ''} ${currentCar?.model || 'Vehicle'}`}
-            onError={(e) => {
-              // Guaranteed graceful switch to local studio category photo without retry loop
-              const target = e.target as HTMLImageElement;
-              markCarImageFailed(target.src);
-              target.src = getStudioFallback(currentCar?.brand, currentCar?.model);
-            }}
-            className="relative z-10 w-full max-w-lg max-h-[220px] sm:max-h-[270px] object-contain drop-shadow-[0_15px_25px_rgba(0,0,0,0.12)] animate-scale-in select-none pointer-events-none rounded-2xl transition-all duration-300"
-          />
-
-          {/* Carousel Prev/Next Glass Controls */}
-          {displayCars.length > 1 && (
-            <>
-              <button
-                onClick={handlePrevCar}
-                className="absolute left-1 sm:left-2 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/90 hover:bg-white text-slate-800 shadow-md border border-slate-200 flex items-center justify-center transition-transform active:scale-90"
-                aria-label="Previous Car"
-              >
-                <ChevronLeft size={20} />
-              </button>
-              <button
-                onClick={handleNextCar}
-                className="absolute right-1 sm:right-2 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/90 hover:bg-white text-slate-800 shadow-md border border-slate-200 flex items-center justify-center transition-transform active:scale-90"
-                aria-label="Next Car"
-              >
-                <ChevronRight size={20} />
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* Carousel Pagination Dots & Quick Actions Bar */}
-        <div className="relative z-10 mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            {displayCars.map((_: any, idx: number) => (
-              <button
-                key={idx}
-                onClick={() => setSelectedCarIndex(idx)}
-                className={`transition-all rounded-full ${
-                  idx === selectedCarIndex % displayCars.length
-                    ? 'w-6 h-1.5 bg-[#D32F2F] shadow-sm'
-                    : 'w-2 h-1.5 bg-slate-200 hover:bg-slate-300'
-                }`}
-                aria-label={`Go to slide ${idx + 1}`}
-              />
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate(`/customer/bookings/new?vehicle_id=${currentCar?.id || ''}`)}
-              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
-            >
-              <CalendarCheck size={13} />
-              <span>Book For This Car</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ── GK Club Pass & Loyalty Bento Card ── */}
-      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-[0_10px_30px_rgba(0,0,0,0.04)] relative overflow-hidden group">
-        {/* Pass Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100 relative z-10">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600 flex items-center gap-1">
-                <Sparkles size={11} className="text-amber-500" />
-                GK Club Pass
-              </span>
-              <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-900 text-[9px] font-black uppercase tracking-wider rounded-md">
-                Gold Tier
-              </span>
-            </div>
-            <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight mt-0.5">
-              Rewards & Member Privileges
-            </h3>
-          </div>
-          <Link
-            to="/customer/loyalty"
-            className="text-xs font-black text-red-600 hover:text-red-700 flex items-center gap-1 px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 border border-red-100 transition-all"
-          >
-            <span>Redeem Pass</span>
-            <ChevronRight size={14} className="text-red-500" />
-          </Link>
-        </div>
-
-        {/* 4 Bento Metrics */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4 relative z-10">
-          {/* Reward Points */}
-          <div className="bg-gradient-to-br from-amber-500/[0.04] via-transparent to-transparent rounded-2xl p-4 border border-amber-200/60 hover:border-amber-300 shadow-2xs transition-all flex flex-col justify-between group/metric">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800">Points Balance</span>
-                <div className="w-7 h-7 rounded-xl bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center shadow-2xs">
-                  <Award size={15} />
-                </div>
-              </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight tabular-nums">
-                  {loyalty.credits || 0}
-                </span>
-                <span className="text-xs text-amber-700 font-extrabold uppercase">Pts</span>
-              </div>
-            </div>
-            
-            <div className="mt-3">
-              <div className="w-full bg-amber-100/70 h-1.5 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-full transition-all duration-500" 
-                  style={{ width: `${Math.min(100, Math.max(8, ((loyalty.credits || 0) % 500) / 5))}%` }} 
-                />
-              </div>
-              <p className="text-[10px] text-slate-500 font-semibold mt-1.5 flex items-center justify-between">
-                <span>Instant Cash Off</span>
-                <span className="text-amber-700 font-bold">1 Pt = ₹1</span>
-              </p>
-            </div>
-          </div>
-
-          {/* Free Washes */}
-          <div className="bg-gradient-to-br from-sky-500/[0.04] via-transparent to-transparent rounded-2xl p-4 border border-sky-200/60 hover:border-sky-300 shadow-2xs transition-all flex flex-col justify-between group/metric">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-sky-800">Free Washes</span>
-                <div className="w-7 h-7 rounded-xl bg-sky-100 border border-sky-200 text-sky-700 flex items-center justify-center shadow-2xs">
-                  <Zap size={15} />
-                </div>
-              </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight tabular-nums">
-                  {loyalty.free_washes || 0}
-                </span>
-                <span className="text-xs text-sky-700 font-extrabold uppercase">Available</span>
-              </div>
-            </div>
-
-            <div className="mt-3">
-              <div className="w-full bg-sky-100/70 h-1.5 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-sky-500 rounded-full transition-all duration-500" 
-                  style={{ width: `${(loyalty.free_washes || 0) > 0 ? 100 : 0}%` }} 
-                />
-              </div>
-              <p className="text-[10px] text-slate-500 font-semibold mt-1.5 flex items-center justify-between">
-                <span>100% Free Detailing</span>
-                {(loyalty.free_washes || 0) > 0 && <span className="text-emerald-600 font-black">Ready!</span>}
-              </p>
-            </div>
-          </div>
-
-          {/* Wax Treatments */}
-          <div className="bg-gradient-to-br from-purple-500/[0.04] via-transparent to-transparent rounded-2xl p-4 border border-purple-200/60 hover:border-purple-300 shadow-2xs transition-all flex flex-col justify-between group/metric">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-800">Wax Treatments</span>
-                <div className="w-7 h-7 rounded-xl bg-purple-100 border border-purple-200 text-purple-700 flex items-center justify-center shadow-2xs">
-                  <Sparkles size={15} />
-                </div>
-              </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight tabular-nums">
-                  {loyalty.wax_count || 0}
-                </span>
-                <span className="text-xs text-purple-700 font-extrabold uppercase">Passes Left</span>
-              </div>
-            </div>
-
-            <div className="mt-3">
-              <div className="w-full bg-purple-100/70 h-1.5 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-purple-500 rounded-full transition-all duration-500" 
-                  style={{ width: `${(loyalty.wax_count || 0) > 0 ? 100 : 0}%` }} 
-                />
-              </div>
-              <p className="text-[10px] text-slate-500 font-semibold mt-1.5">
-                <span>Carnauba Mirror Shine</span>
-              </p>
-            </div>
-          </div>
-
-          {/* Total Visits */}
-          <div className="bg-gradient-to-br from-emerald-500/[0.04] via-transparent to-transparent rounded-2xl p-4 border border-emerald-200/60 hover:border-emerald-300 shadow-2xs transition-all flex flex-col justify-between group/metric">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-800">Studio Visits</span>
-                <div className="w-7 h-7 rounded-xl bg-emerald-100 border border-emerald-200 text-emerald-700 flex items-center justify-center shadow-2xs">
-                  <CheckCircle2 size={15} />
-                </div>
-              </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight tabular-nums">
-                  {totalVisits}
-                </span>
-                <span className="text-xs text-emerald-700 font-extrabold uppercase">Completed</span>
-              </div>
-            </div>
-
-            <div className="mt-3">
-              <div className="w-full bg-emerald-100/70 h-1.5 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-emerald-500 rounded-full transition-all duration-500" 
-                  style={{ width: `${Math.min(100, Math.max(10, totalVisits * 20))}%` }} 
-                />
-              </div>
-              <p className="text-[10px] text-slate-500 font-semibold mt-1.5 flex items-center justify-between">
-                <span>VIP Priority Bay</span>
-                <span className="text-emerald-700 font-bold">Active</span>
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Active Membership Package & Expiry Tracker ────────── */}
-      {activePackages.length > 0 && (
-        <div className="space-y-3">
-          {activePackages.map((pkg: any, idx: number) => {
-            const daysLeft = pkg.end_date ? Math.ceil((new Date(pkg.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
-            const isExpired = daysLeft !== null && daysLeft <= 0;
-            const isExpiringSoon = daysLeft !== null && daysLeft <= 30 && daysLeft > 0;
-
-            return (
-              <div key={pkg.id || idx} className="bg-gradient-to-br from-purple-50/70 via-white to-white rounded-3xl p-5 sm:p-6 border border-purple-200/80 shadow-[0_10px_30px_rgba(0,0,0,0.04)] relative overflow-hidden">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-purple-100">
-                  <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-2xl bg-purple-100 border border-purple-200 text-purple-700 flex items-center justify-center shrink-0 shadow-sm">
-                      <Package size={22} />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-purple-600">Active Membership</span>
-                        {isExpired ? (
-                          <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[9px] font-black uppercase rounded-md">Expired</span>
-                        ) : isExpiringSoon ? (
-                          <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-black uppercase rounded-md animate-pulse">
-                            Expires in {daysLeft}d
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase rounded-md">Active</span>
-                        )}
-                      </div>
-                      <h3 className="text-base sm:text-lg font-extrabold text-slate-900 mt-0.5">{pkg.package_name}</h3>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => navigate(`/customer/bookings/new?from_package=1&vehicle_id=${pkg.vehicle_id || ''}`)}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all self-start sm:self-auto"
-                  >
-                    Book from Package
-                  </button>
-                </div>
-
-                {/* Included Services Meters */}
-                {pkg.usage && pkg.usage.length > 0 && (
-                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    {pkg.usage.map((u: any, uIdx: number) => (
-                      <div key={uIdx} className="bg-slate-50 border border-slate-200/70 rounded-xl p-2.5 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 size={14} className={u.remaining > 0 ? 'text-emerald-600' : 'text-slate-400'} />
-                          <span className="text-xs font-bold text-slate-800">{u.service_name}</span>
-                        </div>
-                        <span className={`text-xs font-extrabold px-2 py-0.5 rounded-lg ${
-                          u.remaining > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'
-                        }`}>
-                          {u.remaining} left
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── Upcoming Appointments & History Two-Column ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Upcoming Appointments */}
-        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-[0_10px_30px_rgba(0,0,0,0.03)] flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-red-50 border border-red-100 text-red-600 flex items-center justify-center shadow-2xs">
-                  <Calendar size={16} />
-                </div>
-                <div>
-                  <span className="text-[9px] font-black uppercase tracking-widest text-red-600 block leading-none">Visits</span>
-                  <h3 className="font-black text-slate-900 text-sm sm:text-base tracking-tight mt-0.5">Appointments</h3>
-                </div>
-              </div>
-              <Link 
-                to="/customer/bookings" 
-                className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-0.5 px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 border border-red-100 transition-all"
-              >
-                <span>View All</span>
-                <ChevronRight size={12} />
-              </Link>
-            </div>
-
-            {upcomingBookings.length > 0 ? (
-              <div className="space-y-2.5">
-                {upcomingBookings.slice(0, 3).map((b: any) => (
-                  <div key={b.id} className="bg-slate-50/80 hover:bg-slate-100/90 border border-slate-200/70 rounded-2xl p-3.5 transition-all">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-start gap-3">
-                        {/* Ticket Date Box */}
-                        <div className="w-11 h-11 rounded-xl bg-white border border-slate-200 shadow-2xs flex flex-col items-center justify-center shrink-0">
-                          <span className="text-[9px] font-black uppercase text-red-600 leading-none">
-                            {new Date(b.slot_date).toLocaleString('default', { month: 'short' })}
-                          </span>
-                          <span className="text-sm font-black text-slate-900 leading-none mt-0.5">
-                            {new Date(b.slot_date).getDate()}
-                          </span>
-                        </div>
-                        <div>
-                          <h4 className="text-xs sm:text-sm font-extrabold text-slate-900">{b.service_name || 'Detailing Service'}</h4>
-                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 mt-1">
-                            {b.start_time && (
-                              <span className="flex items-center gap-1 font-semibold text-slate-600">
-                                <Clock size={11} className="text-slate-400" />
-                                {formatTime(b.start_time)}
-                              </span>
-                            )}
-                            {b.vehicle_reg_no && (
-                              <span className="px-1.5 py-0.2 bg-slate-200/70 text-slate-700 text-[10px] font-bold rounded">
-                                {b.vehicle_reg_no}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <span className="px-2 py-0.5 bg-emerald-100 border border-emerald-200 text-emerald-800 text-[9px] font-black uppercase rounded-md shrink-0">
-                        {b.status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="py-6 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-500 flex items-center justify-center mx-auto mb-2 shadow-inner">
-                  <Calendar size={22} />
-                </div>
-                <p className="text-xs text-slate-600 font-bold">No upcoming visits booked</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">Reserve a bay slot in 60 seconds</p>
-                <button
-                  onClick={() => navigate('/customer/bookings/new')}
-                  className="mt-3 px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-black rounded-xl shadow-sm transition-all hover:scale-105 inline-flex items-center gap-1.5"
-                >
-                  <CalendarCheck size={14} />
-                  <span>Book A Slot</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Recent Service History */}
-        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-[0_10px_30px_rgba(0,0,0,0.03)] flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 flex items-center justify-center shadow-2xs">
-                  <Shield size={16} className="text-red-600" />
-                </div>
-                <div>
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 block leading-none">Studio Logs</span>
-                  <h3 className="font-black text-slate-900 text-sm sm:text-base tracking-tight mt-0.5">Service History</h3>
-                </div>
-              </div>
-              <Link 
-                to="/customer/job-carts" 
-                className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-0.5 px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 border border-red-100 transition-all"
-              >
-                <span>All Jobs</span>
-                <ChevronRight size={12} />
-              </Link>
-            </div>
-
-            {recentJobs.length > 0 ? (
-              <div className="space-y-2.5">
-                {recentJobs.slice(0, 3).map((job: any) => (
-                  <div key={job.id} className="bg-slate-50/80 hover:bg-slate-100/90 border border-slate-200/70 rounded-2xl p-3.5 transition-all flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-slate-900 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-2xs">
-                        V{job.visit_number || '1'}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs sm:text-sm font-extrabold text-slate-900">
-                            {job.registration_no || `${job.brand} ${job.model}`}
-                          </p>
-                          {job.invoice_number && (
-                            <span className="text-[10px] font-semibold text-slate-400">
-                              #{job.invoice_number}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                          {job.services_done || `${job.brand} ${job.model}`} • {formatDate(job.visit_date)}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-[9px] font-black uppercase rounded-lg">
-                      {job.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="py-6 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2">
-                  <Wrench size={22} />
-                </div>
-                <p className="text-xs text-slate-600 font-bold">No previous studio records</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">Your invoices and job sheets will appear here</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Add Car Modal ────────────────────────────── */}
-      <AddCarModal isOpen={showAddCar} onClose={() => setShowAddCar(false)} />
-
+      <AddressSheet open={addressOpen} onClose={() => setAddressOpen(false)} />
+      <CancelBookingSheet booking={cancelFor} onClose={() => setCancelFor(null)} />
+      <RescheduleSheet booking={rescheduleFor} onClose={() => setRescheduleFor(null)} />
     </div>
   );
 }
-
-

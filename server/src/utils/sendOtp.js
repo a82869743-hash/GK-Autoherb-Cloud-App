@@ -20,7 +20,7 @@ const axios = require('axios');
  * @returns {Promise<boolean>}
  */
 async function sendOtp(mobile, otp) {
-  const apiKey = process.env.MSG91_AUTH_KEY;
+  const apiKey = process.env.TWO_FACTOR_API_KEY || process.env.MSG91_AUTH_KEY;
 
   if (!apiKey) {
     console.log(`[DEV] OTP for ${mobile}: ${otp} (API key not set)`);

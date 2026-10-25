@@ -25,8 +25,8 @@ exports.list = async (req, res) => {
     }
 
     if (brand) {
-      where += ' AND brand = ?';
-      params.push(brand);
+      where += ' AND brand LIKE ?';
+      params.push(`%${brand}%`);
     }
 
     if (status) {

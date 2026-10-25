@@ -39,7 +39,9 @@ exports.list = async (req, res) => {
     }
 
     const [rows] = await pool.query(`
-      SELECT u.id, u.name, u.mobile, u.email, u.created_at, u.is_active
+      SELECT u.id, u.name, u.mobile, u.email, u.created_at, u.is_active,
+             u.gender, DATE_FORMAT(u.date_of_birth, '%Y-%m-%d') AS date_of_birth,
+             DATE_FORMAT(u.anniversary_date, '%Y-%m-%d') AS anniversary_date, u.profile_photo_url
       FROM users u
       WHERE ${where}
       ORDER BY u.created_at DESC
@@ -82,7 +84,7 @@ exports.getDetail = async (req, res) => {
     const { id } = req.params;
 
     // 1. Get user details
-    const [userRows] = await pool.query("SELECT id, name, mobile, email, created_at, is_active FROM users WHERE id = ? AND role = 'customer'", [id]);
+    const [userRows] = await pool.query("SELECT id, name, mobile, email, created_at, is_active, gender, DATE_FORMAT(date_of_birth, '%Y-%m-%d') AS date_of_birth, DATE_FORMAT(anniversary_date, '%Y-%m-%d') AS anniversary_date, profile_photo_url FROM users WHERE id = ? AND role = 'customer'", [id]);
     if (!userRows.length) {
       return res.status(404).json({ success: false, error: 'Customer not found' });
     }

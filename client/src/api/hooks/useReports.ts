@@ -30,16 +30,21 @@ export function useJobCardReport(params: { from_date?: string; to_date?: string;
   });
 }
 
-export function downloadReport(type: 'sales' | 'inventory' | 'job-cards' | 'package-history', params: any, format: 'xlsx' | 'pdf') {
+export function downloadReport(type: 'sales' | 'inventory' | 'job-cards' | 'package-history' | 'service-wise', params: any, format: 'xlsx' | 'pdf') {
   return api.get(`/reports/${type}`, {
     params: { ...params, format },
     responseType: 'blob',
   }).then(res => {
-    const url = URL.createObjectURL(res.data);
+    const blob = new Blob([res.data], {
+      type: format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `${type}_report.${format}`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   });
 }
@@ -50,3 +55,11 @@ export function useWelcomeRewardsReport() {
     queryFn: () => api.get('/reports/welcome-rewards').then(r => r.data),
   });
 }
+
+export function useServiceWiseReport(params?: { from_date?: string; to_date?: string }) {
+  return useQuery({
+    queryKey: ['report-service-wise', params],
+    queryFn: () => api.get('/reports/service-wise', { params }).then(r => r.data),
+  });
+}
+

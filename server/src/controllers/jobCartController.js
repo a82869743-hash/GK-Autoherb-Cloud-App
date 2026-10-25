@@ -227,6 +227,10 @@ exports.list = async (req, res) => {
       });
     }
 
+    // Signed live-tracker link for each job (customer app "Track" button)
+    const { trackingToken } = require('../services/jobStages');
+    rows.forEach((r) => { r.tracking_path = `/job/${r.id}?t=${trackingToken(r.id)}`; });
+
     res.json({
       success: true,
       data: rows,
@@ -395,6 +399,9 @@ exports.updateStatus = async (req, res) => {
       'UPDATE job_carts SET status = ?, completed_at = COALESCE(?, completed_at) WHERE id = ?',
       [status, completedAt, id]
     );
+    if (status === 'delivered' || status === 'ready') {
+      await setJobStage(id, status, { userId: req.user?.id }).catch(() => {});
+    }
 
     res.json({ success: true, message: `Status updated to ${status}` });
   } catch (err) {
@@ -416,6 +423,7 @@ exports.submit = async (req, res) => {
     }
 
     await pool.query("UPDATE job_carts SET status = 'open' WHERE id = ?", [id]);
+    await setJobStage(id, 'received', { userId: req.user?.id, silent: true }).catch(() => {});
 
     // Trigger Service Started Notification
     try {
@@ -428,12 +436,26 @@ exports.submit = async (req, res) => {
       );
       if (info.length) {
         const messagingService = require('../services/messagingService');
+        const { trackingUrl } = require('../services/jobStages');
+        // Real services on the card and their total time → "ready by" in IST
+        const [svcRows] = await pool.query(
+          `SELECT js.service_name, COALESCE(s.duration_minutes, 60) AS mins
+           FROM job_services js LEFT JOIN services s ON s.name = js.service_name
+           WHERE js.job_cart_id = ?`,
+          [id]
+        );
+        const totalMins = svcRows.reduce((sum, r) => sum + Number(r.mins || 60), 0) || 60;
+        const readyBy = new Date(Date.now() + totalMins * 60000).toLocaleString('en-IN', {
+          hour: 'numeric', minute: '2-digit', hour12: true, day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata',
+        });
         await messagingService.notify(
           info[0].customer_id,
           'SERVICE_STARTED',
-          { 
+          {
             vehicle_number: info[0].registration_no || `${info[0].brand} ${info[0].model}`,
-            estimated_time: '2 hours' 
+            services: svcRows.map((r) => r.service_name).join(', ') || 'As discussed',
+            estimated_time: readyBy,
+            tracking_url: trackingUrl(id),
           },
           { type: 'job_cart', id }
         );
@@ -531,6 +553,16 @@ exports.complete = async (req, res) => {
     } else if (cart[0].discount_type === 'fixed') {
       discountAmt = parseFloat(cart[0].discount_value || 0);
     }
+    const couponDiscount = parseFloat(cart[0].coupon_discount || 0);
+    discountAmt += couponDiscount;
+
+    if (cart[0].coupon_id && couponDiscount > 0) {
+      await conn.query(
+        `INSERT INTO coupon_redemptions (coupon_id, customer_id, job_cart_id, discount_amount)
+         VALUES (?, ?, ?, ?)`,
+        [cart[0].coupon_id, customerId, id, couponDiscount]
+      );
+    }
     const pickupCharge = parseFloat(cart[0].pickup_charge || 0);
     grandTotal = Math.max(0, grandTotal - discountAmt + pickupCharge);
 
@@ -552,11 +584,9 @@ exports.complete = async (req, res) => {
 
       if (hasFirstWashDiscount) {
         await markFirstWashDiscountUsed(conn, customerId);
-        console.log(`[FIRST_WASH] Marked 50% first wash discount used for customer #${customerId} via Job Cart #${id}. Points skipped.`);
-      } else {
-        // Award 10% loyalty points starting from 2nd wash onward (with idempotency safeguard)
-        await awardPointsInternal(conn, customerId, grandTotal, 'job_cart', parseInt(id), req.user ? req.user.id : null);
       }
+      // Loyalty: admin-set % of the amount actually billed, on every service (idempotent per job)
+      await awardPointsInternal(conn, customerId, grandTotal, 'job_cart', parseInt(id), req.user ? req.user.id : null);
     }
 
     // 6. Create transaction
@@ -601,6 +631,14 @@ exports.complete = async (req, res) => {
     }
 
     await conn.commit();
+
+    // Pipeline: finished work means the car is ready; issue warranties for covered services
+    try {
+      await setJobStage(id, 'ready', { userId: req.user?.id, silent: true });
+      await issueWarranties(id);
+    } catch (err) {
+      console.error('Stage/warranty after completion failed (non-blocking):', err.message);
+    }
 
     // Auto-trigger Feedback Request Token & WhatsApp Log
     try {
@@ -651,7 +689,12 @@ exports.complete = async (req, res) => {
         await messagingService.notify(
           customerId,
           'SERVICE_COMPLETED',
-          { vehicle_number: vehName, job_cart_id: id },
+          {
+            vehicle_number: vehName,
+            job_cart_id: id,
+            amount: `₹${Math.round(Number(grandTotal) || 0).toLocaleString('en-IN')}`,
+            tracking_url: require('../services/jobStages').trackingUrl(id),
+          },
           { type: 'job_cart', id }
         );
 
@@ -1049,3 +1092,135 @@ exports.restore = async (req, res) => {
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };
+
+// ═══════════════════════════════════════════════════════════
+// JOB PIPELINE STAGES (live tracker + WhatsApp on every move)
+// ═══════════════════════════════════════════════════════════
+const { JOB_STAGES, STAGE_KEYS, getStage } = require('../services/jobStages');
+
+async function setJobStage(jobId, stageKey, { userId = null, note = null, silent = false } = {}) {
+  if (!STAGE_KEYS.includes(stageKey)) throw new Error('Unknown stage');
+  const [rows] = await pool.query(
+    `SELECT jc.id, jc.stage, v.customer_id, v.registration_no, v.brand, v.model
+     FROM job_carts jc JOIN vehicles v ON v.id = jc.vehicle_id WHERE jc.id = ?`,
+    [jobId]
+  );
+  const job = rows[0];
+  if (!job) throw new Error('Job card not found');
+  if (job.stage === stageKey) return { changed: false, job };
+
+  await pool.query('UPDATE job_carts SET stage = ?, stage_updated_at = NOW() WHERE id = ?', [stageKey, jobId]);
+  await pool.query('INSERT INTO job_stage_history (job_cart_id, stage, note, changed_by) VALUES (?, ?, ?, ?)', [jobId, stageKey, note, userId]);
+
+  const stage = getStage(stageKey);
+  const io = global.__gkIo;
+  if (io) io.emit('job_stage_updated', { job_cart_id: Number(jobId), stage: stageKey, label: stage.label, customer_id: job.customer_id });
+
+  if (!silent && job.customer_id) {
+    const messagingService = require('../services/messagingService');
+    messagingService.notify(
+      job.customer_id,
+      'JOB_STAGE_UPDATE',
+      {
+        vehicle_number: job.registration_no || `${job.brand} ${job.model}`,
+        stage_label: stage.label,
+        stage_note: note || stage.note,
+        tracking_url: require('../services/jobStages').trackingUrl(jobId),
+      },
+      { type: 'job_cart', id: jobId }
+    ).catch(() => {});
+  }
+  return { changed: true, job };
+}
+exports.setJobStage = setJobStage;
+
+exports.listStageDefinitions = (req, res) => {
+  res.json({ success: true, data: JOB_STAGES });
+};
+
+// PATCH /job-carts/:id/stage  { stage, note?, notify? }
+exports.updateStage = async (req, res) => {
+  try {
+    const { stage, note, notify = true } = req.body || {};
+    if (!STAGE_KEYS.includes(stage)) return res.status(400).json({ success: false, error: 'Unknown stage' });
+    const result = await setJobStage(req.params.id, stage, { userId: req.user.id, note: note || null, silent: !notify });
+    res.json({ success: true, message: result.changed ? `Moved to ${getStage(stage).label}` : 'Already at this stage' });
+  } catch (err) {
+    console.error('Update stage error:', err);
+    res.status(err.message === 'Job card not found' ? 404 : 500).json({ success: false, error: err.message || 'Server error' });
+  }
+};
+
+// GET /job-carts/:id/stages — timeline for the tracker
+exports.getStages = async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT jc.id, jc.stage, jc.stage_updated_at, jc.status, v.customer_id
+       FROM job_carts jc JOIN vehicles v ON v.id = jc.vehicle_id WHERE jc.id = ?`,
+      [req.params.id]
+    );
+    const job = rows[0];
+    if (!job) return res.status(404).json({ success: false, error: 'Job card not found' });
+    if (req.user.role === 'customer' && Number(job.customer_id) !== Number(req.user.id)) {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+    const [history] = await pool.query(
+      `SELECT h.stage, h.note, h.created_at, u.name AS changed_by_name
+       FROM job_stage_history h LEFT JOIN users u ON u.id = h.changed_by
+       WHERE h.job_cart_id = ? ORDER BY h.created_at`,
+      [req.params.id]
+    );
+    const currentIdx = STAGE_KEYS.indexOf(job.stage || 'received');
+    const timeline = JOB_STAGES.map((st, idx) => ({
+      ...st,
+      done: idx < currentIdx || (idx === currentIdx && st.key === 'delivered'),
+      current: idx === currentIdx,
+      at: history.filter((h) => h.stage === st.key).pop()?.created_at || null,
+    }));
+    res.json({ success: true, data: { current: job.stage || 'received', updated_at: job.stage_updated_at, timeline, history } });
+  } catch (err) {
+    console.error('Get stages error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+// WARRANTIES — issued automatically for services that carry one
+// ═══════════════════════════════════════════════════════════
+async function issueWarranties(jobId) {
+  const [rows] = await pool.query(
+    `SELECT js.service_name, s.id AS service_id, s.warranty_months, s.warranty_km,
+            jc.vehicle_id, v.customer_id, v.registration_no, v.brand, v.model
+     FROM job_services js
+     JOIN job_carts jc ON jc.id = js.job_cart_id
+     JOIN vehicles v ON v.id = jc.vehicle_id
+     JOIN services s ON LOWER(TRIM(s.name)) = LOWER(TRIM(js.service_name))
+     WHERE js.job_cart_id = ? AND s.warranty_months > 0`,
+    [jobId]
+  );
+  const messagingService = require('../services/messagingService');
+  for (const r of rows) {
+    const code = `GKW${String(jobId).padStart(5, '0')}${String(r.service_id).padStart(3, '0')}`;
+    const [ins] = await pool.query(
+      `INSERT IGNORE INTO service_warranties (customer_id, vehicle_id, job_cart_id, service_id, service_name, warranty_code, start_date, end_date, warranty_km)
+       VALUES (?, ?, ?, ?, ?, ?, CURDATE(), DATE_ADD(CURDATE(), INTERVAL ? MONTH), ?)`,
+      [r.customer_id, r.vehicle_id, jobId, r.service_id, r.service_name, code, r.warranty_months, r.warranty_km]
+    );
+    if (!ins.affectedRows || !r.customer_id) continue;
+    const end = new Date();
+    end.setMonth(end.getMonth() + r.warranty_months);
+    messagingService.notify(
+      r.customer_id,
+      'WARRANTY_ISSUED',
+      {
+        service_name: r.service_name,
+        vehicle_number: r.registration_no || `${r.brand} ${r.model}`,
+        warranty_code: code,
+        end_date: end.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }),
+      },
+      { type: 'warranty', id: ins.insertId }
+    ).catch(() => {});
+  }
+  return rows.length;
+}
+exports.issueWarranties = issueWarranties;

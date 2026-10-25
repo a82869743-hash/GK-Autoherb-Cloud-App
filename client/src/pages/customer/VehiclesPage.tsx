@@ -1,142 +1,122 @@
 import { useState } from 'react';
-import { Car, ChevronRight, Plus, Star, Trash2 } from 'lucide-react';
-import toast from 'react-hot-toast';
-import AdminTopBar from '../../components/layout/AdminTopBar';
-import EmptyState from '../../components/shared/EmptyState';
-import { SkeletonCard } from '../../components/ui/SkeletonLoader';
-import { useCustomerVehicles } from '../../api/hooks/useVehicles';
+import { Car, Plus, Star, Trash2, Pencil, CheckCircle2 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import AddCarModal from '../../components/shared/AddCarModal';
 import CarImage from '../../components/shared/CarImage';
+import { useActiveVehicle } from '../../api/hooks/useCustomerApp';
+import { SEGMENT_LABEL, segmentForVehicle } from '../../utils/pricing';
+import { AppPageHeader, EmptyBlock, Skeleton } from '../../components/customer/ui';
+import { useUIStore } from '../../store/uiStore';
 import api from '../../api/axiosInstance';
-import { useQueryClient } from '@tanstack/react-query';
 
 export default function VehiclesPage() {
-  const { data, isLoading } = useCustomerVehicles();
-  const vehicles = data?.data || [];
-  const [showAddCar, setShowAddCar] = useState(false);
-  const [editingVehicle, setEditingVehicle] = useState<any>(null);
-  const queryClient = useQueryClient();
+  const toast = useUIStore((s) => s.toast);
+  const qc = useQueryClient();
+  const { vehicles, active, setActiveVehicle, isLoading } = useActiveVehicle();
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<any>(null);
 
-  const handleSetPrimary = async (id: number) => {
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['customer-vehicles'] });
+    qc.invalidateQueries({ queryKey: ['dashboard'] });
+  };
+
+  const setPrimary = async (id: number) => {
     try {
       await api.patch(`/vehicles/${id}/primary`);
-      toast.success('Primary car updated');
-      queryClient.invalidateQueries({ queryKey: ['customer-vehicles'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      toast('success', 'Primary car updated');
+      refresh();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to update');
+      toast('error', err.response?.data?.error || 'Failed to update');
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to remove this car?')) return;
+  const remove = async (id: number) => {
+    if (!confirm('Remove this car from your garage?')) return;
     try {
       await api.delete(`/vehicles/${id}`);
-      toast.success('Car removed');
-      queryClient.invalidateQueries({ queryKey: ['customer-vehicles'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      toast('success', 'Car removed');
+      refresh();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to delete');
+      toast('error', err.response?.data?.error || 'Failed to delete');
     }
   };
 
   return (
-    <>
-      <AdminTopBar 
-        title="My Vehicles" 
-        subtitle="Manage your registered vehicles" 
-        actions={
-          <button
-            onClick={() => setShowAddCar(true)}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-br from-[#af101a] to-[#D32F2F] text-white font-bold rounded-lg shadow-lg shadow-[#D32F2F]/20 hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] transition-all text-xs uppercase tracking-wider"
-          >
-            <Plus size={14} /> Add Car
+    <div>
+      <AppPageHeader
+        title="My Garage"
+        right={
+          <button onClick={() => setAdding(true)} className="app-btn h-10 px-3.5 bg-[#111] text-white text-[13px]">
+            <Plus size={16} /> Add car
           </button>
         }
       />
 
-      <div className="max-w-5xl">
+      <div className="mt-2 space-y-3">
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3].map(i => <SkeletonCard key={i} />)}
-          </div>
-        ) : !vehicles.length ? (
-          <EmptyState
-            icon={Car}
-            title="No Vehicles Found"
-            description="Add your first car to get started."
-            actionLabel="Add Your First Car"
-            onAction={() => setShowAddCar(true)}
+          <>
+            <Skeleton className="h-56" />
+            <Skeleton className="h-56" />
+          </>
+        ) : vehicles.length === 0 ? (
+          <EmptyBlock
+            icon={<Car size={26} />}
+            title="No cars yet"
+            text="Add your car to see its exact prices and book faster."
+            action={<button onClick={() => setAdding(true)} className="app-btn-primary px-6">Add your car</button>}
           />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {vehicles.map((v: any, idx: number) => (
-              <div
-                key={v.id}
-                className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm card-premium group relative overflow-hidden opacity-0 animate-fade-in-up"
-                style={{ animationDelay: `${idx * 0.08}s`, animationFillMode: 'forwards' }}
-              >
-                {/* Top accent */}
-                <div className={`absolute top-0 left-0 right-0 h-1 ${v.is_primary ? 'bg-gradient-to-r from-[#D32F2F] to-[#FF5252]' : 'bg-gradient-to-r from-transparent via-gray-200 to-transparent'} transition-all duration-500`} />
-                
-                {/* Primary badge */}
-                {v.is_primary ? (
-                  <div className="absolute top-3 right-3 flex items-center gap-1 px-2 py-1 bg-[#D32F2F]/10 rounded-md">
-                    <Star size={10} className="text-[#D32F2F] fill-[#D32F2F]" />
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-[#D32F2F]">Primary</span>
+          vehicles.map((v: any) => {
+            const isActive = active?.id === v.id;
+            return (
+              <div key={v.id} className={`app-card overflow-hidden ${isActive ? 'ring-2 ring-[#D32F2F]' : ''}`}>
+                <div className="relative bg-white">
+                  <CarImage brand={v.brand} model={v.model} containerClassName="h-44 w-full" className="w-full h-full object-contain p-3" />
+                  <div className="absolute top-3 left-3 flex gap-1.5">
+                    {!!v.is_primary && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[#111] text-white px-2.5 py-1 text-[11px] font-bold"><Star size={11} className="fill-white" /> Primary</span>
+                    )}
+                    <span className="rounded-full bg-slate-100 text-slate-700 px-2.5 py-1 text-[11px] font-bold">{SEGMENT_LABEL[segmentForVehicle(v)]}</span>
                   </div>
-                ) : null}
-                
-                {/* Real Car Photo Showcase */}
-                <CarImage
-                  brand={v.brand}
-                  model={v.model}
-                  containerClassName="h-36 w-full rounded-xl bg-slate-50/80 mb-4 p-2 border border-slate-100 group-hover:border-[#D32F2F]/20 transition-all"
-                  className="w-full h-full object-contain drop-shadow-sm group-hover:scale-105 transition-transform duration-300"
-                  showShadow
-                />
-                
-                <h3 className="text-xl font-black text-[#1c1b1b] mb-1 tracking-tight">
-                  {v.brand} {v.model} {v.car_year ? `(${v.car_year})` : ''}
-                </h3>
-                {v.registration_no && (
-                  <p className="text-[#5f5e5e] font-medium text-sm">{v.registration_no}</p>
-                )}
-                
-                <div className="pt-4 mt-4 border-t border-gray-100 flex items-center justify-between">
-                  {!v.is_primary ? (
+                </div>
+                <div className="p-4 border-t border-slate-100">
+                  <p className="font-display text-lg font-extrabold text-slate-900">{v.brand} {v.model}</p>
+                  <p className="text-sm text-slate-500">{[v.registration_no, v.car_year].filter(Boolean).join(' · ') || 'Add registration number'}</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
                     <button
-                      onClick={() => handleSetPrimary(v.id)}
-                      className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline"
+                      onClick={() => { setActiveVehicle(v.id); toast('success', `Showing prices for ${v.model}`); }}
+                      disabled={isActive}
+                      className={`app-btn h-10 ${isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-800'}`}
                     >
-                      <Star size={12} /> Set Primary
+                      {isActive ? <><CheckCircle2 size={15} /> Selected</> : 'Use for booking'}
                     </button>
-                  ) : (
-                    <span className="text-xs text-gray-400 font-medium">Active car</span>
-                  )}
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setEditingVehicle(v)}
-                      className="text-xs font-bold text-gray-500 hover:text-gray-700 transition-colors"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(v.id)}
-                      className="flex items-center gap-1 text-xs font-bold text-red-400 hover:text-red-600 transition-colors"
-                    >
-                      <Trash2 size={12} /> Remove
-                    </button>
+                    {!v.is_primary ? (
+                      <button onClick={() => setPrimary(v.id)} className="app-btn h-10 bg-white border border-slate-200 text-slate-800"><Star size={15} /> Make primary</button>
+                    ) : (
+                      <button onClick={() => setEditing(v)} className="app-btn h-10 bg-white border border-slate-200 text-slate-800"><Pencil size={15} /> Edit</button>
+                    )}
+                  </div>
+                  <div className="mt-2 flex justify-between">
+                    {!v.is_primary && <button onClick={() => setEditing(v)} className="text-[13px] font-semibold text-slate-500 flex items-center gap-1"><Pencil size={13} /> Edit</button>}
+                    <button onClick={() => remove(v.id)} className="ml-auto text-[13px] font-semibold text-red-500 flex items-center gap-1"><Trash2 size={13} /> Remove</button>
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+            );
+          })
         )}
       </div>
 
-      <AddCarModal isOpen={showAddCar || !!editingVehicle} onClose={() => { setShowAddCar(false); setEditingVehicle(null); }} editVehicle={editingVehicle} />
-    </>
+      <AddCarModal
+        isOpen={adding || !!editing}
+        onClose={() => {
+          setAdding(false);
+          setEditing(null);
+          refresh();
+        }}
+        editVehicle={editing}
+      />
+    </div>
   );
 }
-

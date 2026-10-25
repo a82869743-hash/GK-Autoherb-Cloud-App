@@ -14,7 +14,8 @@ exports.getStats = async (req, res) => {
       [purchases], [pendingPay], [lowStock],
       [todayBookings], [totalCustomers], [recentCompletions],
       [staffPresent], [expiringPkgs],
-      [pendingBookings], [pendingPackageReqs], [pendingProductOrders]
+      [pendingBookings], [pendingPackageReqs], [pendingProductOrders],
+      [feedbackStats]
     ] = await Promise.all([
       // Revenue
       pool.query(
@@ -84,6 +85,8 @@ exports.getStats = async (req, res) => {
       pool.query(`SELECT COUNT(*) AS total FROM bookings WHERE status = 'pending_approval'`),
       pool.query(`SELECT COUNT(*) AS total FROM package_requests WHERE status = 'pending'`),
       pool.query(`SELECT COUNT(*) AS total FROM product_orders WHERE payment_status = 'pending'`),
+      // Customer Reviews & Feedback
+      pool.query(`SELECT COUNT(*) as total_reviews, COALESCE(ROUND(AVG(overall_rating), 1), 0) as avg_rating FROM v2_feedback`),
     ]);
 
     const todayRevVal = parseFloat(todayRev[0].total);
@@ -117,6 +120,8 @@ exports.getStats = async (req, res) => {
         pending_package_requests: pendingPackageReqs[0]?.total || 0,
         pending_product_orders: pendingProductOrders[0]?.total || 0,
         total_pending_approvals: (pendingBookings[0]?.total || 0) + (pendingPackageReqs[0]?.total || 0) + (pendingProductOrders[0]?.total || 0),
+        avg_rating: parseFloat(feedbackStats?.[0]?.avg_rating || 5.0),
+        total_reviews: parseInt(feedbackStats?.[0]?.total_reviews || 0),
       }
     });
   } catch (err) {
@@ -139,25 +144,26 @@ exports.getCustomerDashboard = async (req, res) => {
       [activeDelivery], packageData, fwCheck
     ] = await Promise.all([
       // My vehicles (ordered by primary first)
-      pool.query(`SELECT id, registration_no, brand, model, is_primary FROM vehicles WHERE customer_id = ? ORDER BY is_primary DESC, created_at DESC`, [customerId]),
+      pool.query(`SELECT id, registration_no, brand, model, category, is_primary FROM vehicles WHERE customer_id = ? ORDER BY is_primary DESC, created_at DESC`, [customerId]),
       // Upcoming bookings
       pool.query(`
         SELECT b.id, b.status, b.vehicle_brand, b.vehicle_model, b.vehicle_reg_no,
-               s.slot_date, s.start_time, s.end_time,
+               b.customer_confirmation, b.reminder_sent_at, b.reschedule_count, b.total_amount, b.vehicle_id,
+               DATE_FORMAT(s.slot_date, '%Y-%m-%d') AS slot_date, s.start_time, s.end_time,
                svc.name AS service_name, pkg.name AS package_name
         FROM bookings b
         JOIN slots s ON b.slot_id = s.id
         LEFT JOIN services svc ON b.service_id = svc.id
         LEFT JOIN packages pkg ON b.package_id = pkg.id
-        WHERE b.customer_id = ? AND b.status = 'confirmed' AND s.slot_date >= CURDATE()
+        WHERE b.customer_id = ? AND b.status IN ('confirmed','pending_approval') AND s.slot_date >= CURDATE()
         ORDER BY s.slot_date ASC, s.start_time ASC
         LIMIT 3
       `, [customerId]),
       // Loyalty
-      pool.query(`SELECT credits, free_washes, wax_count FROM loyalty WHERE customer_id = ?`, [customerId]),
+      pool.query(`SELECT credits, free_washes, wax_count, points FROM loyalty WHERE customer_id = ?`, [customerId]),
       // Recent completed jobs
       pool.query(`
-        SELECT jc.id, jc.visit_date, jc.visit_number, jc.status, jc.invoice_number,
+        SELECT jc.id, jc.visit_date, jc.visit_number, jc.status, jc.invoice_number, jc.stage, jc.stage_updated_at,
                v.registration_no, v.brand, v.model,
                (SELECT GROUP_CONCAT(js.service_name SEPARATOR ', ')
                 FROM job_services js WHERE js.job_cart_id = jc.id) AS services_done
@@ -197,7 +203,10 @@ exports.getCustomerDashboard = async (req, res) => {
         vehicles: vehicles || [],
         upcoming_bookings: bookings || [],
         loyalty: loyalty[0] || { credits: 0, free_washes: 0, wax_count: 0 },
-        recent_jobs: recentJobs || [],
+        recent_jobs: (recentJobs || []).map((j) => ({
+          ...j,
+          tracking_url: ['draft', 'open'].includes(j.status) ? require('../services/jobStages').trackingUrl(j.id).replace(/^https?:\/\/[^/]+/, '') : null,
+        })),
         total_visits: totalVisits[0]?.total || 0,
         active_delivery: activeDelivery[0] || null,
         // ─── Task 7 data ────────────────────────────────────

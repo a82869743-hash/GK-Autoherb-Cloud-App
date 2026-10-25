@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Calendar, Clock, Car, Phone, User, FileText,
-  ChevronLeft, ChevronRight, Loader2, X, Eye, History, Plus, Download
+  ChevronLeft, ChevronRight, Loader2, X, Eye, History, Plus, Download, MessageCircle, Check
 } from 'lucide-react';
+import { OpsPageTitle, SearchBar, ChipRow, EmptyBlock, Skeleton, StatusPill } from '../../components/ops/ui';
 import { useBookings, useVehicleHistory, useCreateManualBooking } from '../../api/hooks/useBookings';
 import { useServices } from '../../api/hooks/useServices';
 import AdminTopBar from '../../components/layout/AdminTopBar';
@@ -18,15 +19,17 @@ import { formatTime } from '../../utils/formatters';
 import api from '../../api/axiosInstance';
 import ConfirmModal from '../../components/ui/ConfirmModal';
 import toast from 'react-hot-toast';
-import io from 'socket.io-client';
+import { createSocket } from '../../lib/socket';
+import { CancelBookingSheet, RescheduleSheet } from '../../components/customer/BookingActionSheets';
 import { useAuthStore } from '../../store/authStore';
 
 const TABS = [
-  { key: 'pending_approval', label: 'Pending Approvals', color: 'bg-yellow-500' },
-  { key: 'confirmed', label: 'Confirmed', color: 'bg-green-500' },
-  { key: 'all', label: 'All', color: 'bg-gray-500' },
-  { key: 'completed', label: 'Completed', color: 'bg-[#D32F2F]' },
-  { key: 'cancelled', label: 'Cancelled', color: 'bg-red-500' },
+  { key: 'pending_approval', label: 'Needs OK' },
+  { key: 'today', label: 'Today' },
+  { key: 'confirmed', label: 'Confirmed' },
+  { key: 'completed', label: 'Completed' },
+  { key: 'cancelled', label: 'Cancelled' },
+  { key: 'all', label: 'All' },
 ];
 
 export default function CustomerBookingsPage() {
@@ -43,6 +46,8 @@ export default function CustomerBookingsPage() {
 
   // Confirmation Modals
   const [confirmType, setConfirmType] = useState<'approve' | 'reject' | null>(null);
+  const [cancelFor, setCancelFor] = useState<any>(null);
+  const [rescheduleFor, setRescheduleFor] = useState<any>(null);
   const [confirmTargetId, setConfirmTargetId] = useState<number | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
 
@@ -78,7 +83,8 @@ export default function CustomerBookingsPage() {
   const { data, isLoading, refetch } = useBookings({
     page,
     limit,
-    status: activeTab !== 'all' ? activeTab : undefined,
+    status: activeTab !== 'all' && activeTab !== 'today' ? activeTab : undefined,
+    date: activeTab === 'today' ? 'today' : undefined,
     search: searchDebounced || undefined,
   });
 
@@ -86,9 +92,7 @@ export default function CustomerBookingsPage() {
 
   useEffect(() => {
     if (!token) return;
-    const socket = io(import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:5000', {
-      auth: { token }
-    });
+    const socket = createSocket(token);
 
     socket.on('new_booking', () => {
       refetch();
@@ -222,367 +226,181 @@ export default function CustomerBookingsPage() {
     });
   };
 
+  const counts: Record<string, number> = (data as any)?.counts || {};
+  const REPLY: Record<string, { label: string; cls: string }> = {
+    confirmed: { label: '✓ Customer confirmed', cls: 'bg-emerald-50 text-emerald-700' },
+    reschedule_requested: { label: '↻ Wants to reschedule', cls: 'bg-amber-50 text-amber-700' },
+    declined: { label: '✕ Customer declined', cls: 'bg-red-50 text-red-600' },
+  };
+  const openInvoice = (path: string) => {
+    const t = useAuthStore.getState().token;
+    window.open(`${path}?token=${t}`, '_blank');
+  };
+  const serviceLabel = (b: any) => {
+    if (b.cart_items_json) {
+      try {
+        const items = JSON.parse(b.cart_items_json);
+        if (Array.isArray(items) && items.length) return items.map((it: any) => it.name).join(', ');
+      } catch {
+        /* fall through */
+      }
+    }
+    return b.package_service_name || b.service_name || b.package_name || 'Service';
+  };
+  const paymentLine = (b: any) => {
+    if (b.booking_type === 'package') return { text: `Package credit · ${b.package_name || 'active package'}`, cls: 'text-purple-700' };
+    if (b.is_free_wash) return { text: 'Free wash (loyalty)', cls: 'text-[#D32F2F]' };
+    if (b.advance_payment_id) return { text: `Advance ₹${b.advance_amount || 0} paid · ₹${(b.total_amount || 0) - (b.advance_amount || 0)} due`, cls: 'text-emerald-700' };
+    if (b.advance_amount > 0) return { text: `Advance ₹${b.advance_amount} pending · total ₹${b.total_amount || 0}`, cls: 'text-amber-700' };
+    return { text: `Pay at studio · ₹${b.total_amount || 0}`, cls: 'text-slate-600' };
+  };
+
   return (
-    <div className="space-y-6 pb-28 lg:pb-12 max-w-[1600px] mx-auto font-sans">
-      <AdminHeaderBar
-        title="Customer Bookings"
-        subtitle="Manage incoming customer slot appointments & convert to Job Cards"
-      >
-        <button
-          onClick={() => setManualBookingOpen(true)}
-          className="px-4 py-2.5 bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs font-bold rounded-2xl shadow-sm hover:shadow transition-all inline-flex items-center gap-1.5 active:scale-95"
-        >
-          <Plus size={15} />
-          <span>+ New Manual Booking</span>
-        </button>
-      </AdminHeaderBar>
+    <div className="mx-auto max-w-5xl space-y-4 pb-28 font-sans">
+      <OpsPageTitle kicker="Appointments" title="Bookings" subtitle={`${pagination.total} in this list`} />
 
-      {/* ─── Top 4 KPI Metrics ────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-        <AdminMetricCard
-          label="Pending Approvals"
-          value={bookings.filter((b: any) => b.status === 'pending_approval').length || 0}
-          icon={<Clock size={18} />}
-          trend="Awaiting Action"
-          variant="amber"
-        />
-        <AdminMetricCard
-          label="Confirmed Appointments"
-          value={bookings.filter((b: any) => b.status === 'confirmed').length || 0}
-          icon={<Calendar size={18} />}
-          trend="Slots Reserved"
-          variant="red"
-        />
-        <AdminMetricCard
-          label="Completed Today"
-          value={bookings.filter((b: any) => b.status === 'completed').length || 0}
-          icon={<Car size={18} />}
-          trend="Services Done"
-          variant="emerald"
-        />
-        <AdminMetricCard
-          label="Total Bookings"
-          value={pagination.total || 0}
-          icon={<FileText size={18} />}
-          trend="Lifetime Intake"
-          variant="red"
-        />
-      </div>
+      <SearchBar value={search} onChange={setSearch} placeholder="Name, mobile or number plate" />
+      <ChipRow
+        value={activeTab}
+        onChange={(k) => {
+          setActiveTab(k);
+          setPage(1);
+        }}
+        items={TABS.map((t) => ({ key: t.key, label: t.label, count: counts[t.key] }))}
+      />
 
-      {/* Tabs + Search Row */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-white p-4 rounded-3xl border border-slate-200/70 shadow-[0_2px_16px_rgba(0,0,0,0.02)]">
-        {/* Tabs */}
-        <div className="flex gap-1.5 overflow-x-auto max-w-full w-full sm:w-auto pb-1 sm:pb-0 scrollbar-none">
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => { setActiveTab(tab.key); setPage(1); }}
-              className={`px-4 py-2 rounded-2xl text-xs font-bold tracking-tight transition-all shrink-0 ${
-                activeTab === tab.key
-                  ? 'bg-[#D32F2F] text-white shadow-xs'
-                  : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200/60'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Search */}
-        <div className="relative w-full sm:w-80">
-          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search name, mobile, vehicle..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-8 py-2 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs font-medium text-slate-800 placeholder-slate-400 outline-none focus:bg-white focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F] transition-all"
-          />
-          {search && (
-            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-              <X size={14} />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Results Count */}
-      <div className="mb-4">
-        <p className="text-xs font-bold text-[#5f5e5e] uppercase tracking-widest">
-          {pagination.total} Booking{pagination.total !== 1 ? 's' : ''} found
-        </p>
-      </div>
-
-      {/* Bookings List */}
       {isLoading ? (
-        <div className="space-y-4">
-          <SkeletonCard /><SkeletonCard /><SkeletonCard />
-        </div>
+        <div className="space-y-3"><Skeleton className="h-44" /><Skeleton className="h-44" /></div>
       ) : bookings.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center py-16">
-          <Calendar size={48} className="text-gray-300 mb-4" />
-          <h3 className="text-lg font-bold text-[#1c1b1b]">No Bookings Found</h3>
-          <p className="text-sm text-[#5f5e5e] mt-1">
-            {activeTab === 'confirmed' ? 'No confirmed bookings waiting to be processed' : 'No bookings match your filters'}
-          </p>
-        </div>
+        <EmptyBlock
+          icon={<Calendar size={26} />}
+          title={activeTab === 'pending_approval' ? 'Nothing waiting for approval' : activeTab === 'today' ? 'No bookings today' : 'No bookings here'}
+          text={search ? 'Try another search.' : undefined}
+        />
       ) : (
-        <div className="space-y-3">
-          {bookings.map((b: any) => (
-            <div
-              key={b.id}
-              className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6 shadow-[0_4px_24px_rgba(0,0,0,0.03)] hover:shadow-md transition-all group"
-            >
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                {/* Left: Customer + Vehicle Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3.5 mb-3">
-                    {/* Brand Badge & Avatar */}
-                    <VehicleBrandBadge brand={b.vehicle_brand} model={b.vehicle_model} size="md" showText={false} />
-                    <div className="min-w-0">
-                      <h4 className="font-black text-slate-900 text-sm tracking-tight truncate">{b.customer_name}</h4>
-                      <div className="flex items-center gap-3 text-xs text-slate-500">
-                        <a
-                          href={`tel:${b.customer_mobile}`}
-                          className="flex items-center gap-1 text-[#D32F2F] hover:underline font-bold"
-                        >
-                          <Phone size={11} />
-                          {b.customer_mobile}
-                        </a>
-                        {b.customer_email && (
-                          <span className="hidden sm:inline truncate">{b.customer_email}</span>
-                        )}
+        <div className="grid gap-3 lg:grid-cols-2">
+          {bookings.map((b: any) => {
+            const pay = paymentLine(b);
+            const reply = b.customer_confirmation && ['confirmed', 'pending_approval'].includes(b.status) ? REPLY[b.customer_confirmation] || { label: '⏳ Reminder sent, no reply yet', cls: 'bg-slate-100 text-slate-500' } : null;
+            return (
+              <div key={b.id} className="app-card overflow-hidden">
+                <div className="p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center shrink-0">
+                      <VehicleBrandBadge brand={b.vehicle_brand} model={b.vehicle_model} size="md" showText={false} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-display font-extrabold text-[15.5px] text-slate-900 truncate">{b.customer_name}</p>
+                        <StatusPill status={b.status} />
                       </div>
+                      <p className="text-[12.5px] text-slate-500 truncate">
+                        {[b.vehicle_brand, b.vehicle_model].filter(Boolean).join(' ') || 'Vehicle'}
+                        {b.vehicle_reg_no ? ` · ${b.vehicle_reg_no}` : ''}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Details Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100">
-                    {/* Vehicle */}
-                    <div className="flex items-start gap-2">
-                      <Car size={14} className="text-[#D32F2F] shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Vehicle</p>
-                        <p className="text-xs font-black text-slate-900">
-                          {b.vehicle_brand || '—'} {b.vehicle_model || ''}
-                        </p>
-                        {b.vehicle_reg_no && (
-                          <button
-                            onClick={() => openVehicleHistory(b.vehicle_reg_no)}
-                            className="text-[10px] font-bold text-[#D32F2F] hover:underline flex items-center gap-0.5 mt-0.5"
-                          >
-                            <History size={9} />
-                            {b.vehicle_reg_no}
-                          </button>
-                        )}
-                      </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                      <p className="text-[11px] font-semibold text-slate-500 flex items-center gap-1"><Calendar size={11} /> Date</p>
+                      <p className="font-display text-[13.5px] font-bold text-slate-900">
+                        {b.slot_date ? new Date(`${b.slot_date}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }) : '—'}
+                      </p>
                     </div>
+                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                      <p className="text-[11px] font-semibold text-slate-500 flex items-center gap-1"><Clock size={11} /> Time</p>
+                      <p className="font-display text-[13.5px] font-bold text-slate-900">{b.start_time ? `${formatTime(b.start_time)} – ${formatTime(b.end_time)}` : '—'}</p>
+                    </div>
+                  </div>
 
-                    {/* Service / Services Cart Details */}
-                    <div className="flex items-start gap-2">
-                      <FileText size={14} className="text-[#D32F2F] shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e]">Services Cart</p>
-                        {b.cart_items_json ? (
-                          <div className="space-y-1 mt-0.5">
-                            {(() => {
-                              try {
-                                const items = JSON.parse(b.cart_items_json);
-                                return items.map((it: any, i: number) => (
-                                  <div key={i} className="text-[11px] font-extrabold text-[#1c1b1b] flex items-center gap-1">
-                                    <span>• {it.name}</span>
-                                    {it.is_wash && <span className="text-[9px] bg-red-100 text-red-700 px-1 rounded">Wash</span>}
-                                  </div>
-                                ));
-                              } catch {
-                                return <p className="text-xs font-bold text-[#1c1b1b]">{b.service_name || b.package_name || '—'}</p>;
-                              }
-                            })()}
-                          </div>
-                        ) : (
-                          <p className="text-xs font-bold text-[#1c1b1b] truncate">
-                            {b.service_name || b.package_name || '—'}
-                          </p>
-                        )}
-                      </div>
-                    </div>
+                  <p className="mt-3 text-[13px] font-bold text-slate-800 line-clamp-2">{serviceLabel(b)}</p>
+                  <p className={`text-[12.5px] font-semibold ${pay.cls}`}>{pay.text}</p>
 
-                    {/* Date */}
-                    <div className="flex items-start gap-2">
-                      <Calendar size={14} className="text-[#D32F2F] shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e]">Date</p>
-                        <p className="text-xs font-bold text-[#1c1b1b]">
-                          {b.slot_date
-                            ? new Date(b.slot_date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })
-                            : '—'}
-                        </p>
-                      </div>
-                    </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {reply && <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${reply.cls}`}>{reply.label}</span>}
+                    {b.cancel_reason && b.status === 'cancelled' && (
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                        {b.cancelled_by ? `By ${b.cancelled_by}: ` : ''}{b.cancel_reason}
+                      </span>
+                    )}
+                  </div>
+                  {b.notes && <p className="mt-2 text-[12.5px] text-slate-500 line-clamp-2">“{b.notes}”</p>}
+                </div>
 
-                    {/* Time */}
-                    <div className="flex items-start gap-2">
-                      <Clock size={14} className="text-[#D32F2F] shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e]">Time</p>
-                        <p className="text-xs font-bold text-[#1c1b1b]">
-                          {b.start_time ? `${formatTime(b.start_time)} – ${formatTime(b.end_time)}` : '—'}
-                        </p>
-                      </div>
-                    </div>
+                {/* Quick contact + documents */}
+                <div className="flex items-center gap-2 border-t border-slate-100 px-4 py-2.5">
+                  <a href={`tel:${b.customer_mobile}`} className="h-9 w-9 rounded-full bg-slate-100 text-slate-800 flex items-center justify-center" aria-label="Call">
+                    <Phone size={15} />
+                  </a>
+                  <a href={`https://wa.me/91${String(b.customer_mobile || '').replace(/\D/g, '').slice(-10)}`} target="_blank" rel="noreferrer" className="h-9 w-9 rounded-full bg-emerald-500 text-white flex items-center justify-center" aria-label="WhatsApp">
+                    <MessageCircle size={15} />
+                  </a>
+                  {b.vehicle_reg_no && (
+                    <button onClick={() => openVehicleHistory(b.vehicle_reg_no)} className="h-9 px-3 rounded-full bg-slate-100 text-slate-700 text-[12px] font-bold flex items-center gap-1">
+                      <History size={13} /> History
+                    </button>
+                  )}
+                  <div className="ml-auto flex items-center gap-1">
+                    {b.advance_payment_id && (
+                      <button onClick={() => openInvoice(`/api/payments/${b.advance_payment_id}/invoice`)} className="h-9 px-2.5 rounded-full text-[12px] font-bold text-[#D32F2F] flex items-center gap-1">
+                        <Download size={13} /> Receipt
+                      </button>
+                    )}
+                    <button onClick={() => openInvoice(`/api/bookings/${b.id}/invoice`)} className="h-9 px-2.5 rounded-full text-[12px] font-bold text-[#D32F2F] flex items-center gap-1">
+                      <Download size={13} /> Invoice
+                    </button>
                   </div>
                 </div>
 
-                {/* Right: Status + Actions */}
-                <div className="flex flex-row lg:flex-col items-center lg:items-end gap-3 shrink-0">
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full border ${
-                    b.status === 'confirmed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                    b.status === 'completed' ? 'bg-red-50 text-[#b71c1c] border-red-200' :
-                    b.status === 'pending_approval' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                    'bg-rose-50 text-rose-700 border-rose-200'
-                  }`}>
-                    {b.status.replace('_', ' ')}
-                  </span>
-
-                  {b.status === 'pending_approval' && (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          setConfirmType('reject');
-                          setConfirmTargetId(b.id);
-                        }}
-                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-2xl text-xs font-bold transition-all"
-                      >
-                        Reject
+                {/* Actions */}
+                {(b.status === 'pending_approval' || b.status === 'confirmed' || b.job_cart_id) && (
+                  <div className="space-y-2 border-t border-slate-100 p-3">
+                    {b.status === 'pending_approval' && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <button onClick={() => { setConfirmType('reject'); setConfirmTargetId(b.id); }} className="app-btn h-11 bg-red-50 text-[#D32F2F]">Reject</button>
+                        <button onClick={() => { setConfirmType('approve'); setConfirmTargetId(b.id); }} className="app-btn-primary h-11"><Check size={16} /> Approve</button>
+                      </div>
+                    )}
+                    {b.status === 'confirmed' && !b.job_cart_id && (
+                      <button onClick={() => handleCreateJobCart(b)} className="app-btn-dark h-11 w-full">
+                        <FileText size={16} /> Car arrived — create job card
                       </button>
-                      <button
-                        onClick={() => {
-                          setConfirmType('approve');
-                          setConfirmTargetId(b.id);
-                        }}
-                        className="px-4 py-1.5 bg-[#D32F2F] hover:bg-[#b71c1c] text-white rounded-2xl text-xs font-bold transition-all shadow-xs active:scale-95"
-                      >
-                        Approve
+                    )}
+                    {b.job_cart_id && (
+                      <button onClick={() => navigate(`/admin/job-carts/${b.job_cart_id}`)} className="app-btn h-11 w-full bg-slate-100 text-slate-800">
+                        <Eye size={16} /> Open job card #{b.job_cart_id}
                       </button>
-                    </div>
-                  )}
-
-                  {b.status === 'confirmed' && !b.job_cart_id && (
-                    <button
-                      onClick={() => handleCreateJobCart(b)}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-2xl shadow-xs transition-all flex items-center gap-1.5 active:scale-95 whitespace-nowrap"
-                    >
-                      <FileText size={13} />
-                      <span>+ Create Job Card</span>
-                    </button>
-                  )}
-
-                  {b.job_cart_id && (
-                    <button
-                      onClick={() => navigate(`/admin/job-carts/${b.job_cart_id}`)}
-                      className="flex items-center gap-1.5 text-xs font-bold text-[#D32F2F] hover:underline"
-                    >
-                      <Eye size={12} />
-                      <span>View Job Card #{b.job_cart_id}</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Payment Details */}
-              <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-2 items-center w-full">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e]">Payment:</span>
-                {b.booking_type === 'package' ? (
-                  <span className="text-xs font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-lg">
-                    📦 Package Credit ({b.package_name || 'Active Package'})
-                  </span>
-                ) : b.is_free_wash ? (
-                  <span className="text-xs font-bold text-[#b71c1c] bg-red-50 border border-red-200 px-2 py-0.5 rounded-lg">
-                    🎁 Free Wash (Loyalty)
-                  </span>
-                ) : b.advance_payment_id ? (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-lg flex items-center gap-1">
-                      💰 Advance Paid: ₹{b.advance_amount || 0}
-                    </span>
-                    <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-lg">
-                      💵 Studio Due: ₹{(b.total_amount || 0) - (b.advance_amount || 0)} (Total: ₹{b.total_amount || 0})
-                    </span>
-                    <button
-                      onClick={() => {
-                        const token = useAuthStore.getState().token;
-                        window.open(`/api/payments/${b.advance_payment_id}/invoice?token=${token}`, '_blank');
-                      }}
-                      className="text-[#D32F2F] hover:text-[#991b1b] font-bold text-xs inline-flex items-center gap-1.5 bg-red-50 border border-red-200 px-2 py-1 rounded-lg hover:bg-red-100 transition-colors"
-                      title="Download Payment Receipt"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Receipt
-                    </button>
+                    )}
+                    {['confirmed', 'pending_approval'].includes(b.status) && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <button onClick={() => setRescheduleFor(b)} className="app-btn h-10 bg-white border border-slate-200 text-slate-800 text-[13px]">Reschedule</button>
+                        <button onClick={() => setCancelFor(b)} className="app-btn h-10 bg-white border border-slate-200 text-slate-500 text-[13px]">Cancel booking</button>
+                      </div>
+                    )}
                   </div>
-                ) : b.advance_amount > 0 ? (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-xs font-bold text-yellow-700 bg-yellow-50 border border-yellow-200 px-2.5 py-0.5 rounded-lg">
-                      ⏳ Advance Pending: ₹{b.advance_amount || 0}
-                    </span>
-                    <span className="text-xs font-bold text-gray-700 bg-gray-50 border border-gray-200 px-2.5 py-0.5 rounded-lg">
-                      💵 Total Bill: ₹{b.total_amount || 0}
-                    </span>
-                  </div>
-                ) : (
-                  <span className="text-xs font-bold text-gray-700 bg-gray-50 border border-gray-200 px-2.5 py-0.5 rounded-lg">
-                    💵 Pay at Studio: ₹{b.total_amount || 0}
-                  </span>
                 )}
-                
-                <button
-                  onClick={() => {
-                    const token = useAuthStore.getState().token;
-                    window.open(`/api/bookings/${b.id}/invoice?token=${token}`, '_blank');
-                  }}
-                  className="ml-auto text-[#D32F2F] hover:text-[#991b1b] font-bold text-xs inline-flex items-center gap-1.5 bg-red-50 border border-red-200 px-2.5 py-1.5 rounded-lg hover:bg-red-100 transition-colors"
-                  title="Download Booking Invoice"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Booking Invoice
-                </button>
               </div>
-
-              {/* Notes */}
-              {b.notes && (
-                <div className="mt-3 pt-3 border-t border-gray-50">
-                  <p className="text-xs text-[#5f5e5e]">
-                    <span className="font-bold">Notes:</span> {b.notes}
-                  </p>
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3 mt-6 pb-6">
-          <button
-            onClick={() => setPage(Math.max(1, page - 1))}
-            disabled={page <= 1}
-            className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <span className="text-sm font-bold text-[#1c1b1b]">
-            Page {page} of {totalPages}
-          </span>
-          <button
-            onClick={() => setPage(Math.min(totalPages, page + 1))}
-            disabled={page >= totalPages}
-            className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronRight size={18} />
-          </button>
+        <div className="flex items-center justify-between">
+          <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page <= 1} className="app-btn-outline h-10 px-3"><ChevronLeft size={16} /> Prev</button>
+          <span className="text-[13px] font-semibold text-slate-500">Page {page} of {totalPages}</span>
+          <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page >= totalPages} className="app-btn-outline h-10 px-3">Next <ChevronRight size={16} /></button>
         </div>
       )}
+
+      {/* Floating new booking */}
+      <button
+        onClick={() => setManualBookingOpen(true)}
+        className="fixed right-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-30 app-btn-primary h-12 px-5 rounded-full shadow-app-lg"
+      >
+        <Plus size={18} /> New booking
+      </button>
 
       {/* Vehicle History Modal */}
       <Modal
@@ -938,6 +756,8 @@ export default function CustomerBookingsPage() {
         </div>
       </Modal>
 
+      <CancelBookingSheet booking={cancelFor} onClose={() => setCancelFor(null)} onDone={() => refetch()} />
+      <RescheduleSheet booking={rescheduleFor} onClose={() => setRescheduleFor(null)} onDone={() => refetch()} />
       <ConfirmModal
         open={confirmType !== null}
         onClose={() => { setConfirmType(null); setConfirmTargetId(null); }}
