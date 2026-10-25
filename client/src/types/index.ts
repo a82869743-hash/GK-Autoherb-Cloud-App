@@ -15,6 +15,12 @@ export interface User {
   custom_role_id?: number | null;
   base_salary?: number;
   permissions?: string[];
+  gender?: 'male' | 'female' | 'other' | null;
+  date_of_birth?: string | null;
+  anniversary_date?: string | null;
+  profile_photo_url?: string | null;
+  profile_complete?: boolean;
+  missing_fields?: string[];
 }
 
 // ═══════════════════════════════════════════

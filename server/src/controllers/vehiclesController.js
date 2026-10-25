@@ -1,6 +1,15 @@
 const pool = require('../config/db');
+const { detectVehicleCategory, VALID_CATEGORIES } = require('../utils/vehicleCategory');
 
 // Get all unique brands (makes)
+// Pricing segment for a vehicle. Customers can't pick a cheaper segment themselves:
+// only admins may override; otherwise it is detected from brand + model ("bike" is kept as chosen).
+function resolveCategory(user, category, brand, model) {
+  if (category === 'bike') return 'bike';
+  if (user?.role === 'admin' && VALID_CATEGORIES.includes(category)) return category;
+  return detectVehicleCategory(brand, model);
+}
+
 exports.getBrands = async (req, res) => {
   try {
     const query = 'SELECT DISTINCT make FROM vehicle_master ORDER BY make ASC';
@@ -144,7 +153,8 @@ exports.addCar = async (req, res) => {
     const [result] = await conn.query(
       `INSERT INTO vehicles (customer_id, brand, model, registration_no, car_year, is_primary, category)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [userId, brand.trim(), model.trim(), registration_no?.toUpperCase().trim() || null, resolvedYear, isFirst ? 1 : 0, category || 'sedan']
+      [userId, brand.trim(), model.trim(), registration_no?.toUpperCase().trim() || null, resolvedYear, isFirst ? 1 : 0,
+       resolveCategory(req.user, category, brand, model)]
     );
 
     await conn.commit();
@@ -298,7 +308,7 @@ exports.updateCar = async (req, res) => {
 
     // Verify car exists
     const [cars] = await conn.query(
-      'SELECT id, customer_id FROM vehicles WHERE id = ?',
+      'SELECT id, customer_id, brand, model, registration_no, car_year FROM vehicles WHERE id = ?',
       [carId]
     );
     if (!cars.length) {
@@ -312,17 +322,22 @@ exports.updateCar = async (req, res) => {
       return res.status(403).json({ success: false, error: 'Not authorized' });
     }
 
-    // Update details
+    const existingCar = cars[0];
+    const newBrand = brand ? brand.trim() : existingCar.brand;
+    const newModel = model ? model.trim() : existingCar.model;
+    const newCategory = resolveCategory(req.user, category, newBrand, newModel);
+
+    // Update details (fields not sent keep their current value)
     await conn.query(
       `UPDATE vehicles 
        SET brand = ?, model = ?, registration_no = ?, car_year = ?, category = ?
        WHERE id = ?`,
       [
-        brand ? brand.trim() : null,
-        model ? model.trim() : null,
-        registration_no ? registration_no.toUpperCase().trim() : null,
-        resolvedYear,
-        category || 'sedan',
+        newBrand,
+        newModel,
+        registration_no !== undefined ? (registration_no ? registration_no.toUpperCase().trim() : null) : existingCar.registration_no,
+        resolvedYear ?? existingCar.car_year,
+        newCategory,
         carId
       ]
     );
@@ -333,11 +348,11 @@ exports.updateCar = async (req, res) => {
       message: 'Car updated successfully',
       data: {
         id: parseInt(carId),
-        brand: brand?.trim() || null,
-        model: model?.trim() || null,
-        registration_no: registration_no?.toUpperCase().trim() || null,
-        car_year: resolvedYear,
-        category: category || 'sedan'
+        brand: newBrand,
+        model: newModel,
+        registration_no: registration_no !== undefined ? registration_no?.toUpperCase().trim() || null : existingCar.registration_no,
+        car_year: resolvedYear ?? existingCar.car_year,
+        category: newCategory
       }
     });
   } catch (err) {

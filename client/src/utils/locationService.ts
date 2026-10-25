@@ -94,97 +94,117 @@ export function estimateDriveMinutes(distanceKm: number): number {
 }
 
 /**
- * High-accuracy live GPS location fetch from device
+ * Live device location.
+ *
+ * getCurrentPosition() often returns the first, coarse fix (Wi-Fi / IP based, sometimes kilometres
+ * off), which is why the app showed the wrong area. Instead we watch the position for a few seconds
+ * and keep the most accurate reading, stopping early once it is good enough.
  */
-export function getDeviceLiveLocation(): Promise<LocationCoordinates> {
+export function getDeviceLiveLocation(opts: { desiredAccuracy?: number; timeoutMs?: number } = {}): Promise<LocationCoordinates> {
+  const desired = opts.desiredAccuracy ?? 40;
+  const timeoutMs = opts.timeoutMs ?? 12000;
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
-      reject(new Error('Geolocation is not supported by your browser/device.'));
+      reject(new Error('Location is not supported on this device.'));
+      return;
+    }
+    if (!window.isSecureContext) {
+      reject(new Error('Live location needs a secure (https) connection.'));
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-        });
+    let best: LocationCoordinates | null = null;
+    let settled = false;
+    const finish = (err?: Error) => {
+      if (settled) return;
+      settled = true;
+      navigator.geolocation.clearWatch(watchId);
+      clearTimeout(timer);
+      if (best) resolve(best);
+      else reject(err || new Error('Could not get your location. Please try again outdoors or turn on GPS.'));
+    };
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const fix = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
+        if (!best || (fix.accuracy ?? Infinity) < (best.accuracy ?? Infinity)) best = fix;
+        if ((fix.accuracy ?? Infinity) <= desired) finish();
       },
       (error) => {
-        let msg = 'Unable to retrieve your location.';
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            msg = 'Location permission was denied. Please allow location access in your browser settings.';
-            break;
-          case error.POSITION_UNAVAILABLE:
-            msg = 'Location information is currently unavailable from your device GPS.';
-            break;
-          case error.TIMEOUT:
-            msg = 'Location request timed out. Please try again.';
-            break;
-        }
-        reject(new Error(msg));
+        let msg = 'Unable to get your location.';
+        if (error.code === error.PERMISSION_DENIED) msg = 'Location permission is off. Allow location for this app in your phone settings.';
+        else if (error.code === error.POSITION_UNAVAILABLE) msg = 'GPS signal not available. Turn on location / GPS and try again.';
+        else if (error.code === error.TIMEOUT) msg = 'Location request timed out. Please try again.';
+        // Keep waiting for a better fix unless permission is denied
+        if (error.code === error.PERMISSION_DENIED || !best) finish(new Error(msg));
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 20000,
-        maximumAge: 0,
-      }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: timeoutMs }
     );
+    const timer = setTimeout(() => finish(), timeoutMs);
   });
 }
 
+/** Continuous tracking (used while a staff member is driving the car back). Returns a stop() function. */
+export function watchDeviceLocation(
+  onFix: (fix: LocationCoordinates & { heading?: number | null; speed?: number | null }) => void,
+  onError?: (message: string) => void
+): () => void {
+  if (!navigator.geolocation) {
+    onError?.('Location is not supported on this device.');
+    return () => {};
+  }
+  const id = navigator.geolocation.watchPosition(
+    (pos) => onFix({
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude,
+      accuracy: pos.coords.accuracy,
+      heading: pos.coords.heading,
+      speed: pos.coords.speed,
+    }),
+    (error) => onError?.(error.code === error.PERMISSION_DENIED ? 'Location permission denied' : error.message),
+    { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 }
+  );
+  return () => navigator.geolocation.clearWatch(id);
+}
+
 /**
- * Reverse-geocodes GPS coordinates into formatted address components
+ * Turns coordinates into an address. Returns null fields (never invented place names)
+ * when the lookup service can't be reached.
  */
 export async function reverseGeocodeCoords(lat: number, lng: number): Promise<GeocodedAddress> {
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`,
-      {
-        headers: {
-          'Accept-Language': 'en-IN,en;q=0.9',
-        },
-      }
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&lat=${lat}&lon=${lng}`,
+      { headers: { 'Accept-Language': 'en-IN,en;q=0.9' } }
     );
-
     if (res.ok) {
       const data = await res.json();
       const a = data.address || {};
-
-      const street = a.road || a.pedestrian || a.suburb || a.neighbourhood || '';
-      const landmark = a.neighbourhood || a.suburb || a.residential || a.amenity || '';
-      const area = a.suburb || a.city_district || a.neighbourhood || 'Gotri-Vasna-Bhayli Area';
-      const city = a.city || a.town || a.county || 'Vadodara';
-      const state = a.state || 'Gujarat';
-      const pincode = a.postcode || '391410';
-
-      const formatted = data.display_name || `${street}, ${area}, ${city}, ${state} - ${pincode}`;
-
+      const street = [a.house_number, a.road || a.pedestrian].filter(Boolean).join(' ');
+      const landmark = a.amenity || a.building || a.shop || '';
+      const area = a.neighbourhood || a.suburb || a.quarter || a.city_district || a.residential || '';
+      const city = a.city || a.town || a.village || a.county || a.state_district || '';
       return {
-        formattedAddress: formatted,
+        formattedAddress: data.display_name || '',
         street,
         landmark,
         area,
         city,
-        state,
-        pincode,
+        state: a.state || '',
+        pincode: a.postcode || '',
       };
     }
   } catch (e) {
-    console.warn('Reverse geocoding network error, using fallback:', e);
+    console.warn('Reverse geocoding failed:', e);
   }
-
-  // Graceful fallback if offline or API rate limit
   return {
-    formattedAddress: `GPS (${lat.toFixed(5)}, ${lng.toFixed(5)}), Vadodara, Gujarat`,
-    street: `Location near GPS (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
-    landmark: 'Near Gotri-Vasna-Bhayli Corridor',
-    area: 'Vadodara Urban',
-    city: 'Vadodara',
-    state: 'Gujarat',
-    pincode: '390021',
+    formattedAddress: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+    street: '',
+    landmark: '',
+    area: '',
+    city: '',
+    state: '',
+    pincode: '',
   };
 }
 

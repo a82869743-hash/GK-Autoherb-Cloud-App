@@ -1,70 +1,12 @@
 const pool = require('../config/db');
 
-// ─── WhatsApp Configuration ──────────────────────────────
-const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL || 'https://graph.facebook.com/v18.0';
-const WHATSAPP_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
-const WHATSAPP_PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+const messagingService = require('../services/messagingService');
+const whatsapp = require('../services/whatsappProvider');
+const whatsappBot = require('../services/whatsappBot');
 
+// All outgoing WhatsApp goes through the provider (Cloud API when configured, queued link otherwise)
 async function sendWhatsAppMessage(phone, templateName, params = [], messageBody = '') {
-  // Normalize phone to E.164
-  let normalized = phone.replace(/\D/g, '');
-  if (normalized.length === 10) normalized = '91' + normalized;
-  if (!normalized.startsWith('+')) normalized = '+' + normalized;
-
-  let msgId = Math.floor(Math.random() * 10000);
-  try {
-    // Log to DB regardless of provider availability
-    const [result] = await pool.query(
-      `INSERT INTO whatsapp_messages (phone, template_name, message_type, message_body, status)
-       VALUES (?, ?, 'manual', ?, 'pending')`,
-      [normalized, templateName, messageBody || `Template: ${templateName}`]
-    );
-    msgId = result.insertId;
-  } catch (dbErr) {
-    console.warn('sendWhatsAppMessage DB log error, running in Mock Mode:', dbErr.message);
-  }
-
-  if (!WHATSAPP_TOKEN || !WHATSAPP_PHONE_ID) {
-    // Mock mode — mark as sent for dev
-    try {
-      await pool.query(`UPDATE whatsapp_messages SET status = 'sent', sent_at = NOW() WHERE id = ?`, [msgId]);
-    } catch (dbErr) {}
-    return { success: true, mock: true, id: msgId };
-  }
-
-  try {
-    const response = await fetch(`${WHATSAPP_API_URL}/${WHATSAPP_PHONE_ID}/messages`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${WHATSAPP_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: normalized,
-        type: templateName ? 'template' : 'text',
-        ...(templateName ? {
-          template: { name: templateName, language: { code: 'en' }, components: params.length ? [{ type: 'body', parameters: params.map(p => ({ type: 'text', text: String(p) })) }] : [] }
-        } : {
-          text: { body: messageBody }
-        })
-      })
-    });
-    const data = await response.json();
-    if (data.messages?.[0]?.id) {
-      try {
-        await pool.query(`UPDATE whatsapp_messages SET status = 'sent', provider_message_id = ?, sent_at = NOW() WHERE id = ?`, [data.messages[0].id, msgId]);
-      } catch (dbErr) {}
-      return { success: true, id: msgId, provider_id: data.messages[0].id };
-    } else {
-      try {
-        await pool.query(`UPDATE whatsapp_messages SET status = 'failed', error_message = ? WHERE id = ?`, [JSON.stringify(data), msgId]);
-      } catch (dbErr) {}
-      return { success: false, error: data };
-    }
-  } catch (err) {
-    try {
-      await pool.query(`UPDATE whatsapp_messages SET status = 'failed', error_message = ? WHERE id = ?`, [err.message, msgId]);
-    } catch (dbErr) {}
-    return { success: false, error: err.message };
-  }
+  return messagingService.sendWhatsApp(phone, templateName || 'manual', { body: messageBody || `Template: ${templateName}` });
 }
 
 // ─── SEND MANUAL MESSAGE ────────────────────────────────
@@ -189,7 +131,7 @@ exports.listTemplates = async (req, res) => {
 exports.updateTemplate = async (req, res) => {
   try {
     const { id } = req.params;
-    const { message_body, is_active } = req.body;
+    const { message_body, is_active, provider_template_name, provider_language, send_sms } = req.body;
 
     const [existing] = await pool.query('SELECT id FROM v2_whatsapp_templates WHERE id = ?', [id]);
     if (!existing.length) return res.status(404).json({ success: false, error: 'Template not found' });
@@ -197,6 +139,9 @@ exports.updateTemplate = async (req, res) => {
     const updates = []; const params = [];
     if (message_body !== undefined) { updates.push('message_body = ?'); params.push(message_body); }
     if (is_active !== undefined) { updates.push('is_active = ?'); params.push(is_active ? 1 : 0); }
+    if (provider_template_name !== undefined) { updates.push('provider_template_name = ?'); params.push(provider_template_name || null); }
+    if (provider_language !== undefined) { updates.push('provider_language = ?'); params.push(provider_language || 'en'); }
+    if (send_sms !== undefined) { updates.push('send_sms = ?'); params.push(send_sms ? 1 : 0); }
 
     if (!updates.length) return res.status(400).json({ success: false, error: 'No fields provided' });
     params.push(id);
@@ -265,3 +210,144 @@ exports.retryNotification = async (req, res) => {
   }
 };
 
+
+// ─── PROVIDER STATUS (admin) ────────────────────────────
+exports.providerStatus = async (req, res) => {
+  const base = messagingService.appBaseUrl();
+  res.json({
+    success: true,
+    data: {
+      connected: whatsapp.isConfigured(),
+      mode: whatsapp.isConfigured() ? 'cloud_api' : 'queued',
+      webhook_url: `${base}/api/whatsapp/webhook`,
+      verify_token_set: Boolean(process.env.WHATSAPP_VERIFY_TOKEN),
+      app_secret_set: Boolean(process.env.WHATSAPP_APP_SECRET),
+      required_env: ['WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_VERIFY_TOKEN', 'WHATSAPP_APP_SECRET'],
+    },
+  });
+};
+
+// ─── META WEBHOOK: verification handshake (public) ──────
+exports.webhookVerify = (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  if (mode === 'subscribe' && token && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+    return res.status(200).send(challenge);
+  }
+  return res.sendStatus(403);
+};
+
+// ─── META WEBHOOK: incoming messages & delivery receipts (public, raw body) ──
+exports.webhookReceive = async (req, res) => {
+  const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body || {}));
+  if (!whatsapp.verifySignature(raw, req.get('x-hub-signature-256'))) {
+    return res.sendStatus(401);
+  }
+  // Meta expects a fast 200 — process after acknowledging
+  res.sendStatus(200);
+
+  try {
+    const payload = JSON.parse(raw.toString('utf8') || '{}');
+    const { messages, statuses } = whatsapp.parseWebhook(payload);
+
+    for (const st of statuses) {
+      const mapped = ['sent', 'delivered', 'read', 'failed'].includes(st.status) ? st.status : null;
+      if (!mapped) continue;
+      await pool.query(
+        'UPDATE whatsapp_messages SET status = ?, error_message = COALESCE(?, error_message) WHERE provider_message_id = ?',
+        [mapped, st.error || null, st.id]
+      );
+      await pool.query(
+        "UPDATE v2_notification_logs SET status = ? WHERE channel = 'whatsapp' AND JSON_UNQUOTE(JSON_EXTRACT(response_data, '$.provider_message_id')) = ?",
+        [mapped, st.id]
+      );
+    }
+
+    for (const m of messages) {
+      await whatsappBot.handleIncoming({ from: m.from, name: m.name, text: m.text, providerMessageId: m.id });
+    }
+  } catch (err) {
+    console.error('[WA WEBHOOK] processing error:', err);
+  }
+};
+
+// ─── INBOX (admin) ──────────────────────────────────────
+exports.inbox = async (req, res) => {
+  try {
+    const { category, status, search, page = 1, limit = 50 } = req.query;
+    let where = '1=1';
+    const params = [];
+    if (category && category !== 'all') { where += ' AND wi.category = ?'; params.push(category); }
+    if (status && status !== 'all') { where += ' AND wi.status = ?'; params.push(status); }
+    if (search) {
+      where += ' AND (wi.phone LIKE ? OR wi.message_body LIKE ? OR u.name LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+    const offset = (Number(page) - 1) * Number(limit);
+
+    const [rows] = await pool.query(
+      `SELECT wi.*, u.name AS customer_name, u.mobile AS customer_mobile, h.name AS handled_by_name
+       FROM whatsapp_inbox wi
+       LEFT JOIN users u ON u.id = wi.customer_id
+       LEFT JOIN users h ON h.id = wi.handled_by
+       WHERE ${where} ORDER BY wi.received_at DESC LIMIT ? OFFSET ?`,
+      [...params, Number(limit), offset]
+    );
+    const [counts] = await pool.query('SELECT category, status, COUNT(*) AS n FROM whatsapp_inbox GROUP BY category, status');
+    res.json({ success: true, data: rows, counts });
+  } catch (err) {
+    console.error('WhatsApp inbox error:', err);
+    res.status(500).json({ success: false, error: 'Failed to load inbox' });
+  }
+};
+
+exports.updateInbox = async (req, res) => {
+  try {
+    const { status, category } = req.body;
+    const updates = [];
+    const params = [];
+    if (status) { updates.push('status = ?'); params.push(status); }
+    if (category) { updates.push('category = ?'); params.push(category); }
+    if (status === 'resolved') { updates.push('handled_by = ?', 'handled_at = NOW()'); params.push(req.user.id); }
+    if (!updates.length) return res.status(400).json({ success: false, error: 'Nothing to update' });
+    await pool.query(`UPDATE whatsapp_inbox SET ${updates.join(', ')} WHERE id = ?`, [...params, req.params.id]);
+    res.json({ success: true, message: 'Inbox item updated' });
+  } catch (err) {
+    console.error('Update inbox error:', err);
+    res.status(500).json({ success: false, error: 'Failed to update' });
+  }
+};
+
+exports.replyInbox = async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ success: false, error: 'Message is required' });
+    const [rows] = await pool.query('SELECT * FROM whatsapp_inbox WHERE id = ?', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ success: false, error: 'Not found' });
+    const item = rows[0];
+    const result = await messagingService.sendWhatsApp(item.phone, 'staff_reply', { body: message }, { customer_id: item.customer_id, message_type: 'staff_reply' });
+    await pool.query("UPDATE whatsapp_inbox SET status = 'resolved', handled_by = ?, handled_at = NOW() WHERE id = ?", [req.user.id, item.id]);
+    res.json({
+      success: true,
+      data: result,
+      message: result.status === 'sent' ? 'Reply sent on WhatsApp' : 'Reply queued — open the WhatsApp link to send it',
+    });
+  } catch (err) {
+    console.error('Reply inbox error:', err);
+    res.status(500).json({ success: false, error: 'Failed to send reply' });
+  }
+};
+
+// Lets the admin test the auto-bot before the WhatsApp API is connected
+exports.simulateIncoming = async (req, res) => {
+  try {
+    const { phone, message } = req.body;
+    if (!phone || !message) return res.status(400).json({ success: false, error: 'Phone and message are required' });
+    const result = await whatsappBot.handleIncoming({ from: phone, text: message, providerMessageId: null });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('Simulate incoming error:', err);
+    res.status(500).json({ success: false, error: 'Bot failed to process the message' });
+  }
+};

@@ -80,6 +80,13 @@ export default function CustomersListPage() {
   };
 
   const totalFleetVehicles = customers.reduce((acc, c) => acc + (c.vehicles?.length || 0), 0);
+  const thisMonth = new Date().getMonth();
+  const birthdaysThisMonth = customers.filter((c: any) => c.date_of_birth && new Date(c.date_of_birth).getMonth() === thisMonth).length;
+  const joinedThisMonth = customers.filter((c: any) => {
+    const d = c.created_at ? new Date(c.created_at) : null;
+    const now = new Date();
+    return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  }).length;
 
   return (
     <div className="space-y-6 pb-28 lg:pb-12 max-w-[1600px] mx-auto font-sans">
@@ -125,16 +132,16 @@ export default function CustomersListPage() {
           accentColor="sky"
         />
         <AdminMetricCard
-          label="Loyalty Membership"
-          value={Math.round((customers.length || 1) * 0.85)}
-          trend={{ text: 'AutoHerb Club', positive: true }}
+          label="Birthdays this month"
+          value={birthdaysThisMonth}
+          trend="Wishes go out automatically"
           icon={<Sparkles size={20} />}
           accentColor="amber"
         />
         <AdminMetricCard
-          label="Studio Retention"
-          value="94.2%"
-          trend={{ text: 'Repeat Detailing', positive: true }}
+          label="Joined this month"
+          value={joinedThisMonth}
+          trend="New customer accounts"
           icon={<ShieldCheck size={20} />}
           accentColor="emerald"
         />

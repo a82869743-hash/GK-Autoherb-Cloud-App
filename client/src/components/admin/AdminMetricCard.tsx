@@ -46,6 +46,7 @@ export default function AdminMetricCard({
   // Normalize trend
   const trendText = typeof trend === 'object' && trend !== null ? trend.text : trend;
   const isPositive = typeof trend === 'object' && trend !== null ? (trend.positive ?? true) : trendDirection === 'up';
+  const isNumericTrend = Boolean(trendText && /\d/.test(trendText) && /%/.test(trendText));
 
   const displayTitle = title || label || '';
 
@@ -61,35 +62,31 @@ export default function AdminMetricCard({
   };
 
   return (
-    <div className={`bg-white rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow group ${className}`}>
-      <div className="flex items-start justify-between mb-2.5">
-        <div>
-          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{displayTitle}</p>
-          <h3 className="text-xl sm:text-[22px] font-bold text-slate-900 tracking-tight mt-0.5">
-            {value}
-          </h3>
-          {subtitle && (
-            <p className="text-[11px] text-slate-400 mt-0.5 font-medium">{subtitle}</p>
-          )}
-        </div>
-        <div className={`w-10 h-10 rounded-xl ${styleClass} flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform`}>
+    <div className={`metric-card app-card p-3.5 flex flex-col justify-between ${className}`}>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[12px] font-semibold text-slate-500 leading-tight">{displayTitle}</p>
+        <div className={`w-8 h-8 rounded-xl ${styleClass} flex items-center justify-center shrink-0 [&_svg]:w-4 [&_svg]:h-4`}>
           {renderIcon()}
         </div>
       </div>
+      <div className="mt-1">
+        <h3 className="font-display text-[22px] font-extrabold text-slate-900 leading-tight truncate">{value}</h3>
+        {subtitle && <p className="text-[11px] text-slate-400 mt-0.5 font-medium truncate">{subtitle}</p>}
+      </div>
 
       {(trendText || trendLabel) && (
-        <div className="flex items-center gap-1.5 text-[11px] font-semibold pt-1">
+        <div className="flex items-center gap-1 text-[11px] font-semibold mt-1.5 min-w-0">
           {trendText && (
-            <span className={`inline-flex items-center gap-1 ${
-              isPositive ? 'text-emerald-600' : 'text-rose-600'
-            }`}>
-              {isPositive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-              {trendText}
-            </span>
+            isNumericTrend ? (
+              <span className={`inline-flex items-center gap-1 truncate ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {isPositive ? <TrendingUp size={12} className="shrink-0" /> : <TrendingDown size={12} className="shrink-0" />}
+                <span className="truncate">{trendText}</span>
+              </span>
+            ) : (
+              <span className="truncate font-medium text-slate-400">{trendText}</span>
+            )
           )}
-          {trendLabel && (
-            <span className="text-slate-400 font-normal">{trendLabel}</span>
-          )}
+          {trendLabel && <span className="text-slate-400 font-normal truncate">{trendLabel}</span>}
         </div>
       )}
     </div>

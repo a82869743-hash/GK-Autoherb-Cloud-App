@@ -1,200 +1,124 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bell, Search, LogOut, ChevronDown, Check, User, Sparkles } from 'lucide-react';
+import { Bell, Search, LogOut, Settings, ChevronRight, CalendarCheck, Package, ShoppingBag } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useDashboardStats } from '../../api/hooks/useDashboard';
 import LiveSearch from '../shared/LiveSearch';
+import { BottomSheet } from '../customer/ui';
 
+/** Light app header (customer-app style) with search, alerts and profile sheets. */
 export default function AdminMobileTopBar() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const { data: stats } = useDashboardStats();
 
-  const [showSearchModal, setShowSearchModal] = useState(false);
-  const [showNotifModal, setShowNotifModal] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [accentColor, setAccentColor] = useState(() => localStorage.getItem('crm-accent') || 'red');
+  const [showSearch, setShowSearch] = useState(false);
+  const [showNotif, setShowNotif] = useState(false);
+  const [showUser, setShowUser] = useState(false);
 
   const pendingCount = (stats?.pending_service_bookings || 0) + (stats?.pending_package_requests || 0) + (stats?.pending_product_orders || 0);
+  const firstName = user?.name?.split(' ')[0] || 'Admin';
+  const initial = firstName.charAt(0).toUpperCase();
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+  const alerts = [
+    { n: stats?.pending_service_bookings || 0, label: 'bookings waiting for review', to: '/admin/customer-bookings', icon: CalendarCheck, tone: 'bg-red-50 text-[#D32F2F]' },
+    { n: stats?.pending_package_requests || 0, label: 'package requests', to: '/admin/package-approvals', icon: Package, tone: 'bg-purple-50 text-purple-600' },
+    { n: stats?.pending_product_orders || 0, label: 'store orders', to: '/admin/product-orders', icon: ShoppingBag, tone: 'bg-amber-50 text-amber-600' },
+  ].filter((a) => a.n > 0);
+
+  const go = (to: string) => {
+    setShowNotif(false);
+    setShowUser(false);
+    navigate(to);
   };
 
-  const handleAccentChange = (color: string) => {
-    setAccentColor(color);
-    localStorage.setItem('crm-accent', color);
-    window.dispatchEvent(new Event('crm-theme-changed'));
-  };
-
-  const initial = user?.name ? user.name.charAt(0).toUpperCase() : 'A';
+  const roundBtn = 'relative h-10 w-10 rounded-full bg-white shadow-app flex items-center justify-center text-slate-700 active:scale-95 transition-transform';
 
   return (
     <>
-      {/* ── Universal Studio Top Header (Desktop & Mobile) ──────────────── */}
-      <header className="fixed top-0 left-0 right-0 h-14 z-40 bg-white/95 backdrop-blur-xl border-b border-slate-200/80 px-4 sm:px-6 flex items-center justify-between shadow-[0_1px_4px_rgba(0,0,0,0.03)]">
-        {/* Left: Brand + Telemetry Indicator */}
-        <Link to="/admin" className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#af101a] via-[#D32F2F] to-[#ff5252] p-[1px] shadow-sm flex items-center justify-center">
-            <div className="w-full h-full bg-white rounded-[10px] flex items-center justify-center">
-              <span className="text-[#D32F2F] font-bold text-xs">GK</span>
-            </div>
+      <header className="fixed top-0 inset-x-0 z-40 bg-[#f3f4f6]/95 backdrop-blur-md pt-safe">
+        <div className="mx-auto max-w-[1600px] px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+          <Link to="/admin" className="flex items-center gap-2.5 min-w-0">
+            <span className="h-10 w-10 rounded-xl bg-[#111] text-white flex items-center justify-center font-display font-black text-sm shrink-0">GK</span>
+            <span className="min-w-0">
+              <span className="block font-display text-[16px] font-extrabold text-slate-900 leading-tight truncate">Hi, {firstName}</span>
+              <span className="flex items-center gap-1.5 text-[11.5px] font-semibold text-slate-500 leading-tight">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> GK AutoHerb · Admin
+              </span>
+            </span>
+          </Link>
+
+          <div className="hidden md:flex flex-1 max-w-md mx-6">
+            <LiveSearch />
           </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <h1 className="text-sm font-bold text-slate-900 tracking-tight leading-none">AutoHerb</h1>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            </div>
-            <p className="text-[9px] text-slate-400 font-medium tracking-wide mt-0.5">Admin Studio Portal</p>
-          </div>
-        </Link>
 
-        {/* Center: Live Search (Visible on md and lg screens) */}
-        <div className="hidden md:flex flex-1 max-w-md mx-6">
-          <LiveSearch />
-        </div>
-
-        {/* Right: Actions (Mobile Search, Alerts, Accent, Avatar) */}
-        <div className="flex items-center gap-2">
-          {/* Quick Search Button (Mobile only) */}
-          <button
-            onClick={() => setShowSearchModal(true)}
-            className="md:hidden p-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-600 transition-all active:scale-95"
-            aria-label="Search Studio"
-          >
-            <Search size={15} />
-          </button>
-
-          {/* Notifications Trigger */}
-          <div className="relative">
-            <button
-              onClick={() => setShowNotifModal(!showNotifModal)}
-              className="relative p-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-600 transition-all active:scale-95"
-              aria-label="System Alerts"
-            >
-              <Bell size={15} />
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={() => setShowSearch(true)} className={`md:hidden ${roundBtn}`} aria-label="Search">
+              <Search size={18} />
+            </button>
+            <button onClick={() => setShowNotif(true)} className={roundBtn} aria-label="Alerts">
+              <Bell size={18} />
               {pendingCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-[#D32F2F] text-white text-[9px] font-bold rounded-full flex items-center justify-center animate-pulse">
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#D32F2F] text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-[#f3f4f6]">
                   {pendingCount}
                 </span>
               )}
             </button>
-
-            {/* Notification Popover Dropdown */}
-            {showNotifModal && (
-              <div className="absolute right-0 top-11 w-80 bg-white rounded-2xl p-3.5 z-50 border border-slate-200 shadow-xl animate-scale-in text-slate-900">
-                <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 px-1">
-                  <span className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                    <Bell size={13} className="text-[#D32F2F]" />
-                    <span>System Alerts</span>
-                  </span>
-                  <button onClick={() => setShowNotifModal(false)} className="text-slate-400 text-xs hover:text-slate-600">✕</button>
-                </div>
-
-                <div className="space-y-1.5 max-h-60 overflow-y-auto divide-y divide-slate-100 text-xs">
-                  {(stats?.pending_service_bookings || 0) > 0 && (
-                    <Link
-                      to="/admin/customer-bookings"
-                      onClick={() => setShowNotifModal(false)}
-                      className="block p-2.5 rounded-2xl hover:bg-red-50 text-red-700 font-bold"
-                    >
-                      {stats?.pending_service_bookings} Booking(s) Pending Review →
-                    </Link>
-                  )}
-                  {(stats?.pending_package_requests || 0) > 0 && (
-                    <Link
-                      to="/admin/package-approvals"
-                      onClick={() => setShowNotifModal(false)}
-                      className="block p-2.5 rounded-2xl hover:bg-purple-50 text-purple-700 font-bold"
-                    >
-                      {stats?.pending_package_requests} Package Membership Request(s) →
-                    </Link>
-                  )}
-                  {(stats?.pending_product_orders || 0) > 0 && (
-                    <Link
-                      to="/admin/product-orders"
-                      onClick={() => setShowNotifModal(false)}
-                      className="block p-2.5 rounded-2xl hover:bg-red-50 text-red-700 font-bold"
-                    >
-                      {stats?.pending_product_orders} Product Store Order(s) →
-                    </Link>
-                  )}
-                  {pendingCount === 0 && (
-                    <div className="py-4 text-center text-slate-400 text-xs">
-                      All caught up • No pending tasks
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* User Profile Avatar Pill */}
-          <div className="relative">
             <button
-              onClick={() => setShowUserMenu(!showUserMenu)}
-              className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all active:scale-95"
+              onClick={() => setShowUser(true)}
+              className="h-10 w-10 rounded-full bg-gradient-to-br from-[#e53935] to-[#b71c1c] text-white font-display font-extrabold text-sm active:scale-95"
+              aria-label="Account"
             >
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#D32F2F] to-[#af101a] text-white flex items-center justify-center text-xs font-black shadow-xs">
-                {initial}
-              </div>
-              <span className="text-xs font-bold text-slate-800 hidden sm:inline truncate max-w-[100px]">
-                {user?.name?.split(' ')[0] || 'Admin'}
-              </span>
-              <ChevronDown size={12} className="text-slate-500" />
+              {initial}
             </button>
-
-            {/* Profile Dropdown */}
-            {showUserMenu && (
-              <div className="absolute right-0 top-12 w-56 bg-white rounded-3xl p-3.5 z-50 border border-slate-200 shadow-2xl animate-scale-in text-slate-900">
-                <div className="pb-2.5 border-b border-slate-100 px-1 mb-2">
-                  <p className="text-xs font-black text-slate-900 truncate">{user?.name || 'Administrator'}</p>
-                  <p className="text-[10px] text-slate-400 font-medium truncate">{user?.email || 'admin@gkautoherb.com'}</p>
-                </div>
-
-                <Link
-                  to="/admin/settings"
-                  onClick={() => setShowUserMenu(false)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-2xl hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-colors"
-                >
-                  <Sparkles size={14} className="text-[#D32F2F]" />
-                  <span>Studio Settings</span>
-                </Link>
-
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-2xl hover:bg-red-50 text-xs font-bold text-red-600 transition-colors mt-1"
-                >
-                  <LogOut size={14} />
-                  <span>Sign Out</span>
-                </button>
-              </div>
-            )}
           </div>
         </div>
       </header>
 
-      {/* ── Global Search Modal Overlay (Mobile) ─────────────────── */}
-      {showSearchModal && (
-        <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[95] p-4 flex flex-col pt-16"
-          onClick={() => setShowSearchModal(false)}
-        >
-          <div 
-            className="w-full max-w-lg mx-auto bg-white rounded-3xl p-5 shadow-2xl border border-slate-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <span className="text-xs font-black uppercase tracking-wider text-slate-800">Global Studio Search</span>
-              <button onClick={() => setShowSearchModal(false)} className="text-xs text-slate-400 hover:text-slate-600">✕ Close</button>
-            </div>
-            <div className="pt-3">
-              <LiveSearch />
-            </div>
-          </div>
+      <BottomSheet open={showSearch} onClose={() => setShowSearch(false)} title="Search">
+        <div className="min-h-[50dvh]">
+          <LiveSearch />
         </div>
-      )}
+      </BottomSheet>
+
+      <BottomSheet open={showNotif} onClose={() => setShowNotif(false)} title="Alerts">
+        {alerts.length === 0 ? (
+          <div className="py-8 text-center">
+            <p className="font-display font-bold text-slate-900">All caught up</p>
+            <p className="text-sm text-slate-500 mt-1">Nothing is waiting for you.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {alerts.map((a) => (
+              <button key={a.to} onClick={() => go(a.to)} className="w-full app-card flex items-center gap-3 p-3 text-left">
+                <span className={`h-10 w-10 rounded-xl flex items-center justify-center ${a.tone}`}><a.icon size={19} /></span>
+                <span className="flex-1 text-[14px] text-slate-700">
+                  <b className="font-display text-slate-900">{a.n}</b> {a.label}
+                </span>
+                <ChevronRight size={18} className="text-slate-300" />
+              </button>
+            ))}
+          </div>
+        )}
+      </BottomSheet>
+
+      <BottomSheet open={showUser} onClose={() => setShowUser(false)} title={user?.name || 'Administrator'}>
+        <p className="-mt-2 mb-4 text-xs text-slate-500">{user?.email || user?.mobile || 'GK AutoHerb admin'}</p>
+        <button onClick={() => go('/admin/settings')} className="w-full app-card flex items-center gap-3 p-3 text-left">
+          <span className="h-10 w-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center"><Settings size={19} /></span>
+          <span className="flex-1 font-display font-bold text-[14px] text-slate-900">Studio settings</span>
+          <ChevronRight size={18} className="text-slate-300" />
+        </button>
+        <button
+          onClick={() => {
+            setShowUser(false);
+            logout();
+          }}
+          className="mt-4 w-full app-btn-outline text-[#D32F2F]"
+        >
+          <LogOut size={17} /> Sign out
+        </button>
+      </BottomSheet>
     </>
   );
 }

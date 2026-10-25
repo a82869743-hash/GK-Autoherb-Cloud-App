@@ -15,7 +15,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={inputId} className="block text-xs font-medium text-[#5f5e5e] mb-1">
+          <label htmlFor={inputId} className="block text-[13px] font-semibold text-slate-700 mb-1.5">
             {label}
           </label>
         )}
@@ -23,7 +23,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={inputId}
           list={autoListId}
-          className={`w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-[#1c1b1b] text-sm font-normal focus:outline-none focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] placeholder:text-gray-400 transition-all duration-150 ${
+          className={`w-full h-11 px-3.5 bg-white border border-slate-200 rounded-xl text-slate-900 text-[15px] sm:text-sm font-normal focus:outline-none focus:ring-2 focus:ring-red-500/15 focus:border-[#D32F2F] placeholder:text-gray-400 transition-all duration-150 ${
             error ? 'border-red-400 focus:ring-red-400 focus:border-red-400' : ''
           } ${className}`}
           {...props}

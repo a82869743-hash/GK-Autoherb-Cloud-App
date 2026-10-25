@@ -7,7 +7,7 @@ import VehicleBrandBadge from '../../components/admin/VehicleBrandBadge';
 import { useToastStore } from '../../store/toastStore';
 import { formatDate } from '../../utils/formatters';
 import { useAuthStore } from '../../store/authStore';
-import { io } from 'socket.io-client';
+import { createSocket } from '../../lib/socket';
 
 interface Delivery {
   id: number;
@@ -161,8 +161,7 @@ export default function DeliveriesPage() {
     // Socket.io for real-time updates
     let socket: any = null;
     try {
-      const socketUrl = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:5000';
-      socket = io(socketUrl, { auth: { token }, transports: ['websocket', 'polling'] });
+      socket = createSocket(token);
 
       socket.on('connect', () => {
         socket.emit('join_delivery', { deliveryId: trackingId });

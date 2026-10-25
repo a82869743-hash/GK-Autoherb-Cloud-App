@@ -8,11 +8,13 @@ import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
 import AdminMetricCard from '../../components/admin/AdminMetricCard';
 import type { LoyaltySettings, LoyaltyTransaction } from '../../types';
 import { formatINR } from '../../utils/formatters';
+import LoyaltyRewardsAdmin from '../../components/admin/LoyaltyRewardsAdmin';
 
 export default function LoyaltySettingsPage() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'grants' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'rewards' | 'overview' | 'grants' | 'settings'>('rewards');
 
   const tabs = [
+    { key: 'rewards' as const, label: 'Reward Catalogue', icon: Gift },
     { key: 'overview' as const, label: 'Customer Points Lookup', icon: Users },
     { key: 'grants' as const, label: 'Direct Benefit Grants', icon: Award },
     { key: 'settings' as const, label: 'Program Settings', icon: Settings },
@@ -46,9 +48,9 @@ export default function LoyaltySettingsPage() {
         {/* Metric Cards Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <AdminMetricCard
-            title="Earn Ratio"
-            value={`₹${settings?.points_ratio || 100}`}
-            subtitle="Per 1 Loyalty Point"
+            title="Earn Rate"
+            value={`${(settings as any)?.earn_percent ?? 10}%`}
+            subtitle="Of every bill, as points"
             icon={<Star className="w-5 h-5 text-amber-500" />}
             variant="amber"
             trend={{ text: '1 Pt per ratio', positive: true }}
@@ -80,7 +82,7 @@ export default function LoyaltySettingsPage() {
         </div>
 
         {/* Tabs */}
-        <div className="bg-white rounded-3xl p-1.5 border border-slate-100 shadow-sm inline-flex items-center gap-1">
+        <div className="bg-white rounded-3xl p-1.5 border border-slate-100 shadow-sm inline-flex max-w-full overflow-x-auto no-scrollbar items-center gap-1 [&>*]:shrink-0">
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -97,6 +99,7 @@ export default function LoyaltySettingsPage() {
           ))}
         </div>
 
+        {activeTab === 'rewards' && <LoyaltyRewardsAdmin />}
         {activeTab === 'overview' && <CustomerLoyaltyLookup />}
         {activeTab === 'grants' && <DirectGrantsTab />}
         {activeTab === 'settings' && <LoyaltySettingsTab />}
@@ -329,14 +332,16 @@ function LoyaltySettingsTab() {
         </h3>
 
         <div>
-          <label className="block text-xs text-slate-500 mb-1.5 font-bold uppercase tracking-wider">Points Ratio (₹ per 1 point)</label>
+          <label className="block text-xs text-slate-500 mb-1.5 font-bold uppercase tracking-wider">Points earned (% of bill)</label>
           <input
             type="number"
-            value={form.points_ratio || ''}
-            onChange={(e) => setForm((f) => ({ ...f, points_ratio: parseFloat(e.target.value) }))}
+            min={0}
+            max={100}
+            value={(form as any).earn_percent ?? ''}
+            onChange={(e) => setForm((f) => ({ ...f, earn_percent: parseFloat(e.target.value) } as any))}
             className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-800 outline-none focus:ring-2 focus:ring-red-500/20 font-medium"
           />
-          <p className="text-[11px] text-slate-400 mt-1">Customer earns 1 point for every ₹{form.points_ratio || 100} spent on services</p>
+          <p className="text-[11px] text-slate-400 mt-1">A ₹2,000 service earns {Math.floor(2000 * (Number((form as any).earn_percent) || 0) / 100)} points. Points are added automatically on every completed job.</p>
         </div>
 
         <div>

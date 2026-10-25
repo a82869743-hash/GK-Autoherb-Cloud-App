@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Plus, Trash2, ArrowLeft, Loader2, Save, ShoppingBag, Search, FileText, IndianRupee, Sparkles, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import io from 'socket.io-client';
+import { createSocket } from '../../lib/socket';
 
 import api from '../../api/axiosInstance';
 import { useServices } from '../../api/hooks/useServices';
@@ -79,8 +79,7 @@ export default function QuotationCreatePage() {
   useEffect(() => {
     refreshCustomerList();
 
-    const socketUrl = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || window.location.origin;
-    const socket = io(socketUrl, { transports: ['websocket', 'polling'] });
+    const socket = createSocket();
 
     socket.on('customer_updated', () => refreshCustomerList());
     socket.on('customer_created', () => refreshCustomerList());

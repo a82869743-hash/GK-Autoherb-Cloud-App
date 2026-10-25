@@ -31,21 +31,21 @@ async function getStudioSettings() {
 async function getUserContext(userId) {
   if (!userId) return null;
   try {
-    const [vehicles] = await pool.query('SELECT * FROM vehicles WHERE user_id = ?', [userId]);
+    const [vehicles] = await pool.query('SELECT id, brand, model, registration_no, category FROM vehicles WHERE customer_id = ?', [userId]);
     const [activeJobs] = await pool.query(`
-      SELECT jc.*, v.brand, v.model, v.registration_no
+      SELECT jc.id, jc.status, jc.stage, v.brand, v.model, v.registration_no
       FROM job_carts jc
       JOIN vehicles v ON jc.vehicle_id = v.id
-      WHERE v.user_id = ? AND jc.status NOT IN ('delivered', 'cancelled')
+      WHERE v.customer_id = ? AND jc.status IN ('draft', 'open')
       ORDER BY jc.created_at DESC LIMIT 1
     `, [userId]);
 
     const [packages] = await pool.query(`
-      SELECT up.*, p.name as package_name, p.free_washes_count, p.wax_coat_count
+      SELECT up.id, up.end_date, p.name AS package_name, p.wash_count, p.wax_count
       FROM user_packages up
       JOIN packages p ON up.package_id = p.id
-      WHERE up.user_id = ? AND up.status = 'active'
-      LIMIT 1
+      WHERE up.user_id = ? AND up.package_status = 'active' AND up.end_date > NOW()
+      ORDER BY up.end_date DESC LIMIT 1
     `, [userId]);
 
     const [loyalty] = await pool.query('SELECT * FROM loyalty WHERE customer_id = ? LIMIT 1', [userId]);
@@ -62,13 +62,19 @@ async function getUserContext(userId) {
   }
 }
 
-// ─── HELPER: Intelligent Knowledge Response Generator ────────────────────────
 async function generateBotReply(userMessage, conversation, userCtx) {
   const q = (userMessage || '').trim().toLowerCase();
   const settings = await getStudioSettings();
 
+  // A logged-in customer asking about *their own* car or points gets the personal answer below,
+  // not a generic FAQ entry whose broad keyword ("where", "points") happens to match.
+  const personalQuestion = !!userCtx && (
+    /where is my car|car status|job status|my vehicle|my car|track/.test(q) ||
+    /my points|loyalty|reward|free wash|coins|points balance/.test(q)
+  );
+
   // 1. Check custom admin knowledge base overrides first
-  try {
+  if (!personalQuestion) try {
     const [kbRows] = await pool.query('SELECT * FROM chatbot_knowledge WHERE is_active = 1 ORDER BY sort_order ASC');
     for (const kb of kbRows) {
       const keywords = (kb.keywords || '').split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
@@ -91,14 +97,12 @@ async function generateBotReply(userMessage, conversation, userCtx) {
   if (q.includes('where is my car') || q.includes('car status') || q.includes('job status') || q.includes('my vehicle') || q.includes('tracking') || q.includes('track')) {
     if (userCtx?.activeJob) {
       const job = userCtx.activeJob;
-      const stageName = job.status === 'in_progress' ? 'Detailing & Wash Bay (In Progress)' 
-                      : job.status === 'qc' ? 'Final Quality Inspection' 
-                      : job.status === 'ready' ? 'Ready for Pickup / Out for Delivery' 
-                      : 'Intake Bay Inspection';
+      const STAGES = { received: 'Vehicle received', inspection: 'Inspection', washing: 'Washing', detailing: 'Detailing', curing: 'Coating & curing', quality_check: 'Final quality check', ready: 'Ready for pickup', delivered: 'Delivered' };
+      const stageName = STAGES[job.stage] || 'Intake bay inspection';
       return {
         reply: `🚗 **Live Status for ${job.brand} ${job.model} (${job.registration_no})**\n\nYour vehicle is currently in **${stageName}**.\nJob Card: #${job.id || job.job_card_number || 'N/A'}\n\nOur certified detailers are working on it with utmost precision!`,
         intent: 'job_tracking',
-        actionUrl: `/job/${job.id}`,
+        actionUrl: require('../services/jobStages').trackingUrl(job.id).replace(/^https?:\/\/[^/]+/, ''),
         actionLabel: 'View Progress & Live Photos',
         chips: ['Call Studio', 'Book Next Visit', 'Store Products']
       };
@@ -107,7 +111,7 @@ async function generateBotReply(userMessage, conversation, userCtx) {
       return {
         reply: `You have registered vehicle **${car.brand} ${car.model} (${car.registration_no})**, but there is currently no vehicle actively checked into the studio bay.\n\nWould you like to schedule an appointment for today or upcoming days?`,
         intent: 'job_tracking',
-        actionUrl: '/customer/booking',
+        actionUrl: '/customer/bookings/new',
         actionLabel: 'Book Detailing Appointment',
         chips: ['Explore Wash Packages', 'Helpline Number', 'Store Products']
       };
@@ -115,7 +119,7 @@ async function generateBotReply(userMessage, conversation, userCtx) {
       return {
         reply: `To check live vehicle progress, please log in to your registered customer account or enter your Vehicle Registration Number below so our team can pull up your studio status!`,
         intent: 'job_tracking',
-        actionUrl: '/customer/booking',
+        actionUrl: '/customer/bookings/new',
         actionLabel: 'Book a Slot',
         chips: ['Helpline Number', 'Services & Rates', 'Packages']
       };
@@ -138,7 +142,7 @@ async function generateBotReply(userMessage, conversation, userCtx) {
     return {
       reply: `💧 **GK AutoHerb Wash & Care Pricing**:\n\n• **Full Foam Wash**: pH-neutral snow foam, underbody wash, alloy wheel de-greasing, microfiber dual-bucket hand wash, interior vacuuming & tire dressing.\n• **Two-Wheeler Wash**: High-pressure clean, engine degrease & gloss glaze coat.\n• **Deep Interior Sanitization**: Steam extraction, fabric deep shampoo, leather conditioning & AC vent disinfection.\n\n*Pricing is calibrated transparently based on vehicle category (Hatchback / Sedan / SUV). Members save up to 40% with packages!*`,
       intent: 'services_wash',
-      actionUrl: '/customer/booking',
+      actionUrl: '/customer/bookings/new',
       actionLabel: 'Check Pricing & Book Slot',
       chips: ['Compare Packages', 'Doorstep Pickup Info', 'Helpline Number']
     };
@@ -182,7 +186,7 @@ async function generateBotReply(userMessage, conversation, userCtx) {
     return {
       reply: `🚗 **GK AutoHerb Doorstep Valet Concierge**:\n\nNo time to drive to the studio? We've got you covered!\n\n1. Select **'Doorstep Pickup & Drop'** during appointment booking.\n2. Our certified driver arrives at your home or workplace.\n3. Digital check-in with pre-wash walkaround inspection photos.\n4. Live driver GPS tracking on your customer dashboard.\n5. Vehicle delivered back in immaculate showroom shine!`,
       intent: 'concierge_pickup',
-      actionUrl: '/customer/booking',
+      actionUrl: '/customer/bookings/new',
       actionLabel: 'Schedule Pickup Booking',
       chips: ['Helpline Number', 'Package Details', 'Detailing Rates']
     };
@@ -190,10 +194,15 @@ async function generateBotReply(userMessage, conversation, userCtx) {
 
   // 9. Loyalty & Free Wash Vouchers Intent
   if (q.includes('loyalty') || q.includes('points') || q.includes('free wash') || q.includes('reward') || q.includes('coins')) {
-    let loyaltyMsg = 'Earn 1 Loyalty Point for every ₹100 spent. Points automatically convert into cash discounts at checkout!';
+    let loyaltyMsg = 'Get 10% of every bill back as GK points, and redeem them for free washes and discounts in Rewards.';
     if (userCtx?.loyalty) {
       const l = userCtx.loyalty;
-      loyaltyMsg = `⭐ **Your Current Loyalty Rewards**:\n• Cash Credits: **₹${l.credits || 0}**\n• Complimentary Washes: **${l.free_washes || 0} Vouchers**\n• Wax Sessions: **${l.wax_count || 0} Remaining**\n\nYou can apply these directly when booking or paying for studio services!`;
+      loyaltyMsg = `⭐ **Your GK Rewards**:
+• Points: **${Math.floor(Number(l.points || 0))}**
+• Free washes: **${l.free_washes || 0}**
+• Credits: **₹${l.credits || 0}**
+
+Redeem points for free washes and discounts in Rewards.`;
     }
     return {
       reply: loyaltyMsg,
@@ -249,7 +258,7 @@ async function generateBotReply(userMessage, conversation, userCtx) {
   return {
     reply: `👋 Hello! Welcome to **GK AutoHerb Studio AI Concierge**.\n\nI can assist you instantly with:\n• **Active Car Tracking**: Check live wash & detailing progress\n• **Services & Rates**: Foam wash, PPF wrap, ceramic coating & polish\n• **Packages**: 5 tiers with massive savings & free wash vouchers\n• **Accessories Store**: Genuine digital inflators, vacuums & cushions\n• **Helpline & Valet**: Concierge doorstep vehicle pickup & drop\n\nHow can I help care for your vehicle today?`,
     intent: 'general_welcome',
-    actionUrl: '/customer/booking',
+    actionUrl: '/customer/bookings/new',
     actionLabel: 'Book Studio Appointment',
     chips: ['🏎️ Track My Car', '💎 Membership Packages', '🛠️ Detailing Rates', '🛍️ Store Products', '📞 Call Helpline', '📝 Request Callback']
   };

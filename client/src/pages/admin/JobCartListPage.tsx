@@ -128,7 +128,7 @@ export default function JobCartListPage() {
           label="Total Job Cards"
           value={stats.total.toLocaleString()}
           icon={<FileText size={18} />}
-          trend="↑ 12.5%"
+          trend="All time"
           variant="red"
         />
         <AdminMetricCard

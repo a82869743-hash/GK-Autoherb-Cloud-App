@@ -394,7 +394,9 @@ export default function CustomerDetailPage() {
             <div className="px-6 pb-6 relative">
               <div className="absolute -top-10 bg-white p-1.5 rounded-2xl shadow-md border border-slate-100">
                 <div className="w-14 h-14 rounded-xl bg-red-50 text-[#b71c1c] flex items-center justify-center font-black text-xl">
-                  {data.name?.charAt(0)?.toUpperCase() || 'C'}
+                  {data.profile_photo_url
+                    ? <img src={data.profile_photo_url} alt="" className="w-full h-full object-cover rounded-xl" />
+                    : (data.name?.charAt(0)?.toUpperCase() || 'C')}
                 </div>
               </div>
               <div className="pt-10">
@@ -413,6 +415,24 @@ export default function CustomerDetailPage() {
                       <Mail size={13} className="text-slate-400" /> Email
                     </span>
                     <span className="font-bold text-slate-900 text-xs truncate max-w-[180px]">{data.email || '—'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                    <span className="text-xs font-semibold text-slate-500 flex items-center gap-2">
+                      <Calendar size={13} className="text-slate-400" /> Gender
+                    </span>
+                    <span className="font-bold text-slate-900 text-xs capitalize">{data.gender || '—'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                    <span className="text-xs font-semibold text-slate-500 flex items-center gap-2">
+                      <Calendar size={13} className="text-slate-400" /> Birthday
+                    </span>
+                    <span className="font-bold text-slate-900 text-xs capitalize">{data.date_of_birth ? new Date(data.date_of_birth).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                    <span className="text-xs font-semibold text-slate-500 flex items-center gap-2">
+                      <Calendar size={13} className="text-slate-400" /> Anniversary
+                    </span>
+                    <span className="font-bold text-slate-900 text-xs capitalize">{data.anniversary_date ? new Date(data.anniversary_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}</span>
                   </div>
                   <div className="flex justify-between items-center py-2">
                     <span className="text-xs font-semibold text-slate-500 flex items-center gap-2">

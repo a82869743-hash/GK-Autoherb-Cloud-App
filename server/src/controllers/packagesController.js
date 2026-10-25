@@ -278,58 +278,11 @@ exports.update = async (req, res) => {
 
 // Helper: Syncs updated package services to all active customer subscriptions for this package_id
 async function syncPackageServicesToUserPackages(conn, packageId) {
-  try {
-    const [pkgServices] = await conn.query(
-      `SELECT ps.service_id, s.name AS service_name, ps.total_count
-       FROM package_services ps
-       JOIN services s ON ps.service_id = s.id
-       WHERE ps.package_id = ?`,
-      [packageId]
-    );
-
-    const [activeUserPkgs] = await conn.query(
-      `SELECT id FROM user_packages WHERE package_id = ? AND status = 'active'`,
-      [packageId]
-    );
-
-    for (const upkg of activeUserPkgs) {
-      const userPackageId = upkg.id;
-
-      if (pkgServices.length > 0) {
-        const activeNames = pkgServices.map(s => s.service_name);
-        await conn.query(
-          `DELETE FROM user_package_usage WHERE user_package_id = ? AND service_name NOT IN (?)`,
-          [userPackageId, activeNames]
-        );
-      } else {
-        await conn.query(`DELETE FROM user_package_usage WHERE user_package_id = ?`, [userPackageId]);
-      }
-
-      for (const ps of pkgServices) {
-        const [existing] = await conn.query(
-          `SELECT id, remaining, used_count FROM user_package_usage WHERE user_package_id = ? AND service_name = ?`,
-          [userPackageId, ps.service_name]
-        );
-
-        if (existing.length > 0) {
-          const used = existing[0].used_count || 0;
-          const newRemaining = Math.max(0, ps.total_count - used);
-          await conn.query(
-            `UPDATE user_package_usage SET total_count = ?, remaining = ? WHERE id = ?`,
-            [ps.total_count, newRemaining, existing[0].id]
-          );
-        } else {
-          await conn.query(
-            `INSERT INTO user_package_usage (user_package_id, service_name, total_count, used_count, remaining)
-             VALUES (?, ?, ?, 0, ?)`,
-            [userPackageId, ps.service_name, ps.total_count, ps.total_count]
-          );
-        }
-      }
-    }
-  } catch (syncErr) {
-    console.error('Failed syncPackageServicesToUserPackages:', syncErr.message);
-  }
+  // Nothing to copy: customers' package credits are read live from package_services
+  // (see userPackagesController.getServiceBreakdown), so editing a package already reaches
+  // everyone who bought it. The old copy step wrote to user_package_usage, a table that no
+  // longer exists, and only produced errors.
+  return { packageId, synced: 0 };
 }
 
 // ─── TOGGLE PUBLISH ─────────────────────────
@@ -400,12 +353,35 @@ exports.createRequest = async (req, res) => {
       return res.status(400).json({ success: false, error: 'vehicle_id, package_id, and price are required' });
     }
 
+    // Price always follows the customer's own car — never a segment picked in the browser
+    const [vehRows] = await pool.query('SELECT id, brand, model, category FROM vehicles WHERE id = ? AND customer_id = ?', [vehicle_id, customerId]);
+    if (!vehRows.length) {
+      return res.status(403).json({ success: false, error: 'This vehicle is not in your garage' });
+    }
+    const { detectVehicleCategory } = require('../utils/vehicleCategory');
+    const segment = vehRows[0].category || detectVehicleCategory(vehRows[0].brand, vehRows[0].model);
+    const CAR_TYPE = { hatchback: 'SMALL_HATCHBACK', medium_hatchback: 'MEDIUM_HATCHBACK', sedan: 'SEDAN_SUV', premium_sedan: 'PREMIUM_SEDAN', suv: 'SEDAN_SUV', luxury: 'LARGE_CAR' };
+    const effectiveCarType = CAR_TYPE[segment] || car_type || 'SEDAN_SUV';
+
+    let listPrice = parseFloat(price);
+    const [matrix] = await pool.query(
+      'SELECT price FROM package_pricing WHERE package_id = ? AND car_type = ? AND pricing_type = ? LIMIT 1',
+      [package_id, effectiveCarType, pricing_type]
+    );
+    if (matrix.length && Number(matrix[0].price) > 0) {
+      listPrice = Number(matrix[0].price);
+    } else {
+      const [pkgRows] = await pool.query('SELECT * FROM packages WHERE id = ?', [package_id]);
+      const col = { hatchback: 'price_hatchback', medium_hatchback: 'price_medium_hatchback', sedan: 'price_sedan', premium_sedan: 'price_premium_sedan', suv: 'price_suv', luxury: 'price_suv' }[segment];
+      if (pkgRows.length && col && Number(pkgRows[0][col]) > 0) listPrice = Number(pkgRows[0][col]);
+    }
+
     const discount = parseFloat(discount_amount || 0);
-    const finalPrice = Math.max(0, parseFloat(price) - discount);
+    const finalPrice = Math.max(0, listPrice - discount);
 
     const [result] = await pool.query(
       "INSERT INTO package_requests (customer_id, vehicle_id, package_id, price, pricing_type, car_type, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')",
-      [customerId, vehicle_id, package_id, finalPrice, pricing_type, car_type || null]
+      [customerId, vehicle_id, package_id, finalPrice, pricing_type, effectiveCarType]
     );
 
     const requestId = result.insertId;
@@ -418,7 +394,7 @@ exports.createRequest = async (req, res) => {
       ).catch(e => console.warn('Coupon redemption log error:', e.message));
     }
 
-    res.status(201).json({ success: true, requestId, message: 'Package request submitted to admin for approval' });
+    res.status(201).json({ success: true, requestId, price: finalPrice, car_type: effectiveCarType, message: 'Package request submitted to admin for approval' });
   } catch (err) {
     console.error('Package request create error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -522,20 +498,21 @@ exports._approveRequestInternal = async (conn, id, paymentId = null) => {
     console.warn('Failed to write initial purchase log:', dbErr.message);
   }
 
-  // Fire-and-forget approval SMS & WhatsApp
+  // Fire-and-forget "package is active" message (editable template PACKAGE_APPROVED; WhatsApp + SMS fallback)
   try {
     const messagingService = require('../services/messagingService');
-    const [custRows] = await conn.query('SELECT name, mobile FROM users WHERE id = ?', [reqData.customer_id]);
-    if (custRows.length && custRows[0].mobile) {
-      const msg = `GK AutoHerb: Hi ${custRows[0].name}, your package request has been approved. You can now use your package services.`;
-      messagingService.sendSMS(custRows[0].mobile, null, null, { content: msg }).catch(() => {});
-      
-      const vehicleStr = reqData.car_type ? ` for vehicle segment ${reqData.car_type.replace(/_/g, ' ')}` : '';
-      const body = `🎉 *Package Approved!*\n\nHi ${custRows[0].name},\nYour request for the *${packageName}* package${vehicleStr} has been approved and activated!\n\nThank you for choosing GK AutoHerb! 💎`;
-      messagingService.sendWhatsApp(`91${custRows[0].mobile}`, null, { body }).catch(() => {});
-    }
+    const [upRows] = await conn.query('SELECT start_date, end_date FROM user_packages WHERE id = ?', [userPackageId]);
+    const fmt = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : '');
+    messagingService
+      .notify(
+        reqData.customer_id,
+        'PACKAGE_APPROVED',
+        { package_name: packageName, valid_from: fmt(upRows[0]?.start_date), valid_till: fmt(upRows[0]?.end_date) },
+        { type: 'package', id: userPackageId }
+      )
+      .catch(() => {});
   } catch (err) {
-    console.warn('SMS/WhatsApp error:', err.message);
+    console.warn('Package activation message error:', err.message);
   }
 
   return { success: true, userPackageId };

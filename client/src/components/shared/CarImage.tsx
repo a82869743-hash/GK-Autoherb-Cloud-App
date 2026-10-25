@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useCarImage } from '../../utils/carImageService';
 import { Car } from 'lucide-react';
+import { isBrandLogoUrl } from '../../utils/brandLogos';
 
 interface CarImageProps {
   brand?: string;
@@ -49,7 +50,7 @@ export default function CarImage({
         src={imgSrc || fallbackUrl}
         alt={displayAlt}
         onError={handleImageError}
-        className={`${className} transition-opacity duration-300 ${isLoading ? 'opacity-0' : 'opacity-100'} ${
+        className={`${className} ${isBrandLogoUrl(imgSrc) ? '!object-contain p-[14%]' : ''} transition-opacity duration-300 ${isLoading ? 'opacity-0' : 'opacity-100'} ${
           showShadow ? 'drop-shadow-[0_12px_24px_rgba(0,0,0,0.14)]' : ''
         }`}
         loading="lazy"

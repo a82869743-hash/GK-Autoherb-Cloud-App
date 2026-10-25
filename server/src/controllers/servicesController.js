@@ -324,6 +324,7 @@ exports.addMedia = async (req, res) => {
     let media_type = req.body.media_type || 'image';
     let external_url = req.body.external_url || null;
     let sort_order = parseInt(req.body.sort_order || 0);
+    const media_role = ['gallery', 'before', 'after', 'process'].includes(req.body.media_role) ? req.body.media_role : 'gallery';
 
     // If uploaded via multer
     if (req.file) {
@@ -343,9 +344,9 @@ exports.addMedia = async (req, res) => {
     }
 
     const [result] = await pool.query(
-      `INSERT INTO service_media (service_id, media_type, url, public_id, thumbnail_url, external_url, sort_order, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
-      [serviceId, media_type, url || external_url, public_id, thumbnail_url, external_url, sort_order]
+      `INSERT INTO service_media (service_id, media_type, media_role, url, public_id, thumbnail_url, external_url, sort_order, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      [serviceId, media_type, media_role, url || external_url, public_id, thumbnail_url, external_url, sort_order]
     );
 
     // If this is a video and service video_url is null, set as primary video_url
@@ -356,7 +357,7 @@ exports.addMedia = async (req, res) => {
     res.status(201).json({
       success: true,
       message: `${media_type === 'video' ? 'Video' : 'Media'} added successfully`,
-      data: { id: result.insertId, url: url || external_url, media_type, thumbnail_url }
+      data: { id: result.insertId, url: url || external_url, media_type, media_role, thumbnail_url }
     });
   } catch (err) {
     console.error('Add service media error:', err);
@@ -384,6 +385,10 @@ exports.deleteMedia = async (req, res) => {
     }
 
     await pool.query('DELETE FROM service_media WHERE id = ?', [mediaId]);
+    // Clear the service's main video link if it pointed at this item
+    if (media.media_type === 'video') {
+      await pool.query('UPDATE services SET video_url = NULL WHERE id = ? AND video_url = ?', [id, media.url]);
+    }
     res.json({ success: true, message: 'Media removed' });
   } catch (err) {
     console.error('Delete service media error:', err);

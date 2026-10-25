@@ -342,28 +342,28 @@ export default function AccountsPage() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <AdminMetricCard
                   label="Today's Revenue"
-                  value={`₹${formatINR(summary?.today_revenue || 0)}`}
+                  value={`${formatINR(summary?.today_revenue || 0)}`}
                   trend={{ text: 'Daily collections', positive: true }}
                   icon={<IndianRupee size={20} />}
                   accentColor="emerald"
                 />
                 <AdminMetricCard
                   label="Period Revenue"
-                  value={`₹${formatINR(summary?.month_revenue || 0)}`}
+                  value={`${formatINR(summary?.month_revenue || 0)}`}
                   trend={{ text: 'Filtered interval turnover', positive: true }}
                   icon={<TrendingUp size={20} />}
                   accentColor="indigo"
                 />
                 <AdminMetricCard
                   label="Period Procurements"
-                  value={`₹${formatINR(summary?.total_purchases_month || 0)}`}
+                  value={`${formatINR(summary?.total_purchases_month || 0)}`}
                   trend={{ text: 'Inventory & supplies spend', positive: false }}
                   icon={<TrendingDown size={20} />}
                   accentColor="rose"
                 />
                 <AdminMetricCard
                   label="Pending Salaries"
-                  value={`₹${formatINR(summary?.pending_staff_payments || 0)}`}
+                  value={`${formatINR(summary?.pending_staff_payments || 0)}`}
                   trend={{ text: 'Payroll obligations', positive: false }}
                   icon={<Clock size={20} />}
                   accentColor="amber"
@@ -374,14 +374,14 @@ export default function AccountsPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <AdminMetricCard
                   label="B2B Bulk Sales"
-                  value={`₹${formatINR(summary?.total_b2b_sales_month || 0)}`}
+                  value={`${formatINR(summary?.total_b2b_sales_month || 0)}`}
                   trend={{ text: 'Wholesale client ledger', positive: true }}
                   icon={<TrendingUp size={20} />}
                   accentColor="purple"
                 />
                 <AdminMetricCard
                   label="B2C Retail Sales"
-                  value={`₹${formatINR(summary?.total_b2c_sales_month || 0)}`}
+                  value={`${formatINR(summary?.total_b2c_sales_month || 0)}`}
                   trend={{ text: 'Counter customer sales', positive: true }}
                   icon={<TrendingUp size={20} />}
                   accentColor="sky"

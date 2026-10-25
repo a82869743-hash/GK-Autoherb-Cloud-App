@@ -1,557 +1,375 @@
-import { useState, useEffect } from 'react';
-import { Calendar, Clock, ArrowRight, CalendarPlus, Car, Sparkles, X, Loader2, CreditCard, QrCode } from 'lucide-react';
-import AdminTopBar from '../../components/layout/AdminTopBar';
-import EmptyState from '../../components/shared/EmptyState';
-import ErrorState from '../../components/shared/ErrorState';
-import Button from '../../components/ui/Button';
-import { useBookings, useCancelBooking, useChangeBookingServices } from '../../api/hooks/useBookings';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { CalendarDays, Clock, Car, CreditCard, QrCode, Loader2, Plus, CheckCircle2, RotateCcw, Pencil, IndianRupee } from 'lucide-react';
+import { useBookings, useChangeBookingServices } from '../../api/hooks/useBookings';
 import { useServices } from '../../api/hooks/useServices';
-import { useNavigate } from 'react-router-dom';
+import { useConfirmAttendance } from '../../api/hooks/useCustomerApp';
 import { useUIStore } from '../../store/uiStore';
-import { formatTime } from '../../utils/formatters';
-import api from '../../api/axiosInstance';
 import { useAuthStore } from '../../store/authStore';
+import { formatTime } from '../../utils/formatters';
+import { priceForSegment, formatPrice } from '../../utils/pricing';
+import api from '../../api/axiosInstance';
 import QrPaymentModal from '../../components/shared/QrPaymentModal';
 import PaymentSandboxModal from '../../components/shared/PaymentSandboxModal';
-import Modal from '../../components/ui/Modal';
+import { AppPageHeader, BottomSheet, EmptyBlock, SegmentedTabs, Skeleton, StatusPill } from '../../components/customer/ui';
+import { CancelBookingSheet, RescheduleSheet } from '../../components/customer/BookingActionSheets';
+import ServiceImage from '../../components/customer/ServiceImage';
 
-function BookingCountdown({ expiresAt, onExpire }: { expiresAt: string; onExpire: () => void }) {
-  const [timeLeft, setTimeLeft] = useState<string>('');
+type Tab = 'upcoming' | 'past' | 'cancelled';
 
+function PayCountdown({ expiresAt, onExpire }: { expiresAt: string; onExpire: () => void }) {
+  const [left, setLeft] = useState('');
   useEffect(() => {
-    const calculateTime = () => {
-      const difference = new Date(expiresAt).getTime() - new Date().getTime();
-      if (difference <= 0) {
-        setTimeLeft('Expired');
+    const tick = () => {
+      const ms = new Date(expiresAt).getTime() - Date.now();
+      if (ms <= 0) {
+        setLeft('Expired');
         onExpire();
         return false;
       }
-      const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((difference % (1000 * 60)) / 1000);
-      setTimeLeft(`${minutes}:${seconds < 10 ? '0' : ''}${seconds}`);
+      setLeft(`${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}`);
       return true;
     };
-
-    calculateTime();
-    const interval = setInterval(() => {
-      const active = calculateTime();
-      if (!active) clearInterval(interval);
-    }, 1000);
-
-    return () => clearInterval(interval);
+    tick();
+    const t = setInterval(() => !tick() && clearInterval(t), 1000);
+    return () => clearInterval(t);
   }, [expiresAt, onExpire]);
+  return <span className="text-[11px] font-bold text-orange-700 bg-orange-50 rounded-full px-2 py-0.5">Pay within {left}</span>;
+}
 
-  return (
-    <span className="text-[10px] sm:text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-lg animate-pulse whitespace-nowrap">
-      ⏳ Pay in {timeLeft}
-    </span>
-  );
+function bookingStart(b: any) {
+  return new Date(`${String(b.slot_date).slice(0, 10)}T${b.start_time || '00:00:00'}`);
 }
 
 export default function BookingsPage() {
   const navigate = useNavigate();
   const toast = useUIStore((s) => s.toast);
-  const [page, setPage] = useState(1);
-  const { data, isLoading, isError, refetch } = useBookings({ page, limit: 20 });
-  const cancelMut = useCancelBooking();
-  const changeServicesMut = useChangeBookingServices();
+  const [params, setParams] = useSearchParams();
+  const [tab, setTab] = useState<Tab>('upcoming');
+  const { data, isLoading, refetch } = useBookings({ page: 1, limit: 100 });
   const { data: servicesRes } = useServices({ active_only: true });
+  const changeServicesMut = useChangeBookingServices();
+  const confirmAttendance = useConfirmAttendance();
 
-  const [changeTargetBooking, setChangeTargetBooking] = useState<any>(null);
+  const [cancelFor, setCancelFor] = useState<any>(null);
+  const [rescheduleFor, setRescheduleFor] = useState<any>(null);
+  const [changeFor, setChangeFor] = useState<any>(null);
   const [selectedServiceIds, setSelectedServiceIds] = useState<number[]>([]);
-
-  const [choiceBookingData, setChoiceBookingData] = useState<any>(null);
-  const [showQrModal, setShowQrModal] = useState(false);
-  const [qrAmount, setQrAmount] = useState(0);
-  const [activeBookingId, setActiveBookingId] = useState<number | null>(null);
+  const [payFor, setPayFor] = useState<any>(null);
+  const [qr, setQr] = useState<{ amount: number; bookingId: number } | null>(null);
   const [submittingOnline, setSubmittingOnline] = useState(false);
-
-  // Sandbox payment modal state
   const [sandboxModal, setSandboxModal] = useState<{
-    isOpen: boolean;
-    orderId: string;
-    amount: number;
-    itemName: string;
-    handler: (resp: any) => Promise<void>;
-    onDismiss: () => void;
-    loading?: boolean;
+    isOpen: boolean; orderId: string; amount: number; itemName: string;
+    handler: (resp: any) => Promise<void>; onDismiss: () => void; loading?: boolean;
   } | null>(null);
 
-  const loadRazorpayScript = () => {
-    return new Promise((resolve) => {
-      const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
-    });
-  };
+  const bookings: any[] = data?.data || [];
+  const services: any[] = servicesRes?.data || [];
 
-  const handlePayOnline = async (bookingId: number, advanceAmt: number) => {
+  const grouped = useMemo(() => {
+    const now = Date.now();
+    const out: Record<Tab, any[]> = { upcoming: [], past: [], cancelled: [] };
+    for (const b of bookings) {
+      if (['cancelled', 'expired', 'rejected'].includes(b.status)) out.cancelled.push(b);
+      else if (b.status === 'completed' || bookingStart(b).getTime() < now - 3 * 36e5) out.past.push(b);
+      else out.upcoming.push(b);
+    }
+    out.upcoming.sort((a, b) => bookingStart(a).getTime() - bookingStart(b).getTime());
+    return out;
+  }, [bookings]);
+
+  // Deep link from the WhatsApp "RESCHEDULE" reply: /customer/bookings?reschedule=<id>
+  useEffect(() => {
+    const id = Number(params.get('reschedule'));
+    if (!id || !bookings.length) return;
+    const b = bookings.find((x) => Number(x.id) === id);
+    if (b) setRescheduleFor(b);
+    params.delete('reschedule');
+    setParams(params, { replace: true });
+  }, [bookings.length]);
+
+  const loadRazorpay = () =>
+    new Promise<boolean>((resolve) => {
+      if ((window as any).Razorpay) return resolve(true);
+      const s = document.createElement('script');
+      s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      s.onload = () => resolve(true);
+      s.onerror = () => resolve(false);
+      document.body.appendChild(s);
+    });
+
+  const payOnline = async (bookingId: number, amount: number) => {
     setSubmittingOnline(true);
     try {
-      const sdkLoaded = await loadRazorpayScript();
-      if (!sdkLoaded) {
-        toast('error', 'Razorpay SDK failed to load. Are you online?');
-        setSubmittingOnline(false);
-        return;
-      }
-
-      const resOrder = await api.post('/payments/razorpay/order', {
-        amount: advanceAmt,
-        booking_id: bookingId
-      });
-
-      if (!resOrder.data.success) {
-        throw new Error(resOrder.data.error || 'Failed to create payment order');
-      }
-
-      const orderData = resOrder.data.data;
-
-      const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_123',
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: 'GK AutoHerb',
-        description: `Booking Advance Payment (Booking #${bookingId})`,
-        order_id: orderData.id,
-        prefill: {
-          name: useAuthStore.getState().user?.name || '',
-          email: useAuthStore.getState().user?.email || '',
-          contact: useAuthStore.getState().user?.mobile || ''
-        },
-        handler: async function (response: any) {
-          try {
-            await api.post('/payments/razorpay/verify', {
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature
-            });
-            toast('success', 'Payment successful! Your booking is now pending approval.');
-            setChoiceBookingData(null);
-            refetch();
-          } catch (err: any) {
-            console.error(err);
-            toast('error', err.response?.data?.error || 'Payment verification failed');
-          }
-        },
-        modal: {
-          ondismiss: function () {
-            toast('warning', 'Razorpay checkout dismissed.');
-          }
-        },
-        theme: { color: '#D32F2F' }
-      };
-
-      if (orderData.id.startsWith('order_mock_')) {
-        setSandboxModal({
-          isOpen: true,
-          orderId: orderData.id,
-          amount: advanceAmt,
-          itemName: 'Booking Advance Deposit',
-          handler: options.handler,
-          onDismiss: options.modal.ondismiss,
+      if (!(await loadRazorpay())) throw new Error('Payment gateway failed to load. Are you online?');
+      const resOrder = await api.post('/payments/razorpay/order', { amount, booking_id: bookingId });
+      if (!resOrder.data.success) throw new Error(resOrder.data.error || 'Could not start payment');
+      const order = resOrder.data.data;
+      const user = useAuthStore.getState().user;
+      const handler = async (response: any) => {
+        await api.post('/payments/razorpay/verify', {
+          razorpay_order_id: response.razorpay_order_id,
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_signature: response.razorpay_signature,
         });
+        toast('success', 'Payment successful! Your booking is awaiting confirmation.');
+        setPayFor(null);
+        refetch();
+      };
+      const onDismiss = () => toast('warning', 'Payment cancelled');
+      if (String(order.id).startsWith('order_mock_')) {
+        setSandboxModal({ isOpen: true, orderId: order.id, amount, itemName: 'Booking advance', handler, onDismiss });
         return;
       }
-
-      const rzp = new (window as any).Razorpay(options);
+      const rzp = new (window as any).Razorpay({
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_123',
+        amount: order.amount,
+        currency: order.currency,
+        name: 'GK AutoHerb',
+        description: `Booking advance (#${bookingId})`,
+        order_id: order.id,
+        prefill: { name: user?.name || '', email: user?.email || '', contact: user?.mobile || '' },
+        handler: (r: any) => handler(r).catch((e: any) => toast('error', e?.response?.data?.error || 'Payment verification failed')),
+        modal: { ondismiss: onDismiss },
+        theme: { color: '#D32F2F' },
+      });
       rzp.open();
     } catch (err: any) {
-      console.error('RAZORPAY ERROR:', err);
-      toast('error', err.message || 'An error occurred during Razorpay checkout.');
+      toast('error', err.message || 'Payment failed to start');
     } finally {
       setSubmittingOnline(false);
     }
   };
 
-  const bookings = data?.data || [];
-  const pagination = data?.pagination;
-  const services = servicesRes?.data || [];
-
-  const handleCancel = async (id: number) => {
-    if (!confirm('Are you sure you want to cancel this booking?')) return;
+  const openChangeServices = (b: any) => {
+    setChangeFor(b);
     try {
-      await cancelMut.mutateAsync(id);
-      toast('success', 'Booking cancelled');
-      refetch();
-    } catch (err: any) {
-      toast('error', err?.response?.data?.error || 'Failed to cancel');
+      const items = JSON.parse(b.cart_items_json || '[]');
+      setSelectedServiceIds(items.map((i: any) => i.id).filter(Boolean));
+    } catch {
+      setSelectedServiceIds(b.service_id ? [b.service_id] : []);
     }
   };
 
-  const handleUpdateServices = async () => {
-    if (selectedServiceIds.length === 0) {
-      toast('error', 'Select at least one service');
-      return;
-    }
+  const saveServices = async () => {
     try {
-      await changeServicesMut.mutateAsync({
-        id: changeTargetBooking.id,
-        service_ids: selectedServiceIds,
-      });
-      toast('success', 'Booking services updated');
-      setChangeTargetBooking(null);
+      await changeServicesMut.mutateAsync({ id: changeFor.id, service_ids: selectedServiceIds });
+      toast('success', 'Services updated');
+      setChangeFor(null);
       refetch();
     } catch (err: any) {
-      toast('error', err?.response?.data?.error || 'Failed to update services');
+      toast('error', err?.response?.data?.error || 'Could not update services');
     }
   };
+
+  const list = grouped[tab];
 
   return (
-    <>
-      <AdminTopBar
+    <div>
+      <AppPageHeader
         title="My Bookings"
-        subtitle="Your upcoming appointments"
-        actions={
-          <Button icon={<CalendarPlus size={16} />} onClick={() => navigate('/customer/bookings/new')}>
-            Book Service
-          </Button>
+        back={false}
+        right={
+          <button onClick={() => navigate('/customer/bookings/new')} className="app-btn h-10 px-3.5 bg-[#111] text-white text-[13px]">
+            <Plus size={16} /> Book
+          </button>
         }
       />
 
-      <div className="max-w-4xl">
-        {isError ? (
-          <ErrorState
-            message="Failed to load bookings. Please check your connection and try again."
-            onRetry={() => refetch()}
-          />
-        ) : isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 size={24} className="animate-spin text-[#D32F2F]" />
-          </div>
-        ) : !bookings.length ? (
-          <EmptyState
-            icon={Calendar}
-            title="No Bookings Yet"
-            description="You don't have any service appointments. Book one now!"
-            actionLabel="Book Now"
-            onAction={() => navigate('/customer/bookings/new')}
+      <div className="mt-2">
+        <SegmentedTabs<Tab>
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'upcoming', label: 'Upcoming', badge: grouped.upcoming.length ? <span className="text-[11px] opacity-70">{grouped.upcoming.length}</span> : undefined },
+            { value: 'past', label: 'Past' },
+            { value: 'cancelled', label: 'Cancelled' },
+          ]}
+        />
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {isLoading ? (
+          <>
+            <Skeleton className="h-40" />
+            <Skeleton className="h-40" />
+          </>
+        ) : list.length === 0 ? (
+          <EmptyBlock
+            icon={<CalendarDays size={26} />}
+            title={tab === 'upcoming' ? 'No upcoming bookings' : tab === 'past' ? 'No past visits yet' : 'Nothing cancelled'}
+            text={tab === 'upcoming' ? 'Book a wash or detailing slot in under a minute.' : undefined}
+            action={tab === 'upcoming' ? <button onClick={() => navigate('/customer/bookings/new')} className="app-btn-primary px-6">Book a service</button> : undefined}
           />
         ) : (
-          <>
-            <div className="grid gap-4">
-              {bookings.map((b: any, idx: number) => {
-                const dateObj = b.slot_date ? new Date(b.slot_date) : null;
-                const isPast = dateObj ? dateObj < new Date(new Date().toISOString().split('T')[0]) : false;
-
-                // Calculate if can change service (must be >= 24h away)
-                let canChange = false;
-                let hoursRemaining = 0;
-                if (dateObj && b.start_time && !isPast) {
-                  const slotDateStr = dateObj.toISOString().split('T')[0];
-                  const slotDateTime = new Date(`${slotDateStr}T${b.start_time}`);
-                  const now = new Date();
-                  const diffMs = slotDateTime.getTime() - now.getTime();
-                  hoursRemaining = diffMs / (1000 * 60 * 60);
-                  canChange = hoursRemaining >= 24;
-                }
-
-                return (
-                  <div
-                    key={b.id}
-                    onClick={() => {
-                      if (b.status === 'pending_payment') {
-                        setChoiceBookingData(b);
-                      }
-                    }}
-                    className={`bg-white p-6 rounded-xl border shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 group card-premium opacity-0 animate-fade-in-up transition-all ${
-                      b.status === 'cancelled' ? 'border-red-100 bg-red-50/20' : 
-                      b.status === 'pending_payment' ? 'border-amber-200 bg-amber-50/5 hover:border-amber-400 cursor-pointer hover:shadow-md' :
-                      'border-gray-100'
-                    }`}
-                    style={{ animationDelay: `${idx * 0.05}s`, animationFillMode: 'forwards' }}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-shadow ${
-                        b.status === 'cancelled'
-                          ? 'bg-gradient-to-br from-gray-50 to-gray-100 text-gray-400'
-                          : 'bg-gradient-to-br from-red-50 to-red-100 text-[#D32F2F] group-hover:shadow-glow-red'
-                      }`}>
-                        <Calendar size={24} />
-                      </div>
-                      <div>
-                        <h3 className={`font-bold text-lg transition-colors ${
-                          b.status === 'cancelled' ? 'text-gray-400 line-through' : 'text-[#1c1b1b] group-hover:text-[#D32F2F]'
-                        }`}>
-                          {b.service_name || b.package_name || 'Service Booking'}
-                        </h3>
-                        <div className="flex items-center gap-3 text-sm text-[#5f5e5e] mt-1 font-medium flex-wrap">
-                          {dateObj && (
-                            <span className="flex items-center gap-1">
-                              <Calendar size={14} />
-                              {dateObj.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                            </span>
-                          )}
-                          {b.start_time && (
-                            <span className="flex items-center gap-1">
-                              <Clock size={14} />
-                              {formatTime(b.start_time)} – {formatTime(b.end_time)}
-                            </span>
-                          )}
-                        </div>
-                        {(b.vehicle_brand || b.vehicle_model) && (
-                          <div className="flex items-center gap-1.5 text-xs text-[#5f5e5e] mt-1.5">
-                            <Car size={12} className="text-[#D32F2F]" />
-                            <span>{b.vehicle_brand} {b.vehicle_model} {b.vehicle_reg_no ? `(${b.vehicle_reg_no})` : ''}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between md:justify-end gap-3 w-full md:w-auto mt-4 md:mt-0 pt-4 md:pt-0 border-t md:border-0 border-gray-100">
-                      {b.pickup_status && (
-                        <span className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider border ${
-                          b.pickup_status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                          b.pickup_status === 'assigned' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                          b.pickup_status === 'picked_up' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                          'bg-gray-50 text-gray-700 border-gray-200'
-                        }`}>
-                          📍 Pickup: {b.pickup_status === 'picked_up' ? 'Picked Up' : b.pickup_status}
-                        </span>
-                      )}
-                      {b.status === 'pending_payment' ? (
-                        <div className="flex items-center gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                          {b.expires_at && (
-                            <BookingCountdown expiresAt={b.expires_at} onExpire={refetch} />
-                          )}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setChoiceBookingData(b);
-                            }}
-                            className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-extrabold rounded-lg text-xs shadow-md shadow-amber-500/10 transition-all flex items-center gap-1 shrink-0"
-                          >
-                            Pay Now
-                          </button>
-                        </div>
-                      ) : (
-                        <span className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider border ${
-                          b.status === 'confirmed' ? 'bg-green-50 text-green-700 border-green-200' :
-                          b.status === 'completed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                          b.status === 'pending_approval' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                          'bg-red-50 text-red-700 border-red-200'
-                        }`}>
-                          {b.status === 'pending_approval' ? 'Pending Approval' : b.status}
-                        </span>
-                      )}
-                      {['confirmed', 'pending_approval'].includes(b.status) && canChange && (
-                        <button
-                          onClick={() => setChangeTargetBooking(b)}
-                          className="px-3 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 font-bold rounded-lg text-xs hover:bg-blue-100 transition-all"
-                        >
-                          Change Service
-                        </button>
-                      )}
-                      {b.status === 'confirmed' && !isPast && (
-                        <button
-                          onClick={() => handleCancel(b.id)}
-                          className="text-red-500 hover:text-red-700 transition p-2 rounded-full hover:bg-red-50 text-xs font-bold"
-                          title="Cancel Booking"
-                        >
-                          <X size={18} />
-                        </button>
-                      )}
-                    </div>
+          list.map((b) => {
+            const start = bookingStart(b);
+            const hoursAway = (start.getTime() - Date.now()) / 36e5;
+            const canChangeServices = tab === 'upcoming' && hoursAway >= 24 && b.status !== 'pending_payment';
+            return (
+              <div key={b.id} className="app-card p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-display font-extrabold text-slate-900 leading-tight">
+                      {b.service_name || b.package_service_name || b.package_name || 'Car care service'}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">Booking #{b.id}{b.reschedule_count > 0 ? ` · rescheduled ${b.reschedule_count}×` : ''}</p>
                   </div>
-                );
-              })}
-            </div>
+                  <StatusPill status={b.status} />
+                </div>
 
-            {/* Pagination */}
-            {pagination && pagination.total > pagination.limit && (
-              <div className="flex items-center justify-center gap-2 mt-6">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={page <= 1}
-                  onClick={() => setPage(page - 1)}
-                >
-                  Previous
-                </Button>
-                <span className="text-xs text-[#5f5e5e] font-medium">
-                  Page {page} of {Math.ceil(pagination.total / pagination.limit)}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={page >= Math.ceil(pagination.total / pagination.limit)}
-                  onClick={() => setPage(page + 1)}
-                >
-                  Next
-                </Button>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-[13px]">
+                  <span className="flex items-center gap-1.5 text-slate-700"><CalendarDays size={15} className="text-[#D32F2F]" />{start.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+                  <span className="flex items-center gap-1.5 text-slate-700"><Clock size={15} className="text-[#D32F2F]" />{formatTime(b.start_time)}</span>
+                  <span className="flex items-center gap-1.5 text-slate-700 col-span-2 truncate"><Car size={15} className="text-[#D32F2F]" />{[b.vehicle_brand, b.vehicle_model].filter(Boolean).join(' ')}{b.vehicle_reg_no ? ` · ${b.vehicle_reg_no}` : ''}</span>
+                  {Number(b.total_amount) > 0 && (
+                    <span className="flex items-center gap-1.5 text-slate-700 col-span-2"><IndianRupee size={15} className="text-[#D32F2F]" />{formatPrice(Number(b.total_amount))}{Number(b.advance_amount) > 0 ? ` · advance ₹${Number(b.advance_amount)}` : ''}</span>
+                  )}
+                </div>
+
+                {b.status === 'pending_payment' && (
+                  <div className="mt-3 rounded-xl bg-orange-50/70 p-3 flex items-center justify-between gap-2">
+                    {b.expires_at ? <PayCountdown expiresAt={b.expires_at} onExpire={() => refetch()} /> : <span className="text-xs font-semibold text-orange-700">Advance pending</span>}
+                    <button onClick={() => setPayFor(b)} className="app-btn h-9 px-3 bg-[#D32F2F] text-white text-xs">Pay ₹{Number(b.advance_amount)}</button>
+                  </div>
+                )}
+
+                {tab === 'upcoming' && b.customer_confirmation === 'pending' && (
+                  <button
+                    onClick={async () => { await confirmAttendance.mutateAsync(b.id); toast('success', "Thanks! We'll be ready for you."); }}
+                    className="mt-3 w-full rounded-xl bg-emerald-50 text-emerald-700 font-bold text-sm h-10 flex items-center justify-center gap-1.5"
+                  >
+                    <CheckCircle2 size={16} /> Yes, I'll be there
+                  </button>
+                )}
+
+                {b.cancel_reason && tab === 'cancelled' && (
+                  <p className="mt-3 text-xs text-slate-500">Reason: {b.cancel_reason}</p>
+                )}
+
+                {tab === 'upcoming' && (
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      disabled={!b.can_reschedule}
+                      onClick={() => setRescheduleFor(b)}
+                      className="app-btn h-10 bg-slate-100 text-slate-800"
+                    >
+                      <RotateCcw size={15} /> Reschedule
+                    </button>
+                    <button
+                      disabled={!b.can_cancel}
+                      onClick={() => setCancelFor(b)}
+                      className="app-btn h-10 bg-white border border-slate-200 text-red-600"
+                    >
+                      Cancel
+                    </button>
+                    {canChangeServices && (
+                      <button onClick={() => openChangeServices(b)} className="col-span-2 app-btn h-9 text-[13px] text-slate-600">
+                        <Pencil size={14} /> Change services
+                      </button>
+                    )}
+                    {(!b.can_cancel || !b.can_reschedule) && b.action_block_reason && (
+                      <p className="col-span-2 text-[11px] text-slate-400 text-center">{b.action_block_reason}</p>
+                    )}
+                  </div>
+                )}
+
+                {tab !== 'upcoming' && (
+                  <button
+                    onClick={() => navigate(`/customer/bookings/new${b.service_id ? `?service_id=${b.service_id}` : ''}`)}
+                    className="mt-3 w-full app-btn h-10 bg-slate-100 text-slate-800"
+                  >
+                    Book again
+                  </button>
+                )}
               </div>
-            )}
-          </>
+            );
+          })
         )}
       </div>
 
-      {/* Service Update Modal */}
-      {changeTargetBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setChangeTargetBooking(null)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in-up">
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#D32F2F] to-[#af101a] flex items-center justify-center text-white">
-                  <Sparkles size={16} />
-                </div>
-                <h3 className="font-bold text-[#1c1b1b]">Change Booking Services</h3>
-              </div>
-              <button onClick={() => setChangeTargetBooking(null)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors">
-                <X size={16} />
-              </button>
-            </div>
+      <CancelBookingSheet booking={cancelFor} onClose={() => setCancelFor(null)} onDone={() => refetch()} />
+      <RescheduleSheet booking={rescheduleFor} onClose={() => setRescheduleFor(null)} onDone={() => refetch()} />
 
-            {/* Body */}
-            <div className="p-6 max-h-[60vh] overflow-y-auto space-y-3">
-              <p className="text-xs text-[#5f5e5e] font-medium mb-4">
-                Choose the services you would like to swap for Booking #{changeTargetBooking.id}.
-              </p>
-              {services.map((s: any) => {
-                const isChecked = selectedServiceIds.includes(s.id);
-                return (
-                  <label
-                    key={s.id}
-                    className={`flex items-center justify-between p-3.5 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
-                      isChecked
-                        ? 'border-[#D32F2F] bg-red-50/5'
-                        : 'border-gray-100 hover:border-gray-200 bg-white'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => {
-                          if (isChecked) {
-                            setSelectedServiceIds(selectedServiceIds.filter(id => id !== s.id));
-                          } else {
-                            setSelectedServiceIds([...selectedServiceIds, s.id]);
-                          }
-                        }}
-                        className="mt-1 accent-[#D32F2F] h-4 w-4 rounded text-[#D32F2F] border-gray-300 focus:ring-[#D32F2F]"
-                      />
-                      <div>
-                        <div className="font-bold text-[#1c1b1b] text-sm">{s.name}</div>
-                        <div className="text-xs text-[#5f5e5e] mt-0.5">{s.duration_minutes} min</div>
-                      </div>
-                    </div>
-                    <div className="font-black text-sm text-[#1c1b1b]">
-                      ₹{s.price_sedan || s.price_hatchback || s.price_suv}
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-
-            {/* Footer */}
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
-              <Button variant="ghost" onClick={() => setChangeTargetBooking(null)}>
-                Cancel
-              </Button>
-              <Button
-                loading={changeServicesMut.isPending}
-                onClick={handleUpdateServices}
-                disabled={selectedServiceIds.length === 0}
+      {/* Change services (≥ 24h before the slot) */}
+      <BottomSheet
+        open={!!changeFor}
+        onClose={() => setChangeFor(null)}
+        title="Change services"
+        footer={
+          <button onClick={saveServices} disabled={!selectedServiceIds.length || changeServicesMut.isPending} className="app-btn-primary w-full">
+            {changeServicesMut.isPending && <Loader2 size={16} className="animate-spin" />} Update services
+          </button>
+        }
+      >
+        <div className="space-y-2">
+          {services.filter((s) => s.vehicle_type !== 'bike').map((s) => {
+            const on = selectedServiceIds.includes(s.id);
+            return (
+              <button
+                key={s.id}
+                onClick={() => setSelectedServiceIds((p) => (on ? p.filter((x) => x !== s.id) : [...p, s.id]))}
+                className={`w-full flex items-center gap-3 rounded-2xl border p-2.5 text-left ${on ? 'border-[#D32F2F] bg-red-50/40' : 'border-slate-200'}`}
               >
-                Update Services
-              </Button>
-            </div>
-          </div>
+                <ServiceImage service={s} className="h-12 w-16 rounded-lg" />
+                <span className="flex-1 min-w-0">
+                  <span className="block font-display font-bold text-sm text-slate-900 truncate">{s.name}</span>
+                  <span className="block text-xs font-bold text-[#C62828]">{formatPrice(priceForSegment(s, changeFor?.vehicle_category || 'sedan'))}</span>
+                </span>
+                <span className={`h-5 w-5 rounded-md border-2 ${on ? 'bg-[#D32F2F] border-[#D32F2F]' : 'border-slate-300'}`} />
+              </button>
+            );
+          })}
         </div>
-      )}
+      </BottomSheet>
 
-      {showQrModal && (
-        <QrPaymentModal
-          open={showQrModal}
-          onClose={() => {
-            setShowQrModal(false);
-            toast('warning', 'Payment cancelled. Your booking slot is reserved for 10 minutes.');
-          }}
-          amount={qrAmount}
-          bookingId={activeBookingId || undefined}
-          onSuccess={() => {
-            setShowQrModal(false);
-            toast('success', 'Your QR Payment confirmation request has been submitted for admin verification.');
-            refetch();
-          }}
-        />
-      )}
-
-      {choiceBookingData && (
-        <Modal 
-          open={!!choiceBookingData} 
-          onClose={() => setChoiceBookingData(null)} 
-          title="Choose Advance Payment Method"
-          size="sm"
-        >
-          <div className="flex flex-col gap-3 py-2 text-center">
-            <p className="text-sm text-gray-600 mb-2">
-              An advance payment of <span className="font-extrabold text-[#D32F2F]">₹{choiceBookingData.advance_amount}</span> is required to reserve your slot.
-            </p>
-            <button
-              onClick={() => handlePayOnline(choiceBookingData.id, choiceBookingData.advance_amount)}
-              className="w-full py-3 px-4 bg-[#D32F2F] text-white rounded-xl font-extrabold text-sm hover:bg-[#b71c1c] shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
-            >
-              <CreditCard size={16} />
-              Pay Online (Razorpay)
+      {/* Advance payment choice */}
+      <BottomSheet open={!!payFor} onClose={() => setPayFor(null)} title="Pay advance">
+        {payFor && (
+          <div className="space-y-3 pb-2">
+            <p className="text-sm text-slate-600">Pay <b className="text-[#C62828]">₹{Number(payFor.advance_amount)}</b> to lock your slot.</p>
+            <button disabled={submittingOnline} onClick={() => payOnline(payFor.id, Number(payFor.advance_amount))} className="app-btn-primary w-full">
+              {submittingOnline ? <Loader2 size={16} className="animate-spin" /> : <CreditCard size={17} />} Pay online (UPI / Card)
             </button>
             <button
-              onClick={() => {
-                setQrAmount(choiceBookingData.advance_amount);
-                setActiveBookingId(choiceBookingData.id);
-                setShowQrModal(true);
-                setChoiceBookingData(null);
-              }}
-              className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-extrabold text-sm hover:from-emerald-700 hover:to-teal-700 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+              onClick={() => { setQr({ amount: Number(payFor.advance_amount), bookingId: payFor.id }); setPayFor(null); }}
+              className="app-btn-outline w-full"
             >
-              <QrCode size={16} />
-              Scan & Pay (UPI QR)
-            </button>
-            <button
-              onClick={() => setChoiceBookingData(null)}
-              className="w-full py-2.5 bg-gray-100 text-gray-700 rounded-xl font-semibold text-sm hover:bg-gray-200 transition-all"
-            >
-              Cancel
+              <QrCode size={17} /> Scan & pay with UPI QR
             </button>
           </div>
-        </Modal>
+        )}
+      </BottomSheet>
+
+      {qr && (
+        <QrPaymentModal
+          open={!!qr}
+          onClose={() => { setQr(null); toast('warning', 'Payment not completed — your slot is held for 10 minutes.'); }}
+          amount={qr.amount}
+          bookingId={qr.bookingId}
+          onSuccess={() => { setQr(null); toast('success', 'Payment submitted for verification.'); refetch(); }}
+        />
       )}
 
       <PaymentSandboxModal
         isOpen={!!sandboxModal?.isOpen}
         orderId={sandboxModal?.orderId || ''}
         amount={sandboxModal?.amount || 0}
-        itemName={sandboxModal?.itemName || 'Booking Advance Deposit'}
+        itemName={sandboxModal?.itemName || 'Booking advance'}
         isLoading={!!sandboxModal?.loading}
         onSimulateSuccess={async () => {
           if (!sandboxModal) return;
           try {
-            setSandboxModal(prev => prev ? { ...prev, loading: true } : null);
-            await sandboxModal.handler({
-              razorpay_order_id: sandboxModal.orderId,
-              razorpay_payment_id: 'pay_mock_' + Date.now(),
-              razorpay_signature: 'sig_mock_' + Date.now(),
-            });
+            setSandboxModal((p) => (p ? { ...p, loading: true } : null));
+            await sandboxModal.handler({ razorpay_order_id: sandboxModal.orderId, razorpay_payment_id: 'pay_mock_' + Date.now(), razorpay_signature: 'sig_mock_' + Date.now() });
             setSandboxModal(null);
-          } catch (e: any) {
-            setSandboxModal(prev => prev ? { ...prev, loading: false } : null);
+          } catch {
+            setSandboxModal((p) => (p ? { ...p, loading: false } : null));
           }
         }}
-        onSimulateFailure={() => {
-          if (sandboxModal) {
-            sandboxModal.onDismiss();
-            setSandboxModal(null);
-          }
-        }}
-        onClose={() => {
-          if (sandboxModal) {
-            sandboxModal.onDismiss();
-            setSandboxModal(null);
-          }
-        }}
+        onSimulateFailure={() => { sandboxModal?.onDismiss(); setSandboxModal(null); }}
+        onClose={() => { sandboxModal?.onDismiss(); setSandboxModal(null); }}
       />
-    </>
+    </div>
   );
 }

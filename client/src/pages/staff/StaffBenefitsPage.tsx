@@ -1,82 +1,64 @@
-import { IndianRupee, History, TrendingUp } from 'lucide-react';
-import AdminTopBar from '../../components/layout/AdminTopBar';
-import EmptyState from '../../components/shared/EmptyState';
+import { IndianRupee, Wallet, CheckCircle2, Clock } from 'lucide-react';
 import ErrorState from '../../components/shared/ErrorState';
-import { SkeletonCard } from '../../components/ui/SkeletonLoader';
 import { useMyPayments } from '../../api/hooks/useStaff';
 import { formatDate } from '../../utils/formatters';
+import { OpsPageTitle, StatTile, SectionTitle, EmptyBlock, Skeleton } from '../../components/ops/ui';
 
 export default function StaffBenefitsPage() {
   const { data, isLoading, isError, refetch } = useMyPayments();
   const benefits = data?.data || [];
 
   const pendingAmount = benefits.filter((b: any) => b.status === 'pending').reduce((sum: number, b: any) => sum + Number(b.amount), 0);
+  const paidAmount = benefits.filter((b: any) => b.status === 'paid').reduce((sum: number, b: any) => sum + Number(b.amount), 0);
 
   return (
-    <>
-      <AdminTopBar title="My Benefits & Incentives" subtitle="Track your bonuses and compensation" />
+    <div className="space-y-5">
+      <OpsPageTitle kicker="Earnings" title="My benefits" subtitle="Bonuses, incentives and payouts" />
 
       {isError ? (
-        <div className="pt-4">
-          <ErrorState
-            message="Failed to load benefits history. Please check your connection and try again."
-            onRetry={() => refetch()}
-          />
-        </div>
+        <ErrorState message="Failed to load benefits history. Please check your connection and try again." onRetry={() => refetch()} />
       ) : isLoading ? (
-        <div className="space-y-4">
-          <SkeletonCard />
-          <SkeletonCard />
-        </div>
+        <div className="space-y-3"><Skeleton className="h-32" /><Skeleton className="h-48" /></div>
       ) : (
         <>
-          {/* Premium pending card */}
-          <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-2xs mb-4 flex items-center gap-3.5 card-premium relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-green-500 via-green-400 to-green-500/20" />
-            <div className="w-9 h-9 bg-gradient-to-br from-green-100 to-green-50 text-green-600 rounded-lg flex items-center justify-center shrink-0">
-              <IndianRupee size={18} />
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-0.5 flex items-center gap-1">
-                <TrendingUp size={12} /> Pending Clearance
-              </p>
-              <h2 className="text-xl sm:text-[22px] font-semibold text-[#1c1b1b] tracking-tight">₹{pendingAmount.toLocaleString('en-IN')}</h2>
-            </div>
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#e53935] to-[#8e0000] p-5 text-white shadow-app">
+            <div className="absolute -right-8 -bottom-10 h-36 w-36 rounded-full bg-white/10" />
+            <p className="text-[12px] font-semibold text-white/75 flex items-center gap-1.5"><Wallet size={14} /> Pending clearance</p>
+            <p className="font-display text-[34px] font-extrabold leading-tight mt-1">₹{pendingAmount.toLocaleString('en-IN')}</p>
+            <p className="text-[12px] text-white/75 mt-1">Will be paid with your next payout</p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-2xs border border-gray-100 overflow-hidden">
-             <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/50 flex items-center gap-2">
-               <History size={16} className="text-[#D32F2F]"/>
-               <h2 className="text-sm font-semibold text-[#1c1b1b]">Payout History</h2>
-             </div>
-             
-             {!benefits.length ? (
-               <EmptyState icon={IndianRupee} title="No Payments Yet" description="No payments recorded yet. Your incentives will appear here." />
-             ) : (
-               <div className="divide-y divide-gray-50">
-                 {benefits.map((b: any, idx: number) => (
-                   <div
-                     key={b.id}
-                     className="p-3.5 flex items-center justify-between hover:bg-[#faf7f5] transition-colors opacity-0 animate-fade-in-up"
-                     style={{ animationDelay: `${idx * 0.05}s`, animationFillMode: 'forwards' }}
-                   >
-                     <div>
-                       <h4 className="text-sm font-medium text-[#1c1b1b]">{b.purpose}</h4>
-                       <p className="text-xs text-gray-500 mt-0.5">{formatDate(b.payment_date || b.created_at)}</p>
-                     </div>
-                     <div className="text-right">
-                       <p className="font-semibold text-sm text-[#1c1b1b]">₹{Number(b.amount).toLocaleString('en-IN')}</p>
-                       <span className={`text-[10px] uppercase font-semibold tracking-wider px-2 py-0.5 rounded-md border ${b.status === 'paid' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
-                         {b.status}
-                       </span>
-                     </div>
-                   </div>
-                 ))}
-               </div>
-             )}
+          <div className="grid grid-cols-2 gap-2.5">
+            <StatTile label="Paid so far" value={`₹${paidAmount.toLocaleString('en-IN')}`} icon={CheckCircle2} tone="green" />
+            <StatTile label="Entries" value={benefits.length} icon={Clock} tone="slate" />
           </div>
+
+          <section>
+            <SectionTitle>Payout history</SectionTitle>
+            {!benefits.length ? (
+              <EmptyBlock icon={<IndianRupee size={26} />} title="No payments yet" text="Your incentives will appear here." />
+            ) : (
+              <div className="app-card divide-y divide-slate-100">
+                {benefits.map((b: any) => (
+                  <div key={b.id} className="flex items-center gap-3 p-3.5">
+                    <span className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${b.status === 'paid' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                      <IndianRupee size={18} />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-display font-bold text-[14px] text-slate-900 truncate">{b.purpose}</p>
+                      <p className="text-[12px] text-slate-500">{formatDate(b.payment_date || b.created_at)}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="font-display font-extrabold text-[15px] text-slate-900">₹{Number(b.amount).toLocaleString('en-IN')}</p>
+                      <span className={`text-[11px] font-bold capitalize ${b.status === 'paid' ? 'text-emerald-600' : 'text-amber-600'}`}>{b.status}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
         </>
       )}
-    </>
+    </div>
   );
 }

@@ -156,9 +156,10 @@ exports.register = async (req, res) => {
       const [existingVehicles] = await conn.query('SELECT id FROM vehicles WHERE customer_id = ?', [userId]);
       if (existingVehicles.length === 0) {
         await conn.query(
-          `INSERT INTO vehicles (customer_id, brand, model, registration_no, is_primary)
-           VALUES (?, ?, ?, ?, 1)`,
-          [userId, car_brand.trim(), car_model.trim(), car_reg_no?.toUpperCase().trim() || null]
+          `INSERT INTO vehicles (customer_id, brand, model, registration_no, is_primary, category)
+           VALUES (?, ?, ?, ?, 1, ?)`,
+          [userId, car_brand.trim(), car_model.trim(), car_reg_no?.toUpperCase().trim() || null,
+           require('../utils/vehicleCategory').detectVehicleCategory(car_brand, car_model)]
         );
         console.log(`Car saved for user ${userId}: ${car_brand} ${car_model}`);
       }
@@ -279,7 +280,7 @@ exports.login = async (req, res) => {
 exports.getMe = async (req, res) => {
   try {
     const [users] = await pool.query(
-      'SELECT id, name, mobile, email, role, is_active, created_at, opt_out_promotional, custom_role_id, base_salary FROM users WHERE id = ?',
+      'SELECT id, name, mobile, email, role, is_active, created_at, opt_out_promotional, custom_role_id, base_salary, gender, date_of_birth, anniversary_date, profile_photo_url FROM users WHERE id = ?',
       [req.user.id]
     );
 
@@ -313,9 +314,22 @@ exports.getMe = async (req, res) => {
       permissions = rolePerms.map(p => p.permission_key);
     }
 
+    let profileStatus = {};
+    if (user.role === 'customer') {
+      const profile = await require('./customerProfileController').buildProfile(user.id).catch(() => null);
+      if (profile) {
+        profileStatus = {
+          profile_complete: profile.profile_complete,
+          missing_fields: profile.missing_fields,
+          date_of_birth: profile.date_of_birth,
+          anniversary_date: profile.anniversary_date,
+        };
+      }
+    }
+
     res.json({
       success: true,
-      data: { ...user, loyalty, permissions },
+      data: { ...user, ...profileStatus, loyalty, permissions },
     });
   } catch (err) {
     console.error('GetMe error:', err);

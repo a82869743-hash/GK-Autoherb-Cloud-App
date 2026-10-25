@@ -32,45 +32,45 @@ export default function AdminFilterBar({
   children,
 }: AdminFilterBarProps) {
   return (
-    <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
-      {/* Search Input */}
-      <div className="relative flex-1 min-w-[220px]">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+    <div className="space-y-3 md:space-y-0 md:flex md:items-center md:gap-3">
+      {/* Search */}
+      <div className="relative flex-1 md:min-w-[220px]">
+        <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
         <input
           type="text"
           placeholder={searchPlaceholder}
           value={searchValue}
-          onChange={e => onSearchChange(e.target.value)}
-          className="w-full h-9 pl-9 pr-3 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:ring-1 focus:ring-red-500/20 focus:border-[#D32F2F] text-slate-800 placeholder-slate-400 transition-all"
+          onChange={(e) => onSearchChange(e.target.value)}
+          className="app-input pl-10 bg-slate-50 focus:bg-white"
         />
       </div>
 
-      {/* Filter Dropdowns */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {statusOptions && onStatusChange && (
-          <select
-            value={statusValue}
-            onChange={e => onStatusChange(e.target.value)}
-            className="h-9 px-3 text-xs font-semibold border border-slate-200 rounded-lg bg-slate-50 text-slate-700 outline-none hover:bg-slate-100 transition-all cursor-pointer"
-          >
-            {statusOptions.map(opt => (
-              <option key={opt.value} value={opt.value}>
+      {/* Status as chips (customer-app style), sort as a compact select */}
+      <div className="-mx-4 px-4 md:mx-0 md:px-0 flex items-center gap-2 overflow-x-auto no-scrollbar">
+        {statusOptions && onStatusChange &&
+          (statusOptions.length <= 7 ? (
+            statusOptions.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => onStatusChange(opt.value)}
+                className={`app-chip shrink-0 ${statusValue === opt.value ? 'app-chip-on' : 'app-chip-off'}`}
+              >
                 {opt.label}
-              </option>
-            ))}
-          </select>
-        )}
+              </button>
+            ))
+          ) : (
+            <select value={statusValue} onChange={(e) => onStatusChange(e.target.value)} className="app-chip app-chip-off shrink-0 pr-8 cursor-pointer outline-none">
+              {statusOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          ))}
 
         {sortOptions && onSortChange && (
-          <select
-            value={sortValue}
-            onChange={e => onSortChange(e.target.value)}
-            className="h-9 px-3 text-xs font-semibold border border-slate-200 rounded-lg bg-slate-50 text-slate-700 outline-none hover:bg-slate-100 transition-all cursor-pointer"
-          >
-            {sortOptions.map(opt => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
+          <select value={sortValue} onChange={(e) => onSortChange(e.target.value)} className="app-chip app-chip-off shrink-0 pr-8 cursor-pointer outline-none" aria-label="Sort">
+            {sortOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
         )}

@@ -30,6 +30,7 @@ const CAR_TYPE_MAP: Record<string, string> = {
   sedan: 'SEDAN_SUV',
   premium_sedan: 'PREMIUM_SEDAN',
   suv: 'SEDAN_SUV',
+  luxury: 'LARGE_CAR',
 };
 
 interface PkgService {
@@ -561,18 +562,12 @@ export default function BuyPackagesPage() {
           </div>
 
           <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-            <label className="block text-sm font-bold text-gray-700 mb-2">Vehicle Type Filter</label>
-            <select
-              className="w-full bg-gray-50 border border-gray-200 focus:border-purple-500 focus:ring-0 rounded-lg py-2 px-3 text-gray-900 font-medium transition-colors"
-              value={filterCarType}
-              onChange={(e) => setFilterCarType(e.target.value)}
-            >
-              <option value="SMALL_HATCHBACK">Small Hatchback</option>
-              <option value="MEDIUM_HATCHBACK">Medium Hatchback</option>
-              <option value="SEDAN_SUV">Sedan / SUV</option>
-              <option value="PREMIUM_SEDAN">Premium Sedan</option>
-              <option value="LARGE_CAR">Large Car</option>
-            </select>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-gray-500">Prices shown for your car type</span>
+              <span className="text-sm font-bold text-gray-900">
+                {({ SMALL_HATCHBACK: 'Hatchback', MEDIUM_HATCHBACK: 'Premium hatchback', SEDAN_SUV: 'Sedan / SUV', PREMIUM_SEDAN: 'Premium sedan', LARGE_CAR: 'Large / luxury car' } as Record<string, string>)[filterCarType] || filterCarType}
+              </span>
+            </div>
 
             {/* Basic / Premium Toggle */}
             <div className="flex items-center justify-center gap-3 mt-4 pt-3 border-t border-gray-100">

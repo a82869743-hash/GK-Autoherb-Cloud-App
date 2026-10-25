@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { setSetting } = require('../utils/settingsStore');
 
 // ─── GET ALL SETTINGS ─────────────────────
 exports.getAll = async (req, res) => {
@@ -65,11 +66,7 @@ exports.updateAll = async (req, res) => {
     await conn.beginTransaction();
 
     for (const [key, value] of Object.entries(updates)) {
-      // Use standard INSERT ... ON DUPLICATE KEY UPDATE but safe
-      await conn.query(
-        'INSERT INTO settings (key_name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = ?',
-        [key, value !== null ? String(value) : '', value !== null ? String(value) : '']
-      );
+      await setSetting(key, value, conn);
     }
 
     await conn.commit();

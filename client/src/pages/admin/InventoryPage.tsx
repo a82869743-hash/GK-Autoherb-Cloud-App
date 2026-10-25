@@ -459,10 +459,12 @@ export default function InventoryPage() {
   
   // Filter items based on statusFilter, categoryFilter, brandFilter
   const filteredItems = allItems.filter((item: any) => {
-    if (statusFilter === 'low') return item.is_low_stock && parseFloat(item.quantity) > 0;
-    if (statusFilter === 'out') return parseFloat(item.quantity) === 0;
-    if (statusFilter === 'ok') return !item.is_low_stock && parseFloat(item.quantity) > 0;
-    
+    // Status, category and brand filters combine (status used to short-circuit the others)
+    const qty = parseFloat(item.quantity);
+    if (statusFilter === 'low' && !(item.is_low_stock && qty > 0)) return false;
+    if (statusFilter === 'out' && qty !== 0) return false;
+    if (statusFilter === 'ok' && !(!item.is_low_stock && qty > 0)) return false;
+
     if (categoryFilter && item.category !== categoryFilter) return false;
     if (brandFilter && !String(item.brand || '').toLowerCase().includes(brandFilter.toLowerCase())) return false;
     

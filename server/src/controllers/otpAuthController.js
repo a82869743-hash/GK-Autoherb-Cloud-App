@@ -93,7 +93,23 @@ exports.sendOtp = async (req, res) => {
       content: smsMessage
     });
 
-    console.log(`[SMS OTP] Verification code for ${cleanMobile}: [${rawOtp}] (Sent: ${smsRes.success})`);
+    // Also over WhatsApp when the Cloud API + an approved authentication template are set up
+    let waRes = { success: false };
+    try {
+      const tpl = await messagingService.getTemplate('OTP_VERIFICATION');
+      if (tpl?.provider_template_name) {
+        waRes = await require('../services/whatsappProvider').sendAuthOtp(cleanMobile, tpl.provider_template_name, tpl.provider_language, rawOtp);
+      }
+    } catch (waErr) {
+      console.warn('[WA OTP] failed:', waErr.message);
+    }
+
+    // Never write live OTP codes into production logs
+    if (isProd) {
+      console.log(`[OTP] Code sent to ******${cleanMobile.slice(-4)} (SMS: ${smsRes.success}, WhatsApp: ${waRes.success})`);
+    } else {
+      console.log(`[DEV OTP] Verification code for ${cleanMobile}: [${rawOtp}] (SMS: ${smsRes.success}, WhatsApp: ${waRes.success})`);
+    }
 
     // In dev / test mode only, we include rawOtp in debug log
     const responsePayload = {
@@ -226,10 +242,11 @@ exports.verifyOtp = async (req, res) => {
       if (vehicle_number || (vehicle_brand && vehicle_model)) {
         const cleanReg = vehicle_number ? vehicle_number.toUpperCase().replace(/\s/g, '') : `NEW-${newUserId}`;
         await conn.query(
-          `INSERT INTO vehicles (customer_id, brand, model, registration_no, is_primary)
-           VALUES (?, ?, ?, ?, 1)
+          `INSERT INTO vehicles (customer_id, brand, model, registration_no, is_primary, category)
+           VALUES (?, ?, ?, ?, 1, ?)
            ON DUPLICATE KEY UPDATE is_primary = 1`,
-          [newUserId, vehicle_brand || 'Generic', vehicle_model || 'Vehicle', cleanReg]
+          [newUserId, vehicle_brand || 'Generic', vehicle_model || 'Vehicle', cleanReg,
+           require('../utils/vehicleCategory').detectVehicleCategory(vehicle_brand, vehicle_model)]
         );
       }
 
@@ -253,6 +270,7 @@ exports.verifyOtp = async (req, res) => {
 
     // 4. Issue JWT Auth Token matching existing auth response shape
     const token = generateAuthToken(userRecord);
+    const profile = await require('./customerProfileController').buildProfile(userRecord.id).catch(() => null);
 
     res.json({
       success: true,
@@ -265,7 +283,8 @@ exports.verifyOtp = async (req, res) => {
           custom_role_id: userRecord.custom_role_id || null,
         },
         token,
-        is_new_customer: isNewCustomer
+        is_new_customer: isNewCustomer,
+        profile_complete: profile ? profile.profile_complete : false,
       }
     });
 

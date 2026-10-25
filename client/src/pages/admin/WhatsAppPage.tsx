@@ -11,9 +11,11 @@ import {
 import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
 import AdminMetricCard from '../../components/admin/AdminMetricCard';
 import { PageTransition, AnimatedModal } from '../../components/ui/Animations';
+import WhatsAppInboxPanel from '../../components/admin/WhatsAppInboxPanel';
+import { Inbox } from 'lucide-react';
 
 export default function WhatsAppPage() {
-  const [activeTab, setActiveTab] = useState<'logs' | 'templates'>('logs');
+  const [activeTab, setActiveTab] = useState<'inbox' | 'logs' | 'templates'>('inbox');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [showSendModal, setShowSendModal] = useState(false);
@@ -22,6 +24,7 @@ export default function WhatsAppPage() {
   // Template edit / test states
   const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
   const [templateBody, setTemplateBody] = useState('');
+  const [providerTemplate, setProviderTemplate] = useState('');
   const [testModal, setTestModal] = useState<any | null>(null);
   const [testPhone, setTestPhone] = useState('919408424541');
 
@@ -44,7 +47,7 @@ export default function WhatsAppPage() {
 
   const handleSaveTemplate = () => {
     if (!editingTemplate) return;
-    updateTemplate.mutate({ id: editingTemplate.id, body: templateBody }, {
+    updateTemplate.mutate({ id: editingTemplate.id, body: templateBody, provider_template_name: providerTemplate }, {
       onSuccess: () => setEditingTemplate(null)
     });
   };
@@ -146,7 +149,18 @@ export default function WhatsAppPage() {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex items-center gap-2 border-b border-slate-200/80 pb-3">
+      <div className="flex items-center gap-2 border-b border-slate-200/80 pb-3 overflow-x-auto">
+        <button
+          onClick={() => setActiveTab('inbox')}
+          className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'inbox'
+              ? 'bg-slate-900 text-white shadow-sm'
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <Inbox size={14} />
+          <span>Inbox & Auto-bot</span>
+        </button>
         <button
           onClick={() => setActiveTab('logs')}
           className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center gap-2 ${
@@ -171,7 +185,9 @@ export default function WhatsAppPage() {
         </button>
       </div>
 
-      {activeTab === 'logs' ? (
+      {activeTab === 'inbox' ? (
+        <WhatsAppInboxPanel />
+      ) : activeTab === 'logs' ? (
         <>
           {/* Filter and Search Bar */}
           <div className="bg-white rounded-3xl border border-slate-100 p-4 sm:p-5 shadow-sm flex flex-wrap items-center gap-3">
@@ -396,7 +412,8 @@ export default function WhatsAppPage() {
                       type="button"
                       onClick={() => {
                         setEditingTemplate(t);
-                        setTemplateBody(t.body);
+                        setTemplateBody(t.message_body || t.body || '');
+                        setProviderTemplate(t.provider_template_name || '');
                       }}
                       className="px-3 py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all"
                     >
@@ -482,7 +499,7 @@ export default function WhatsAppPage() {
             </div>
             <div>
               <h3 className="text-base font-extrabold text-slate-900">
-                Edit Template: {editingTemplate?.name}
+                Edit Template: {editingTemplate?.name || editingTemplate?.template_name}
               </h3>
               <p className="text-xs text-slate-400">Modify dynamic variables and template text</p>
             </div>
@@ -497,6 +514,19 @@ export default function WhatsAppPage() {
                 rows={6}
                 className="w-full border border-slate-200 rounded-2xl p-3.5 text-xs font-mono font-medium focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500 bg-slate-50 focus:bg-white"
               />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 mb-1 block">Approved Meta template name (for WhatsApp Cloud API)</label>
+              <input
+                value={providerTemplate}
+                onChange={e => setProviderTemplate(e.target.value)}
+                placeholder="e.g. booking_reminder_v1 — leave empty to send as normal text"
+                className="w-full border border-slate-200 rounded-2xl px-3.5 h-10 text-xs font-mono bg-slate-50 focus:bg-white"
+              />
+              <p className="text-[10px] text-slate-400 mt-1">
+                Variables are sent in this order: {(() => { try { const v = typeof editingTemplate?.variables === 'string' ? JSON.parse(editingTemplate.variables) : editingTemplate?.variables; return Array.isArray(v) ? v.map((x: string, i: number) => `{{${i + 1}}}=${x}`).join(', ') : '—'; } catch { return '—'; } })()}
+              </p>
             </div>
 
             <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-[11px] text-amber-800 space-y-1">

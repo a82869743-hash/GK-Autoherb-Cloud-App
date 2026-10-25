@@ -1,19 +1,19 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import io from 'socket.io-client';
+import { createSocket } from '../../lib/socket';
 import {
   IndianRupee, Package, Search, Plus, Trash2, User, Car,
-  FileText, ShieldCheck, Tag, AlertTriangle, ArrowLeft, CheckCircle2, Sparkles, CreditCard
+  FileText, Tag, CheckCircle2, Sparkles, CreditCard, Smartphone, Landmark, Minus, Download, MessageCircle, Loader2
 } from 'lucide-react';
+import { OpsPageTitle } from '../../components/ops/ui';
+import { priceForSegment } from '../../utils/pricing';
+import { useAuthStore } from '../../store/authStore';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import toast from 'react-hot-toast';
 
-import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
-import AdminMetricCard from '../../components/admin/AdminMetricCard';
 import VehicleBrandBadge from '../../components/admin/VehicleBrandBadge';
-import Button from '../../components/ui/Button';
 import api from '../../api/axiosInstance';
 import { useInventory } from '../../api/hooks/useInventory';
 import { useServices } from '../../api/hooks/useServices';
@@ -47,6 +47,9 @@ type QuickBillForm = z.infer<typeof schema>;
 export default function QuickBillingPage() {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
+  const [doneBill, setDoneBill] = useState<{ id: number; total: number; name: string; mobile: string } | null>(null);
+  const [itemTab, setItemTab] = useState<'service' | 'product'>('service');
+  const [itemSearch, setItemSearch] = useState('');
 
   const { data: inventoryData } = useInventory({ limit: 1000 });
   const { data: servicesData } = useServices();
@@ -149,7 +152,7 @@ export default function QuickBillingPage() {
       const sId = Number(val);
       const service = services.find((s: any) => s.id === sId);
       if (service) {
-        append({ type: 'service', id: service.id, name: service.name, price: Number(service.price), quantity: 1 });
+        append({ type: 'service', id: service.id, name: service.name, price: priceForSegment(service, currentCategory || 'sedan') || Number(service.price) || 0, quantity: 1 });
       }
     }
     e.target.value = ''; // reset
@@ -195,9 +198,10 @@ export default function QuickBillingPage() {
         vehicle_category: data.vehicle_category,
       };
 
-      await api.post('/billing', payload);
+      const res = await api.post('/billing', payload);
       toast.success('Bill generated successfully!');
-      navigate('/admin/invoices');
+      setDoneBill({ id: res.data?.data?.id, total, name: data.customer_name, mobile: data.customer_mobile });
+      window.scrollTo({ top: 0 });
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to generate bill');
     } finally {
@@ -220,8 +224,7 @@ export default function QuickBillingPage() {
   useEffect(() => {
     refreshCustomerList();
 
-    const socketUrl = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || window.location.origin;
-    const socket = io(socketUrl, { transports: ['websocket', 'polling'] });
+    const socket = createSocket();
 
     socket.on('customer_updated', () => refreshCustomerList());
     socket.on('new_booking', () => refreshCustomerList());
@@ -257,437 +260,296 @@ export default function QuickBillingPage() {
     }
   };
 
+  const segment = (currentCategory || 'sedan') as string;
+  const shownServices = services.filter((s: any) => s.vehicle_type !== 'bike' && (!itemSearch || s.name.toLowerCase().includes(itemSearch.toLowerCase())));
+  const shownProducts = products.filter((p: any) => !itemSearch || p.product_name?.toLowerCase().includes(itemSearch.toLowerCase()));
+  const addServiceItem = (s: any) => {
+    append({ type: 'service', id: s.id, name: s.name, price: priceForSegment(s, segment) || Number(s.price) || 0, quantity: 1 });
+    toast.success(`${s.name} added`);
+  };
+  const addProductItem = (p: any) => {
+    append({ type: 'product', id: p.id, name: p.product_name, price: Number(p.price || p.selling_price || 0), quantity: 1 });
+    toast.success(`${p.product_name} added`);
+  };
+  const setQty = (index: number, q: number) => setValue(`items.${index}.quantity` as const, Math.max(1, q), { shouldValidate: true });
+  const paymentMethod = watch('payment_method');
+  const PAY = [
+    { v: 'cash', label: 'Cash', icon: IndianRupee },
+    { v: 'upi', label: 'UPI', icon: Smartphone },
+    { v: 'card', label: 'Card', icon: CreditCard },
+    { v: 'bank_transfer', label: 'Bank', icon: Landmark },
+    { v: 'other', label: 'Other', icon: FileText },
+  ] as const;
+
+  // ─── Done screen ───
+  if (doneBill) {
+    const t = useAuthStore.getState().token;
+    const invoiceUrl = `/api/billing/${doneBill.id}/invoice?token=${t}`;
+    const waText = encodeURIComponent(`Hi ${doneBill.name}, thank you for visiting GK AutoHerb! Your bill amount is ${formatINR(doneBill.total)}.`);
+    const waTo = String(doneBill.mobile || '').replace(/\D/g, '').slice(-10);
+    return (
+      <div className="mx-auto max-w-md space-y-4 pt-6 pb-28 text-center font-sans">
+        <div className="mx-auto h-20 w-20 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+          <CheckCircle2 size={44} />
+        </div>
+        <div>
+          <p className="font-display text-[24px] font-extrabold text-slate-900">Bill created</p>
+          <p className="text-[13px] text-slate-500">#{doneBill.id} · {doneBill.name}</p>
+        </div>
+        <p className="font-display text-[34px] font-extrabold text-slate-900">{formatINR(doneBill.total)}</p>
+        <div className="space-y-2.5 text-left">
+          <a href={invoiceUrl} target="_blank" rel="noreferrer" className="app-btn-dark w-full"><Download size={17} /> Download / print invoice</a>
+          {waTo && (
+            <a href={`https://wa.me/91${waTo}?text=${waText}`} target="_blank" rel="noreferrer" className="app-btn w-full h-12 bg-emerald-500 text-white"><MessageCircle size={17} /> Send on WhatsApp</a>
+          )}
+          <button onClick={() => window.location.reload()} className="app-btn-primary w-full"><Plus size={17} /> New bill</button>
+          <button onClick={() => navigate('/admin/invoices')} className="app-btn-outline w-full">All invoices</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6 pb-28 lg:pb-12 max-w-[1600px] mx-auto font-sans">
-      {/* Header Bar */}
-      <AdminHeaderBar
-        title="Quick Billing (POS)"
-        subtitle="Generate instant customer invoices, counter product sales, and direct service bills"
-        actions={
-          <button
-            onClick={() => navigate('/admin/invoices')}
-            className="px-4 py-2.5 rounded-2xl bg-white border border-slate-200/90 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-all flex items-center gap-1.5 shadow-xs active:scale-95"
-          >
-            <ArrowLeft size={15} />
-            <span>All Invoices</span>
+    <div className="mx-auto max-w-5xl space-y-4 pb-44 font-sans">
+      <OpsPageTitle
+        kicker="Counter"
+        title="Quick bill"
+        subtitle="Services and products in one bill"
+        action={
+          <button onClick={() => navigate('/admin/invoices')} className="app-chip app-chip-off">
+            <FileText size={15} /> Invoices
           </button>
         }
       />
 
-      {/* KPI Cards Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <AdminMetricCard
-          label="Bill Subtotal"
-          value={formatINR(subtotal)}
-          trend={{ text: `${watchedItems.length} items queued`, positive: true }}
-          icon={<IndianRupee size={20} />}
-          accentColor="indigo"
-        />
-        <AdminMetricCard
-          label="Discount Applied"
-          value={formatINR(discountAmount)}
-          trend={{ text: discountType === 'percentage' ? `${discountValue}% off` : 'Fixed discount', positive: true }}
-          icon={<Tag size={20} />}
-          accentColor="amber"
-        />
-        <AdminMetricCard
-          label="Total Payable"
-          value={formatINR(total)}
-          trend={{ text: 'Net invoice amount', positive: true }}
-          icon={<CheckCircle2 size={20} />}
-          accentColor="emerald"
-        />
-        <AdminMetricCard
-          label="Client Loyalty Credits"
-          value={formatINR(availableCredits)}
-          trend={{ text: availableCredits > 0 ? 'Eligible for discount' : 'No balance', positive: availableCredits > 0 }}
-          icon={<Sparkles size={20} />}
-          accentColor="purple"
-        />
-      </div>
-
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Column: Client & Vehicle Details */}
-          <div className="lg:col-span-7 space-y-6">
-            {/* Customer Identification */}
-            <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-[0_4px_24px_rgba(0,0,0,0.03)] space-y-5">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-red-50 text-[#D32F2F] flex items-center justify-center">
-                    <User size={18} />
-                  </div>
-                  <h3 className="font-bold text-slate-900 text-base">Client Identity</h3>
-                </div>
-                {availableCredits > 0 && (
-                  <button 
-                    type="button" 
-                    onClick={applyLoyaltyCredits}
-                    className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-xl hover:bg-emerald-100 transition-all flex items-center gap-1"
-                  >
-                    <Sparkles size={13} />
-                    <span>Redeem {formatINR(availableCredits)} Credits</span>
-                  </button>
-                )}
-              </div>
-
-              {/* Search & Select Saved Customer */}
-              <div className="p-4 rounded-2xl bg-red-50/50 border border-red-100 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-[#7f1d1d] uppercase tracking-wider">
-                    ⚡ Quick Search Directory ({filteredCustomers.length} clients)
-                  </span>
-                  {selectedCustKey && (
-                    <button
-                      type="button"
-                      onClick={() => { setSelectedCustKey(''); setCustomerSearchQuery(''); }}
-                      className="text-[11px] text-[#D32F2F] hover:text-[#991b1b] font-bold underline cursor-pointer"
-                    >
-                      Clear Selection
-                    </button>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="text"
-                      value={customerSearchQuery}
-                      onChange={(e) => setCustomerSearchQuery(e.target.value)}
-                      placeholder="Type name, mobile or vehicle registration plate..."
-                      className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-red-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => refreshCustomerList(customerSearchQuery)}
-                    className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-all shrink-0 shadow-xs"
-                  >
-                    Search
-                  </button>
-                </div>
-                <select
-                  value={selectedCustKey}
-                  onChange={(e) => handleSelectExistingCustomer(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-red-200 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500 bg-white shadow-xs"
-                >
-                  <option value="">-- Choose from Search Results --</option>
-                  {filteredCustomers.map((c: any, idx: number) => {
-                    const uniqueVal = c.id ? `user_${c.id}` : `bill_${c.mobile}_${c.name}_${idx}`;
-                    return (
-                      <option key={uniqueVal} value={uniqueVal}>
-                        {c.name} {c.mobile ? `(${c.mobile})` : ''} {c.vehicle_reg_no ? `— [${c.vehicle_reg_no}]` : ''} {c.vehicle_brand ? `(${c.vehicle_brand} ${c.vehicle_model || ''})` : ''}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Customer Full Name *</label>
-                  <input
-                    type="text"
-                    {...register("customer_name")}
-                    className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200/90 focus:border-[#D32F2F] focus:ring-2 focus:ring-red-500/20 outline-none text-xs sm:text-sm font-semibold bg-slate-50/50 focus:bg-white transition-all"
-                    placeholder="e.g. Aryan Sharma"
-                  />
-                  {errors.customer_name && <p className="text-rose-500 text-xs mt-1">{errors.customer_name.message}</p>}
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Mobile Number *</label>
-                  <input
-                    type="text"
-                    {...register("customer_mobile")}
-                    className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200/90 focus:border-[#D32F2F] focus:ring-2 focus:ring-red-500/20 outline-none text-xs sm:text-sm font-semibold bg-slate-50/50 focus:bg-white transition-all"
-                    placeholder="e.g. 9876543210"
-                  />
-                  {errors.customer_mobile && <p className="text-rose-500 text-xs mt-1">{errors.customer_mobile.message}</p>}
-                </div>
-              </div>
-            </div>
-
-            {/* Vehicle Details */}
-            <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-[0_4px_24px_rgba(0,0,0,0.03)] space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-red-50 text-[#D32F2F] flex items-center justify-center">
-                    <Car size={18} />
-                  </div>
-                  <h3 className="font-bold text-slate-900 text-base">Vehicle Garage Identification</h3>
-                </div>
-                {currentBrand && (
-                  <VehicleBrandBadge
-                    brand={currentBrand}
-                    model={currentModel}
-                    regNo={currentRegNo}
-                    size="sm"
-                  />
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Vehicle Brand</label>
-                  <select
-                    value={currentBrand}
-                    onChange={(e) => {
-                      setValue("vehicle_brand", e.target.value);
-                      setValue("vehicle_model", "");
-                    }}
-                    className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs sm:text-sm focus:border-[#D32F2F] outline-none bg-slate-50/50 focus:bg-white font-semibold"
-                  >
-                    <option value="">-- Select Brand --</option>
-                    {effectiveBrands.map((b: string) => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Vehicle Model</label>
-                  <select
-                    value={currentModel}
-                    disabled={!currentBrand}
-                    onChange={(e) => {
-                      const modelName = e.target.value;
-                      setValue("vehicle_model", modelName);
-                      const selectedModelObj = modelsList.find((m: any) => (m.model || m) === modelName);
-                      if (selectedModelObj && selectedModelObj.category) {
-                        setValue("vehicle_category", selectedModelObj.category);
-                      }
-                    }}
-                    className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs sm:text-sm focus:border-[#D32F2F] outline-none bg-slate-50/50 focus:bg-white disabled:bg-slate-100 disabled:text-slate-400 font-semibold"
-                  >
-                    <option value="">{currentBrand ? '-- Select Model --' : 'Select Brand First'}</option>
-                    {effectiveModels.map((m: any) => {
-                      const mName = typeof m === 'string' ? m : m.model;
-                      return <option key={mName} value={mName}>{mName}</option>;
-                    })}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Registration Plate</label>
-                  <input
-                    type="text"
-                    {...register("vehicle_reg_no")}
-                    className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 focus:border-[#D32F2F] focus:ring-2 focus:ring-red-500/20 outline-none uppercase text-xs sm:text-sm font-bold bg-slate-50/50 focus:bg-white"
-                    placeholder="e.g. MH 12 AB 1234"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Body Segment</label>
-                  <select
-                    value={currentCategory}
-                    onChange={(e) => setValue("vehicle_category", e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs sm:text-sm focus:border-[#D32F2F] outline-none bg-slate-50/50 focus:bg-white font-semibold"
-                  >
-                    <option value="">Select Category...</option>
-                    <option value="hatchback">Hatchback</option>
-                    <option value="medium_hatchback">Medium Hatchback</option>
-                    <option value="sedan">Sedan</option>
-                    <option value="premium_sedan">Premium Sedan</option>
-                    <option value="suv">SUV / Luxury 4x4</option>
-                    <option value="luxury">Luxury / Multi-Utility</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Bill Items Selection & List */}
-            <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-[0_4px_24px_rgba(0,0,0,0.03)] space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-red-50 text-[#D32F2F] flex items-center justify-center">
-                    <Package size={18} />
-                  </div>
-                  <h3 className="font-bold text-slate-900 text-base">Invoice Line Items</h3>
-                </div>
-                <span className="text-xs font-bold text-slate-400">{watchedItems.length} items added</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">+ Add Detailing Service</label>
-                  <select 
-                    onChange={handleAddService} 
-                    className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs sm:text-sm focus:border-[#D32F2F] outline-none bg-slate-50 font-semibold cursor-pointer"
-                  >
-                    <option value="">-- Choose Workshop Service --</option>
-                    {services.map((s: any) => (
-                      <option key={s.id} value={s.id}>{s.name} (₹{s.price})</option>
-                    ))}
-                    <option value="other">-- Custom Service Entry --</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">+ Add Inventory Product</label>
-                  <select 
-                    onChange={handleAddProduct} 
-                    className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs sm:text-sm focus:border-[#D32F2F] outline-none bg-slate-50 font-semibold cursor-pointer"
-                  >
-                    <option value="">-- Choose Chemical / Product --</option>
-                    {products.map((p: any) => (
-                      <option key={p.id} value={p.id}>{p.product_name} ({p.quantity} in stock)</option>
-                    ))}
-                    <option value="other">-- Custom Retail Product --</option>
-                  </select>
-                </div>
-              </div>
-
-              {errors.items && <p className="text-rose-500 text-xs font-bold">{errors.items.message}</p>}
-
-              {fields.length > 0 ? (
-                <div className="space-y-3 pt-2">
-                  {fields.map((field, index) => (
-                    <div key={field.id} className="flex flex-col sm:flex-row gap-3 p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200/80 items-start sm:items-center">
-                      <div className="flex-1 min-w-0">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md uppercase bg-red-50 text-[#b71c1c] border border-red-100">
-                          {watchedItems[index].type}
-                        </span>
-                        <input
-                          {...register(`items.${index}.name` as const)}
-                          className="w-full px-2.5 py-1.5 mt-1.5 bg-white rounded-xl border border-slate-200 text-xs sm:text-sm font-semibold text-slate-900"
-                        />
-                      </div>
-                      
-                      <div className="w-full sm:w-28">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Unit Price (₹)</span>
-                        <input
-                          type="number"
-                          {...register(`items.${index}.price` as const, { valueAsNumber: true })}
-                          className="w-full px-2.5 py-1.5 mt-1 bg-white rounded-xl border border-slate-200 text-xs sm:text-sm font-bold text-slate-900"
-                        />
-                      </div>
-
-                      {watchedItems[index].type === 'product' && (
-                        <div className="w-full sm:w-20">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase">Qty</span>
-                          <input
-                            type="number"
-                            {...register(`items.${index}.quantity` as const, { valueAsNumber: true })}
-                            className="w-full px-2.5 py-1.5 mt-1 bg-white rounded-xl border border-slate-200 text-xs sm:text-sm font-bold text-slate-900 text-center"
-                          />
-                        </div>
-                      )}
-
-                      <div className="w-full sm:w-28 text-right">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Total</span>
-                        <p className="font-extrabold text-slate-900 text-sm mt-1">
-                          ₹{((watchedItems[index]?.price || 0) * (watchedItems[index]?.quantity || 1)).toLocaleString('en-IN')}
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => remove(index)}
-                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all self-end sm:self-center"
-                        title="Remove Item"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-10 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-                  <Package size={28} className="text-slate-300 mx-auto mb-2" />
-                  <p className="text-xs text-slate-400 font-medium">Select a service or retail product above to add to this invoice.</p>
-                </div>
+      <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:items-start">
+        <div className="space-y-4 min-w-0">
+          {/* ─── Customer ─── */}
+          <section className="app-card p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="h-9 w-9 rounded-xl bg-red-50 text-[#D32F2F] flex items-center justify-center"><User size={18} /></span>
+              <h3 className="font-display text-[16px] font-extrabold text-slate-900 flex-1">Customer</h3>
+              {selectedCustKey && (
+                <button type="button" onClick={() => { setSelectedCustKey(''); setCustomerSearchQuery(''); }} className="text-[12.5px] font-bold text-[#D32F2F]">Clear</button>
               )}
             </div>
-          </div>
-
-          {/* Right Column: Payment Method & Grand Total Checkout Card */}
-          <div className="lg:col-span-5 space-y-6">
-            {/* Payment & Description Card */}
-            <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-[0_4px_24px_rgba(0,0,0,0.03)] space-y-4">
-              <h3 className="font-bold text-slate-900 text-base border-b border-slate-100 pb-3 flex items-center gap-2">
-                <CreditCard size={18} className="text-[#D32F2F]" />
-                <span>Payment & Remarks</span>
-              </h3>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Payment Method</label>
-                <select
-                  {...register("payment_method")}
-                  className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs sm:text-sm focus:border-[#D32F2F] outline-none bg-slate-50 font-bold"
-                >
-                  <option value="cash">Cash Counter</option>
-                  <option value="upi">UPI / QR Code Scan</option>
-                  <option value="card">Credit / Debit Card POS</option>
-                  <option value="bank_transfer">Direct Bank NEFT / IMPS</option>
-                  <option value="other">Other / Cheque</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Invoice Notes / Remarks</label>
-                <textarea
-                  {...register("description")}
-                  rows={3}
-                  className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs sm:text-sm focus:border-[#D32F2F] outline-none bg-slate-50 focus:bg-white resize-none font-medium"
-                  placeholder="Optional customer requests or service notes..."
-                />
-              </div>
+            <div className="relative">
+              <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={customerSearchQuery}
+                onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), refreshCustomerList(customerSearchQuery))}
+                placeholder="Find saved customer — name, mobile, plate"
+                className="app-input pl-10 bg-slate-50"
+              />
             </div>
-
-            {/* ClaimTrack Luxury Grand Total Checkout Card */}
-            <div className="rounded-3xl bg-slate-950 text-white p-6 sm:p-7 border border-slate-800 shadow-[0_12px_40px_rgba(0,0,0,0.12)] space-y-5">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-400">Order Summary</h3>
-                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#D32F2F]/20 text-red-300 border border-red-500/30">
-                  POS Checkout
-                </span>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex justify-between text-xs sm:text-sm text-slate-300 font-medium">
-                  <span>Gross Subtotal</span>
-                  <span className="font-bold text-white">{formatINR(subtotal)}</span>
-                </div>
-
-                <div className="p-3 bg-slate-900 rounded-2xl border border-slate-800 space-y-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Discount Engine</span>
-                  <div className="grid grid-cols-2 gap-2">
-                    <select 
-                      {...register("discount_type")} 
-                      className="text-xs bg-slate-950 border border-slate-700 text-white rounded-xl px-2.5 py-1.5 font-bold"
-                    >
-                      <option value="fixed">Fixed (₹)</option>
-                      <option value="percentage">Percentage (%)</option>
-                    </select>
-                    <input 
-                      type="number" 
-                      {...register("discount_value", { valueAsNumber: true })} 
-                      className="text-xs bg-slate-950 border border-slate-700 text-white rounded-xl px-2.5 py-1.5 font-bold text-right"
-                      placeholder="0"
-                    />
-                  </div>
-                </div>
-
-                {discountAmount > 0 && (
-                  <div className="flex justify-between text-xs sm:text-sm text-emerald-400 font-semibold">
-                    <span>Discount Deducted</span>
-                    <span>- {formatINR(discountAmount)}</span>
-                  </div>
+            {customerSearchQuery.trim() && !selectedCustKey && (
+              <div className="rounded-2xl border border-slate-100 divide-y divide-slate-100 max-h-56 overflow-y-auto">
+                {filteredCustomers.slice(0, 8).map((c: any, idx: number) => {
+                  const key = c.id ? `user_${c.id}` : `bill_${c.mobile}_${c.name}_${idx}`;
+                  return (
+                    <button type="button" key={key} onClick={() => handleSelectExistingCustomer(key)} className="w-full flex items-center gap-3 px-3 py-2.5 text-left active:bg-slate-50">
+                      <span className="h-8 w-8 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-[13px]">{(c.name || 'C').charAt(0)}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[14px] font-semibold text-slate-900 truncate">{c.name}</span>
+                        <span className="block text-[12px] text-slate-500 truncate">{c.mobile}{c.vehicle_reg_no ? ` · ${c.vehicle_reg_no}` : ''}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+                {!filteredCustomers.length && (
+                  <button type="button" onClick={() => refreshCustomerList(customerSearchQuery)} className="w-full px-3 py-3 text-[13px] font-bold text-[#D32F2F]">Search all customers</button>
                 )}
               </div>
-
-              <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-semibold text-slate-400 block uppercase tracking-wider">Net Amount Payable</span>
-                  <span className="text-xl sm:text-2xl font-semibold text-white">{formatINR(total)}</span>
-                </div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="app-label">Name *</label>
+                <input type="text" {...register('customer_name')} className="app-input" placeholder="Full name" />
+                {errors.customer_name && <p className="text-rose-500 text-[12px] mt-1">{errors.customer_name.message}</p>}
               </div>
-
-              <button
-                type="submit"
-                disabled={submitting || watchedItems.length === 0}
-                className="w-full h-10 px-4 rounded-xl bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs sm:text-sm font-medium shadow-sm transition-all flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50 cursor-pointer"
-              >
-                {submitting ? 'Generating Invoice...' : 'Generate & Confirm Bill'}
-              </button>
+              <div>
+                <label className="app-label">Mobile *</label>
+                <input type="text" inputMode="numeric" {...register('customer_mobile')} className="app-input" placeholder="10 digits" />
+                {errors.customer_mobile && <p className="text-rose-500 text-[12px] mt-1">{errors.customer_mobile.message}</p>}
+              </div>
             </div>
+            {availableCredits > 0 && (
+              <button type="button" onClick={applyLoyaltyCredits} className="app-btn h-11 w-full bg-emerald-50 text-emerald-700">
+                <Sparkles size={16} /> Use {formatINR(availableCredits)} loyalty credits
+              </button>
+            )}
+          </section>
+
+          {/* ─── Car ─── */}
+          <section className="app-card p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="h-9 w-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center"><Car size={18} /></span>
+              <h3 className="font-display text-[16px] font-extrabold text-slate-900 flex-1">Car (optional)</h3>
+              {currentBrand && <VehicleBrandBadge brand={currentBrand} model={currentModel} size="sm" showText={false} />}
+            </div>
+            <input type="text" {...register('vehicle_reg_no')} className="app-input font-display font-bold tracking-wider uppercase" placeholder="Number plate" />
+            <div className="grid grid-cols-2 gap-3">
+              <select
+                value={currentBrand}
+                onChange={(e) => {
+                  setValue('vehicle_brand', e.target.value);
+                  setValue('vehicle_model', '');
+                }}
+                className="app-input"
+              >
+                <option value="">Brand</option>
+                {effectiveBrands.map((b: string) => <option key={b} value={b}>{b}</option>)}
+              </select>
+              <select
+                value={currentModel}
+                disabled={!currentBrand}
+                onChange={(e) => {
+                  const modelName = e.target.value;
+                  setValue('vehicle_model', modelName);
+                  const selectedModelObj = modelsList.find((m: any) => (m.model || m) === modelName);
+                  if (selectedModelObj && selectedModelObj.category) setValue('vehicle_category', selectedModelObj.category);
+                }}
+                className="app-input disabled:bg-slate-50 disabled:text-slate-400"
+              >
+                <option value="">{currentBrand ? 'Model' : 'Brand first'}</option>
+                {effectiveModels.map((m: any) => {
+                  const mName = typeof m === 'string' ? m : m.model;
+                  return <option key={mName} value={mName}>{mName}</option>;
+                })}
+              </select>
+            </div>
+            <div className="-mx-4 px-4 flex gap-2 overflow-x-auto no-scrollbar">
+              {[
+                ['hatchback', 'Hatchback'], ['medium_hatchback', 'Medium hatch'], ['sedan', 'Sedan'],
+                ['premium_sedan', 'Premium sedan'], ['suv', 'SUV'], ['luxury', 'Luxury'],
+              ].map(([v, l]) => (
+                <button type="button" key={v} onClick={() => setValue('vehicle_category', v)} className={`app-chip shrink-0 h-8 text-[12px] ${currentCategory === v ? 'app-chip-on' : 'app-chip-off'}`}>{l}</button>
+              ))}
+            </div>
+          </section>
+
+          {/* ─── Add items ─── */}
+          <section className="app-card p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="h-9 w-9 rounded-xl bg-red-50 text-[#D32F2F] flex items-center justify-center"><Package size={18} /></span>
+              <h3 className="font-display text-[16px] font-extrabold text-slate-900 flex-1">Add to bill</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1">
+              {(['service', 'product'] as const).map((k) => (
+                <button type="button" key={k} onClick={() => setItemTab(k)} className={`h-9 rounded-xl text-[13px] font-display font-bold ${itemTab === k ? 'bg-white text-slate-900 shadow-app' : 'text-slate-500'}`}>
+                  {k === 'service' ? 'Services' : 'Products'}
+                </button>
+              ))}
+            </div>
+            <div className="relative">
+              <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input value={itemSearch} onChange={(e) => setItemSearch(e.target.value)} placeholder={itemTab === 'service' ? 'Search services' : 'Search products'} className="app-input pl-10 bg-slate-50" />
+            </div>
+            <div className="max-h-72 overflow-y-auto -mx-1 px-1 divide-y divide-slate-100">
+              {(itemTab === 'service' ? shownServices : shownProducts).map((x: any) => {
+                const price = itemTab === 'service' ? priceForSegment(x, segment) || Number(x.price) || 0 : Number(x.price || x.selling_price || 0);
+                return (
+                  <button type="button" key={x.id} onClick={() => (itemTab === 'service' ? addServiceItem(x) : addProductItem(x))} className="w-full flex items-center gap-3 py-2.5 text-left active:bg-slate-50">
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[14px] font-semibold text-slate-900 truncate">{itemTab === 'service' ? x.name : x.product_name}</span>
+                      <span className="block text-[12px] text-slate-500">{itemTab === 'service' ? (price ? formatINR(price) : 'Set price') : `${x.quantity} ${x.unit || ''} in stock${price ? ` · ${formatINR(price)}` : ''}`}</span>
+                    </span>
+                    <span className="h-8 w-8 rounded-full bg-red-50 text-[#D32F2F] flex items-center justify-center shrink-0"><Plus size={16} /></span>
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={() => append({ type: itemTab, id: undefined, name: '', price: 0, quantity: 1 })}
+              className="w-full text-[13px] font-bold text-[#D32F2F]"
+            >
+              + Custom {itemTab}
+            </button>
+          </section>
+        </div>
+
+        <div className="space-y-4 min-w-0">
+          {/* ─── Cart ─── */}
+          <section className="app-card p-4">
+            <h3 className="font-display text-[16px] font-extrabold text-slate-900 mb-2">Bill ({fields.length})</h3>
+            {errors.items && <p className="text-rose-500 text-[12px] font-bold mb-2">{errors.items.message}</p>}
+            {fields.length ? (
+              <div className="divide-y divide-slate-100">
+                {fields.map((field, index) => (
+                  <div key={field.id} className="py-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold capitalize ${watchedItems[index]?.type === 'service' ? 'bg-red-50 text-[#D32F2F]' : 'bg-sky-50 text-sky-700'}`}>{watchedItems[index]?.type}</span>
+                      <input {...register(`items.${index}.name` as const)} placeholder="Item name" className="min-w-0 flex-1 bg-transparent text-[14px] font-semibold text-slate-900 outline-none" />
+                      <button type="button" onClick={() => remove(index)} className="h-8 w-8 rounded-full text-slate-400 flex items-center justify-center" aria-label="Remove"><Trash2 size={15} /></button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="relative w-28">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-slate-400">₹</span>
+                        <input type="number" {...register(`items.${index}.price` as const, { valueAsNumber: true })} className="app-input h-10 pl-7 text-[14px]" />
+                      </div>
+                      {watchedItems[index]?.type === 'product' ? (
+                        <div className="flex items-center rounded-xl border border-slate-200">
+                          <button type="button" onClick={() => setQty(index, (watchedItems[index]?.quantity || 1) - 1)} className="h-10 w-9 flex items-center justify-center text-slate-600"><Minus size={15} /></button>
+                          <span className="w-7 text-center text-[14px] font-bold">{watchedItems[index]?.quantity || 1}</span>
+                          <button type="button" onClick={() => setQty(index, (watchedItems[index]?.quantity || 1) + 1)} className="h-10 w-9 flex items-center justify-center text-slate-600"><Plus size={15} /></button>
+                        </div>
+                      ) : null}
+                      <span className="ml-auto font-display font-extrabold text-[15px] text-slate-900">
+                        {formatINR((watchedItems[index]?.price || 0) * (watchedItems[index]?.quantity || 1))}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="py-6 text-center text-[13px] text-slate-400">Tap a service or product to add it.</p>
+            )}
+          </section>
+
+          {/* ─── Discount, payment, notes ─── */}
+          <section className="app-card p-4 space-y-3">
+            <div className="flex items-center justify-between text-[14px]">
+              <span className="text-slate-500">Subtotal</span>
+              <span className="font-bold text-slate-900">{formatINR(subtotal)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[14px] text-slate-500 flex-1 flex items-center gap-1.5"><Tag size={14} /> Discount</span>
+              <select {...register('discount_type')} className="app-input h-10 w-20 px-2 text-[13px]">
+                <option value="fixed">₹</option>
+                <option value="percentage">%</option>
+              </select>
+              <input type="number" {...register('discount_value', { valueAsNumber: true })} className="app-input h-10 w-24 text-right text-[14px]" placeholder="0" />
+            </div>
+            {discountAmount > 0 && (
+              <div className="flex justify-between text-[13px] font-semibold text-emerald-600"><span>You save</span><span>- {formatINR(discountAmount)}</span></div>
+            )}
+            <div>
+              <p className="app-label">Paid by</p>
+              <div className="grid grid-cols-5 gap-1.5">
+                {PAY.map(({ v, label, icon: Icon }) => (
+                  <button type="button" key={v} onClick={() => setValue('payment_method', v)} className={`flex flex-col items-center gap-1 rounded-xl border py-2 text-[11.5px] font-bold ${paymentMethod === v ? 'border-[#111] bg-[#111] text-white' : 'border-slate-200 bg-white text-slate-600'}`}>
+                    <Icon size={16} /> {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <textarea {...register('description')} rows={2} className="app-input h-auto py-3 resize-none text-[14px]" placeholder="Notes on the invoice (optional)" />
+          </section>
+        </div>
+
+        {/* ─── Sticky checkout ─── */}
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t border-slate-200/80 bg-white/95 backdrop-blur-md">
+          <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
+            <div className="shrink-0">
+              <p className="text-[11px] font-semibold text-slate-500 leading-none">To pay</p>
+              <p className="font-display text-[19px] font-extrabold text-slate-900">{formatINR(total)}</p>
+            </div>
+            <button type="submit" disabled={submitting || watchedItems.length === 0} className="app-btn-primary flex-1">
+              {submitting ? <Loader2 size={17} className="animate-spin" /> : <CheckCircle2 size={17} />} {submitting ? 'Creating bill…' : 'Create bill'}
+            </button>
           </div>
         </div>
       </form>

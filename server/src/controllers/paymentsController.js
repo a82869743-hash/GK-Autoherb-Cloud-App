@@ -16,7 +16,24 @@ if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
 // ─── Razorpay Order Creation ───────────────────────
 exports.createRazorpayOrder = async (req, res) => {
   try {
-    const { amount, currency = 'INR', receipt, package_id, booking_id, invoice_id, user_package_id, package_request_id } = req.body;
+    const { currency = 'INR', receipt, package_id, booking_id, invoice_id, user_package_id, package_request_id } = req.body;
+    let { amount } = req.body;
+
+    // Charge what the server priced, not what the browser sent
+    if (package_request_id) {
+      const [reqRows] = await pool.query('SELECT price, customer_id FROM package_requests WHERE id = ?', [package_request_id]);
+      if (reqRows.length) {
+        if (req.user.role === 'customer' && Number(reqRows[0].customer_id) !== Number(req.user.id)) {
+          return res.status(403).json({ success: false, error: 'Not your package request' });
+        }
+        amount = Number(reqRows[0].price);
+      }
+    } else if (booking_id && req.user.role === 'customer') {
+      const [bkRows] = await pool.query('SELECT advance_amount, customer_id FROM bookings WHERE id = ?', [booking_id]);
+      if (bkRows.length && Number(bkRows[0].customer_id) === Number(req.user.id) && Number(bkRows[0].advance_amount) > 0) {
+        amount = Number(bkRows[0].advance_amount);
+      }
+    }
     if (!amount) return res.status(400).json({ success: false, error: 'Amount is required' });
 
     let order;

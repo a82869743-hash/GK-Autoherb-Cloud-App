@@ -148,35 +148,25 @@ export default function CustomerChatbotWidget() {
   };
 
   return (
-    <div className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-50 font-sans">
-      {/* ─── Floating Launcher Pill (When Closed) ─── */}
+    <div className="fixed bottom-[88px] right-4 z-50 font-sans">
+      {/* ─── Floating chat bubble (When Closed) ─── */}
       {!isOpen && (
         <button
           onClick={() => { setIsOpen(true); setIsMinimized(false); }}
-          className="group relative flex items-center gap-2.5 px-4 py-3 bg-white hover:bg-slate-50 text-slate-800 rounded-full shadow-[0_12px_30px_rgba(211,47,47,0.25)] border border-red-200/90 hover:border-red-400 transition-all duration-300 active:scale-95 animate-bounce-short cursor-pointer"
+          aria-label="Chat with GK Concierge"
+          className="relative h-14 w-14 rounded-full bg-gradient-to-br from-[#e53935] to-[#b71c1c] text-white shadow-[0_10px_24px_rgba(211,47,47,0.35)] flex items-center justify-center active:scale-95 transition-transform"
         >
-          {/* Pulsing indicator */}
-          <span className="relative flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-[#D32F2F]" />
+          <Bot size={26} />
+          <span className="absolute top-1 right-1 flex h-3 w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75" />
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-400 border-2 border-white" />
           </span>
-
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#af101a] to-[#D32F2F] text-white flex items-center justify-center shadow-sm">
-            <Bot size={18} />
-          </div>
-
-          <div className="text-left pr-1 hidden sm:block">
-            <p className="text-[10px] font-black text-[#D32F2F] uppercase tracking-wider leading-none">Studio Assistant</p>
-            <p className="text-xs font-black text-slate-900 mt-0.5">Ask GK Concierge</p>
-          </div>
-
-          <div className="sm:hidden text-xs font-extrabold text-slate-900">Ask AI</div>
         </button>
       )}
 
       {/* ─── Chat Window (When Open) ─── */}
       {isOpen && (
-        <div className={`w-[92vw] sm:w-[410px] bg-white rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden flex flex-col transition-all duration-300 ${
+        <div className={`w-[calc(100vw-2rem)] max-w-[410px] bg-white rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden flex flex-col transition-all duration-300 ${
           isMinimized ? 'h-16' : 'h-[580px] max-h-[82vh]'
         }`}>
           {/* Header */}

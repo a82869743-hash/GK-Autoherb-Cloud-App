@@ -101,6 +101,7 @@ const navCategories: NavCategory[] = [
       { to: '/admin/chatbot', icon: Bot, label: 'AI Bot Monitoring', badge: 'Live', permission: 'notifications.send' },
       { to: '/admin/messages', icon: MessageSquare, label: 'Messages', permission: 'notifications.send' },
       { to: '/admin/whatsapp', icon: MessageSquare, label: 'WhatsApp', badge: 'New', permission: 'notifications.send' },
+      { to: '/admin/greetings', icon: Gift, label: 'Birthday & Anniversary', badge: 'New', permission: 'notifications.send' },
       { to: '/admin/inquiries', icon: HelpCircle, label: 'Inquiries', permission: 'notifications.send' },
       { to: '/admin/feedback', icon: Star, label: 'Feedback', badge: 'New', permission: 'feedback.view' },
     ],

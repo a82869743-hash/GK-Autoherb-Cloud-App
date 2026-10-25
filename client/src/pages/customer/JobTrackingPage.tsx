@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import io from 'socket.io-client';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { createSocket } from '../../lib/socket';
+import JobCardTracker from './JobCardTracker';
 import { Clock, Droplets, CheckCircle2, Car, Sparkles, Activity, Shield, Share2 } from 'lucide-react';
 import api from '../../api/axiosInstance';
 
@@ -25,6 +26,13 @@ const PHASE_DETAILS = {
 const PHASE_ORDER = ['pre_wash', 'foam_apply', 'pressure_rinse', 'interior_clean', 'dry_polish', 'complete'];
 
 export default function JobTrackingPage() {
+  const [params] = useSearchParams();
+  // Job-card links from WhatsApp carry a signed token (?t=); quick-wash links don't
+  if (params.get('t')) return <JobCardTracker />;
+  return <QuickWashTracking />;
+}
+
+function QuickWashTracking() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   
@@ -68,9 +76,8 @@ export default function JobTrackingPage() {
   useEffect(() => {
     if (!id) return;
 
-    const socketUrl = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:5000';
     // Connect as guest (no token needed, app.js middleware allows it)
-    const socket = io(socketUrl, { transports: ['websocket', 'polling'] });
+    const socket = createSocket();
 
     socket.on('connect', () => {
       console.log('Socket connected for live tracking');

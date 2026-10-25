@@ -9,6 +9,8 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 // Vehicle lookup
 router.get('/vehicles/lookup/:regNo', auth, role(['admin']), ctrl.lookup);
 
+router.get('/meta/stages', auth, role(['admin', 'staff', 'customer']), ctrl.listStageDefinitions);
+
 // Job cart CRUD
 router.get('/',         auth, role(['admin', 'customer', 'staff']), ctrl.list);
 router.post('/',        auth, role(['admin', 'staff']), ctrl.create);
@@ -19,6 +21,9 @@ router.put('/:id',      auth, role(['admin', 'staff']), ctrl.update);
 router.patch('/:id/status',   auth, role(['admin', 'staff']), ctrl.updateStatus);
 router.patch('/:id/submit',   auth, role(['admin', 'staff']), ctrl.submit);
 router.patch('/:id/complete', auth, role(['admin']), ctrl.complete);
+router.patch('/:id/stage',    auth, role(['admin', 'staff']), ctrl.updateStage);
+router.get('/:id/stages',     auth, role(['admin', 'staff', 'customer']), ctrl.getStages);
+
 
 // Services
 router.post('/:id/services',       auth, role(['admin', 'staff']), ctrl.addService);

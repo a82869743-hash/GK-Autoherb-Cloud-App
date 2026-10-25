@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Droplets, Clock, CheckCircle2, Truck, Plus, RefreshCw, Hash, Search, Car, X, ChevronDown, Download, Check, Sparkles } from 'lucide-react';
+import { Droplets, Clock, CheckCircle2, Truck, Plus, RefreshCw, Search, Download, Check, Phone } from 'lucide-react';
+import { OpsPageTitle, ChipRow, EmptyBlock, Skeleton, BottomSheet } from '../../components/ops/ui';
+import { priceForSegment } from '../../utils/pricing';
 import { useQuickWashes, useQuickWashStats, useCreateQuickWash, useUpdateWashStatus } from '../../api/hooks/useQuickWash';
 import { useCustomerSearch } from '../../api/hooks/useSearch';
 import { useBrands, useModels } from '../../api/hooks/useVehicles';
 import { useServices } from '../../api/hooks/useServices';
 import type { QuickWashBooking, WashStatus } from '../../types';
 import { useToastStore } from '../../store/toastStore';
-import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
-import AdminMetricCard from '../../components/admin/AdminMetricCard';
 import VehicleBrandBadge from '../../components/admin/VehicleBrandBadge';
 
 const STATUS_CONFIG: Record<WashStatus, { label: string; color: string; bg: string; icon: React.ElementType; next?: WashStatus }> = {
@@ -23,6 +23,7 @@ const VEHICLE_CATEGORIES = [
   { value: 'sedan', label: 'Sedan' },
   { value: 'premium_sedan', label: 'Premium Sedan' },
   { value: 'suv', label: 'SUV' },
+  { value: 'luxury', label: 'Luxury' },
 ];
 
 const WASH_PHASE_LABELS = {
@@ -53,235 +54,145 @@ export default function QuickWashPage() {
     }
   };
 
+  const advancePhase = async (wash: QuickWashBooking) => {
+    const currentIdx = PHASE_ORDER.indexOf(wash.current_phase || 'pre_wash');
+    const nextPhase = currentIdx < PHASE_ORDER.length - 1 ? PHASE_ORDER[currentIdx + 1] : 'complete';
+    try {
+      const { default: api } = await import('../../api/axiosInstance');
+      await api.patch(`/quick-wash/${wash.id}/phase`, { phase: nextPhase });
+      addToast('success', `Wash phase advanced to ${nextPhase === 'complete' ? 'Completed' : WASH_PHASE_LABELS[nextPhase as keyof typeof WASH_PHASE_LABELS]}`);
+      refetch();
+    } catch {
+      addToast('error', 'Failed to advance wash phase');
+    }
+  };
+
+  const downloadInvoice = async (wash: QuickWashBooking) => {
+    try {
+      const { default: api } = await import('../../api/axiosInstance');
+      const res = await api.get(`/quick-wash/${wash.id}/invoice`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `QuickWash-Invoice-${wash.id}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch {
+      addToast('error', 'Failed to download invoice');
+    }
+  };
+
+  const TABS: { key: string; label: string; count?: number }[] = [
+    { key: 'all', label: 'All' },
+    { key: 'pending', label: 'Waiting', count: stats?.pending_count },
+    { key: 'washing', label: 'Washing', count: stats?.washing_count },
+    { key: 'completed', label: 'Ready', count: stats?.completed_count },
+    { key: 'delivered', label: 'Released', count: stats?.delivered_count },
+  ];
+  const NEXT_LABEL: Record<string, string> = { washing: 'Start washing', completed: 'Mark ready', delivered: 'Hand over' };
+
   return (
-    <div className="space-y-6 pb-28 lg:pb-12 max-w-[1600px] mx-auto font-sans">
-      <AdminHeaderBar
-        title="Quick Wash Express"
-        subtitle="Fast-track walk-in wash bookings & live bay queue tracking"
-      >
-        <button
-          onClick={() => refetch()}
-          className="px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-2xl text-xs font-bold text-slate-700 transition-all shadow-xs inline-flex items-center gap-1.5"
-        >
-          <RefreshCw size={14} />
-          <span>Refresh</span>
-        </button>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="px-4 py-2.5 bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs font-bold rounded-2xl shadow-sm hover:shadow transition-all inline-flex items-center gap-1.5 active:scale-95"
-        >
-          <Plus size={15} />
-          <span>+ New Wash</span>
-        </button>
-      </AdminHeaderBar>
-
-      {/* Stats Cards */}
-      {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-5">
-          <AdminMetricCard
-            label="In Intake Queue"
-            value={stats.pending_count || 0}
-            icon={<Clock size={18} />}
-            trend="Awaiting Bay"
-            variant="amber"
-          />
-          <AdminMetricCard
-            label="Active In Washing Bay"
-            value={stats.washing_count || 0}
-            icon={<Droplets size={18} />}
-            trend="Under Wash"
-            variant="red"
-          />
-          <AdminMetricCard
-            label="Completed Today"
-            value={stats.completed_count || 0}
-            icon={<CheckCircle2 size={18} />}
-            trend="Ready for Handover"
-            variant="emerald"
-          />
-          <AdminMetricCard
-            label="Delivered Today"
-            value={stats.delivered_count || 0}
-            icon={<Truck size={18} />}
-            trend="Vehicles Released"
-            variant="red"
-          />
-        </div>
-      )}
-
-      {/* Filter Tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {['all', 'pending', 'washing', 'completed', 'delivered'].map((status) => (
-          <button
-            key={status}
-            onClick={() => setFilter(status)}
-            className={`px-4 py-2 rounded-2xl text-xs font-bold tracking-tight transition-all shrink-0 ${
-              filter === status
-                ? 'bg-[#D32F2F] text-white shadow-xs'
-                : 'bg-white hover:bg-slate-50 text-slate-600 border border-slate-200/80'
-            }`}
-          >
-            {status === 'all' ? 'All Queues' : STATUS_CONFIG[status as WashStatus]?.label || status}
+    <div className="mx-auto max-w-5xl space-y-4 pb-28 font-sans">
+      <OpsPageTitle
+        kicker="Walk-in express"
+        title="Quick wash"
+        subtitle="Live wash bay queue"
+        action={
+          <button onClick={() => refetch()} className="h-10 w-10 rounded-full bg-white shadow-app flex items-center justify-center text-slate-700" aria-label="Refresh">
+            <RefreshCw size={17} />
           </button>
+        }
+      />
+
+      <div className="grid grid-cols-4 gap-2">
+        {[
+          { label: 'Waiting', value: stats?.pending_count || 0, tone: 'text-amber-600' },
+          { label: 'Washing', value: stats?.washing_count || 0, tone: 'text-[#D32F2F]' },
+          { label: 'Ready', value: stats?.completed_count || 0, tone: 'text-emerald-600' },
+          { label: 'Released', value: stats?.delivered_count || 0, tone: 'text-slate-500' },
+        ].map((k) => (
+          <div key={k.label} className="app-card px-2 py-3 text-center">
+            <p className={`font-display text-[22px] font-extrabold leading-none ${k.tone}`}>{k.value}</p>
+            <p className="mt-1 text-[11px] font-semibold text-slate-500">{k.label}</p>
+          </div>
         ))}
       </div>
 
-      {/* Wash Cards */}
+      <ChipRow value={filter} onChange={setFilter} items={TABS} />
+
       {isLoading ? (
-        <div className="flex justify-center py-20">
-          <div className="w-8 h-8 border-3 border-gray-200 border-t-[#D32F2F] rounded-full animate-spin" />
-        </div>
+        <div className="space-y-3"><Skeleton className="h-40" /><Skeleton className="h-40" /></div>
       ) : washes.length === 0 ? (
-        <div className="text-center py-20 bg-white rounded-xl border border-gray-200">
-          <Droplets size={48} className="mx-auto text-gray-300 mb-4" />
-          <p className="text-gray-600 text-lg font-medium">No wash bookings</p>
-          <p className="text-gray-400 text-sm mt-1">Click "New Wash" to add a walk-in</p>
-        </div>
+        <EmptyBlock
+          icon={<Droplets size={26} />}
+          title="No cars in this queue"
+          text="Add a walk-in to start."
+          action={<button onClick={() => setShowCreateModal(true)} className="app-btn-primary h-11"><Plus size={16} /> New wash</button>}
+        />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {washes.map((wash: QuickWashBooking) => {
             const config = STATUS_CONFIG[wash.wash_status];
             const StatusIcon = config.icon;
-
+            const phaseIdx = PHASE_ORDER.indexOf(wash.current_phase || 'pre_wash');
             return (
-              <div
-                key={wash.id}
-                className="bg-white border border-slate-200/80 rounded-3xl p-5 hover:shadow-md transition-all group shadow-[0_4px_20px_rgba(0,0,0,0.02)]"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2.5">
-                    <VehicleBrandBadge brand={wash.vehicle_brand} model={wash.vehicle_model} size="md" showText={false} />
-                    <div>
-                      <span className="text-slate-900 font-black text-sm tracking-tight">Queue #{wash.queue_position}</span>
-                      <p className="text-[11px] text-slate-400 font-mono">ID: #{wash.id}</p>
-                    </div>
-                  </div>
-                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border uppercase tracking-wider ${config.bg} ${config.color}`}>
-                    <StatusIcon size={12} className="inline mr-1 -mt-0.5" />
-                    {config.label}
-                  </span>
-                </div>
-
-                {/* Vehicle */}
-                <div className="space-y-1.5 mb-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-slate-900 font-black">
-                      {wash.vehicle_brand} {wash.vehicle_model}
-                    </p>
-                    <span className="text-[10px] font-mono font-bold text-slate-500 bg-white px-2 py-0.5 rounded-lg border border-slate-200">
-                      {wash.vehicle_reg_no || 'Walk-in'}
+              <div key={wash.id} className="app-card overflow-hidden">
+                <div className="p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="relative h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center shrink-0">
+                      <VehicleBrandBadge brand={wash.vehicle_brand} model={wash.vehicle_model} size="md" showText={false} />
+                      <span className="absolute -top-1.5 -left-1.5 h-6 min-w-6 px-1 rounded-full bg-[#111] text-white text-[11px] font-bold flex items-center justify-center">#{wash.queue_position}</span>
                     </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-display font-extrabold text-[16px] text-slate-900 truncate tracking-wide">{wash.vehicle_reg_no || 'Walk-in'}</p>
+                        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold shrink-0 ${config.bg} ${config.color}`}>
+                          <StatusIcon size={12} /> {config.label}
+                        </span>
+                      </div>
+                      <p className="text-[12.5px] text-slate-500 truncate">{[wash.vehicle_brand, wash.vehicle_model].filter(Boolean).join(' ')}</p>
+                      {wash.service_name && <p className="text-[12.5px] font-bold text-[#D32F2F] truncate">{wash.service_name}</p>}
+                    </div>
                   </div>
+
                   {wash.customer_name && (
-                    <p className="text-xs text-slate-600 font-medium">
-                      {wash.customer_name} {wash.customer_mobile && (
-                        <span>· <a href={`tel:${wash.customer_mobile}`} className="text-[#D32F2F] hover:underline font-bold">{wash.customer_mobile}</a></span>
+                    <div className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2">
+                      <span className="text-[13px] font-semibold text-slate-700 truncate">{wash.customer_name}</span>
+                      {wash.customer_mobile && (
+                        <a href={`tel:${wash.customer_mobile}`} className="h-8 w-8 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0" aria-label="Call">
+                          <Phone size={14} />
+                        </a>
                       )}
-                    </p>
+                    </div>
                   )}
-                  {wash.service_name && (
-                    <p className="text-xs text-[#D32F2F] font-bold mt-1">{wash.service_name}</p>
+                  {wash.notes && <p className="mt-2 text-[12px] text-slate-400 line-clamp-2">{wash.notes}</p>}
+
+                  {wash.wash_status === 'washing' && (
+                    <div className="mt-3">
+                      <div className="flex gap-1">
+                        {PHASE_ORDER.map((ph, i) => (
+                          <span key={ph} className={`h-1.5 flex-1 rounded-full ${i < phaseIdx ? 'bg-[#D32F2F]' : i === phaseIdx ? 'bg-[#D32F2F]/50 animate-pulse' : 'bg-slate-200'}`} />
+                        ))}
+                      </div>
+                      <div className="mt-1.5 flex items-center justify-between">
+                        <span className="text-[12px] font-bold text-slate-700">{WASH_PHASE_LABELS[(wash.current_phase || 'pre_wash') as keyof typeof WASH_PHASE_LABELS]}</span>
+                        <button onClick={() => advancePhase(wash)} className="text-[12.5px] font-bold text-[#D32F2F]">Next phase →</button>
+                      </div>
+                    </div>
                   )}
                 </div>
 
-                {wash.notes && (
-                  <p className="text-xs text-gray-400 italic mb-3 line-clamp-2">{wash.notes}</p>
-                )}
-
-                {wash.wash_status === 'washing' && (
-                  <div className="mt-4 pt-3 border-t border-gray-100 mb-4">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-2">Wash Progress</p>
-                    <div className="flex items-center justify-between relative mb-4 px-2">
-                      {/* Background Line */}
-                      <div className="absolute top-1/2 left-4 right-4 h-0.5 bg-gray-200 -translate-y-1/2 z-0" />
-                      {/* Active Progress Line */}
-                      <div
-                        className="absolute top-1/2 left-4 h-0.5 bg-[#D32F2F] -translate-y-1/2 z-0 transition-all duration-300"
-                        style={{
-                          width: `${(PHASE_ORDER.indexOf(wash.current_phase || 'pre_wash') / (PHASE_ORDER.length - 1)) * 90}%`,
-                        }}
-                      />
-
-                      {PHASE_ORDER.map((phaseId, pIdx) => {
-                        const currentIdx = PHASE_ORDER.indexOf(wash.current_phase || 'pre_wash');
-                        const isDone = pIdx < currentIdx;
-                        const isCurrent = pIdx === currentIdx;
-
-                        return (
-                          <div key={phaseId} className="flex flex-col items-center z-10 relative">
-                            <div
-                              className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all duration-300 ${
-                                isDone ? 'bg-[#D32F2F] text-white' :
-                                isCurrent ? 'bg-white text-[#D32F2F] border-2 border-[#D32F2F] ring-4 ring-red-100' :
-                                'bg-white text-gray-400 border-2 border-gray-200'
-                              }`}
-                              title={WASH_PHASE_LABELS[phaseId as keyof typeof WASH_PHASE_LABELS]}
-                            >
-                              {isDone ? '✓' : pIdx + 1}
-                            </div>
-                            <span className={`text-[8px] font-bold mt-1 uppercase tracking-wider ${
-                              isCurrent ? 'text-[#D32F2F]' : isDone ? 'text-gray-700' : 'text-gray-400'
-                            }`}>
-                              {WASH_PHASE_LABELS[phaseId as keyof typeof WASH_PHASE_LABELS]}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <button
-                      onClick={async () => {
-                        const currentIdx = PHASE_ORDER.indexOf(wash.current_phase || 'pre_wash');
-                        const nextPhase = currentIdx < PHASE_ORDER.length - 1 ? PHASE_ORDER[currentIdx + 1] : 'complete';
-                        try {
-                          const { default: api } = await import('../../api/axiosInstance');
-                          await api.patch(`/quick-wash/${wash.id}/phase`, { phase: nextPhase });
-                          addToast('success', `Wash phase advanced to ${nextPhase === 'complete' ? 'Completed' : WASH_PHASE_LABELS[nextPhase as keyof typeof WASH_PHASE_LABELS]}`);
-                          refetch();
-                        } catch {
-                          addToast('error', 'Failed to advance wash phase');
-                        }
-                      }}
-                      className="w-full py-2 bg-red-50 hover:bg-red-100 text-[#D32F2F] border border-red-200/70 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
-                    >
-                      <Clock size={13} />
-                      Advance Phase
-                    </button>
-                  </div>
-                )}
-
-                {/* Action */}
-                <div className="flex gap-2 mt-3">
-                  <button
-                    onClick={async () => {
-                      try {
-                        const { default: api } = await import('../../api/axiosInstance');
-                        const res = await api.get(`/quick-wash/${wash.id}/invoice`, { responseType: 'blob' });
-                        const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
-                        const link = document.createElement('a');
-                        link.href = url;
-                        link.setAttribute('download', `QuickWash-Invoice-${wash.id}.pdf`);
-                        document.body.appendChild(link);
-                        link.click();
-                        link.remove();
-                      } catch {
-                        addToast('error', 'Failed to download invoice');
-                      }
-                    }}
-                    className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 text-xs text-slate-700 rounded-2xl transition-all flex items-center justify-center gap-1.5 font-bold"
-                  >
-                    <Download size={13} />
-                    Invoice
+                <div className="grid grid-cols-[auto_1fr] gap-2 border-t border-slate-100 p-3">
+                  <button onClick={() => downloadInvoice(wash)} className="app-btn h-11 px-3.5 bg-slate-100 text-slate-800" aria-label="Invoice">
+                    <Download size={16} />
                   </button>
-                  {config.next && (
-                    <button
-                      onClick={() => handleStatusAdvance(wash.id, config.next!)}
-                      disabled={updateStatus.isPending}
-                      className="flex-1 py-2 bg-[#D32F2F] hover:bg-[#b71c1c] text-white text-xs rounded-2xl transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 font-bold shadow-xs active:scale-95"
-                    >
-                      <StatusIcon size={13} />
-                      {STATUS_CONFIG[config.next].label}
+                  {config.next ? (
+                    <button onClick={() => handleStatusAdvance(wash.id, config.next!)} disabled={updateStatus.isPending} className="app-btn-primary h-11">
+                      {NEXT_LABEL[config.next] || STATUS_CONFIG[config.next].label}
                     </button>
+                  ) : (
+                    <span className="app-btn h-11 bg-slate-50 text-slate-400">Released</span>
                   )}
                 </div>
               </div>
@@ -290,10 +201,15 @@ export default function QuickWashPage() {
         </div>
       )}
 
-      {/* Create Modal */}
-      {showCreateModal && (
-        <CreateQuickWashModal onClose={() => setShowCreateModal(false)} />
-      )}
+      {/* Floating add button */}
+      <button
+        onClick={() => setShowCreateModal(true)}
+        className="fixed right-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-30 app-btn-primary h-12 px-5 rounded-full shadow-app-lg"
+      >
+        <Plus size={18} /> New wash
+      </button>
+
+      {showCreateModal && <CreateQuickWashModal onClose={() => setShowCreateModal(false)} />}
     </div>
   );
 }
@@ -309,6 +225,8 @@ function CreateQuickWashModal({ onClose }: { onClose: () => void }) {
     vehicle_model: '',
     vehicle_category: 'hatchback',
     notes: '',
+    customer_name: '',
+    customer_mobile: '',
   });
   const [customerQuery, setCustomerQuery] = useState('');
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
@@ -328,7 +246,7 @@ function CreateQuickWashModal({ onClose }: { onClose: () => void }) {
   // Parse brands and models from API responses
   const brands: string[] = brandsData?.data || [];
   const models: string[] = modelsData?.data || [];
-  const services: { id: number; name: string }[] = servicesData?.data || [];
+  const services: any[] = servicesData?.data || [];
 
   // Auto-fill customer/vehicle details when typing registration number
   useEffect(() => {
@@ -399,6 +317,10 @@ function CreateQuickWashModal({ onClose }: { onClose: () => void }) {
 
     const finalBrand = form.vehicle_brand === 'Others' ? customBrand : form.vehicle_brand;
     const finalModel = (form.vehicle_brand === 'Others' || form.vehicle_model === 'Other') ? customModel : form.vehicle_model;
+    if (!form.customer_id && !isAutoFilled && form.customer_mobile.replace(/\D/g, '').length !== 10) {
+      addToast('error', "New car — add the customer's 10-digit mobile number");
+      return;
+    }
 
     try {
       const payload = {
@@ -418,226 +340,186 @@ function CreateQuickWashModal({ onClose }: { onClose: () => void }) {
     }
   };
 
+  const washServices = services.filter((s: any) => s.vehicle_type !== 'bike' && /wash|foam|spa|clean/i.test(`${s.name} ${s.category || ''}`));
+  const pickServices = washServices.length ? washServices : services;
+
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-      <div className="bg-white border border-gray-200 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
-          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-            <Droplets size={20} className="text-[#D32F2F]" />
-            New Quick Wash
-          </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
-            <X size={20} />
-          </button>
+    <BottomSheet open onClose={onClose} title="New quick wash">
+      <form onSubmit={handleSubmit} className="space-y-4 pb-2">
+        <div>
+          <label className="app-label">Number plate *</label>
+          <input
+            type="text"
+            value={form.vehicle_reg_no}
+            onChange={(e) => setForm((f) => ({ ...f, vehicle_reg_no: e.target.value.toUpperCase() }))}
+            placeholder="GJ06AB1234"
+            className="app-input h-14 text-[19px] font-display font-extrabold tracking-wider uppercase"
+            autoFocus
+          />
+          {isAutoFilled && (
+            <p className="mt-1.5 flex items-center gap-1 text-[12px] font-semibold text-emerald-700">
+              <Check size={13} /> Found — customer and car filled in
+            </p>
+          )}
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Customer search */}
+        <div className="relative">
+          <label className="app-label">Customer (optional)</label>
           <div className="relative">
-            <label className="block text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wider">Customer (optional)</label>
-            <div className="relative">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={selectedCustomerName || customerQuery}
-                onChange={(e) => {
-                  setCustomerQuery(e.target.value);
-                  setSelectedCustomerName('');
-                  setShowCustomerDropdown(true);
-                  if (!e.target.value) {
-                    setForm((f) => ({ ...f, customer_id: undefined, vehicle_id: undefined }));
-                  }
-                }}
-                onFocus={() => customerQuery && setShowCustomerDropdown(true)}
-                placeholder="Search by name or mobile..."
-                className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-red-100 focus:border-red-300 outline-none"
-              />
-            </div>
-            {showCustomerDropdown && searchResults.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl max-h-40 overflow-y-auto z-20 shadow-lg">
-                {searchResults.map((c: { id: number; name: string; mobile: string }) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => handleSelectCustomer(c)}
-                    className="w-full px-4 py-2.5 text-left text-sm text-gray-900 hover:bg-red-50 transition-colors flex justify-between items-center"
-                  >
-                    <span className="font-medium">{c.name}</span>
-                    <span className="text-gray-400 text-xs">{c.mobile}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Vehicle Reg No */}
-          <div>
-            <label className="block text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wider">Vehicle Reg No *</label>
+            <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              value={form.vehicle_reg_no}
-              onChange={(e) => setForm((f) => ({ ...f, vehicle_reg_no: e.target.value.toUpperCase() }))}
-              placeholder="MH12AB1234"
-              className="w-full px-4 py-2.5 bg-[#f6f3f2] focus:bg-white border border-transparent focus:border-red-300 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-red-100 outline-none uppercase font-mono tracking-wider transition-all"
+              value={selectedCustomerName || customerQuery}
+              onChange={(e) => {
+                setCustomerQuery(e.target.value);
+                setSelectedCustomerName('');
+                setShowCustomerDropdown(true);
+                if (!e.target.value) setForm((f) => ({ ...f, customer_id: undefined, vehicle_id: undefined }));
+              }}
+              onFocus={() => customerQuery && setShowCustomerDropdown(true)}
+              placeholder="Name or mobile"
+              className="app-input pl-10"
             />
-            {isAutoFilled && (
-              <p className="text-[10px] text-emerald-700 font-bold mt-1.5 flex items-center gap-1">
-                <Check size={11} className="text-emerald-600" /> Auto-filled customer and vehicle details from record
-              </p>
-            )}
           </div>
-
-          {/* Brand & Model dropdowns */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wider">Brand</label>
-              <div className="relative">
-                <select
-                  value={form.vehicle_brand}
-                  onChange={(e) => {
-                    setForm((f) => ({ ...f, vehicle_brand: e.target.value, vehicle_model: '' }));
-                    setCustomBrand('');
-                    setCustomModel('');
-                  }}
-                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-red-100 focus:border-red-300 outline-none appearance-none cursor-pointer"
-                >
-                  <option value="">Select Brand</option>
-                  {brands.map((b: string) => (
-                    <option key={b} value={b}>{b}</option>
-                  ))}
-                  <option value="Others">Others (Enter Manually)</option>
-                </select>
-                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wider">Model</label>
-              <div className="relative">
-                <select
-                  value={form.vehicle_model}
-                  onChange={(e) => {
-                    setForm((f) => ({ ...f, vehicle_model: e.target.value }));
-                    setCustomModel('');
-                  }}
-                  disabled={!form.vehicle_brand || form.vehicle_brand === 'Others'}
-                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-red-100 focus:border-red-300 outline-none appearance-none cursor-pointer disabled:bg-gray-50 disabled:text-gray-400"
-                >
-                  <option value="">Select Model</option>
-                  {models.map((m: string) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                  <option value="Other">Other (Enter Manually)</option>
-                </select>
-                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              </div>
-            </div>
-          </div>
-
-          {(form.vehicle_brand === 'Others' || form.vehicle_model === 'Other') && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2 text-left">
-              {form.vehicle_brand === 'Others' && (
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wider">Enter Brand Name</label>
-                  <input
-                    type="text"
-                    value={customBrand}
-                    onChange={(e) => setCustomBrand(e.target.value)}
-                    placeholder="e.g. Porsche"
-                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-red-100 focus:border-red-300 outline-none"
-                    required
-                  />
-                </div>
-              )}
-              {(form.vehicle_brand === 'Others' || form.vehicle_model === 'Other') && (
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wider">Enter Model Name</label>
-                  <input
-                    type="text"
-                    value={customModel}
-                    onChange={(e) => setCustomModel(e.target.value)}
-                    placeholder="e.g. Cayenne"
-                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-red-100 focus:border-red-300 outline-none"
-                    required
-                  />
-                </div>
-              )}
+          {showCustomerDropdown && searchResults.length > 0 && (
+            <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-48 overflow-y-auto rounded-2xl bg-white shadow-app-lg">
+              {searchResults.map((c: { id: number; name: string; mobile: string }) => (
+                <button key={c.id} type="button" onClick={() => handleSelectCustomer(c)} className="flex w-full items-center justify-between px-4 py-3 text-left text-[14px] active:bg-slate-50">
+                  <span className="font-semibold text-slate-900">{c.name}</span>
+                  <span className="text-[12px] text-slate-400">{c.mobile}</span>
+                </button>
+              ))}
             </div>
           )}
+        </div>
 
-          {/* Vehicle Category */}
-          <div>
-            <label className="block text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wider">Vehicle Category</label>
-            <div className="relative">
-              <select
-                value={form.vehicle_category}
-                onChange={(e) => setForm((f) => ({ ...f, vehicle_category: e.target.value }))}
-                className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-red-100 focus:border-red-300 outline-none appearance-none cursor-pointer"
-              >
-                {VEHICLE_CATEGORIES.map((cat) => (
-                  <option key={cat.value} value={cat.value}>{cat.label}</option>
-                ))}
-              </select>
-              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+        {!form.customer_id && !isAutoFilled && (
+          <div className="rounded-2xl bg-amber-50 p-3 space-y-2.5">
+            <p className="text-[12.5px] font-semibold text-amber-800">New customer? Add their details — the car is saved to their account.</p>
+            <div className="grid grid-cols-2 gap-2.5">
+              <input
+                type="text"
+                value={form.customer_name}
+                onChange={(e) => setForm((f) => ({ ...f, customer_name: e.target.value }))}
+                placeholder="Name"
+                className="app-input bg-white"
+              />
+              <input
+                type="tel"
+                inputMode="numeric"
+                value={form.customer_mobile}
+                onChange={(e) => setForm((f) => ({ ...f, customer_mobile: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+                placeholder="Mobile *"
+                className="app-input bg-white"
+              />
             </div>
           </div>
+        )}
 
-          {/* Service Selection */}
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wider">Wash Service (optional)</label>
-            <div className="relative">
-              <select
-                value={form.service_id || ''}
-                onChange={(e) => setForm((f) => ({ ...f, service_id: e.target.value ? Number(e.target.value) : undefined }))}
-                className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-red-100 focus:border-red-300 outline-none appearance-none cursor-pointer"
-              >
-                <option value="">Select Service</option>
-                {services.map((svc) => (
-                  <option key={svc.id} value={svc.id}>{svc.name}</option>
-                ))}
-              </select>
-              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <label className="app-label">Brand</label>
+            <select
+              value={form.vehicle_brand}
+              onChange={(e) => {
+                setForm((f) => ({ ...f, vehicle_brand: e.target.value, vehicle_model: '' }));
+                setCustomBrand('');
+                setCustomModel('');
+              }}
+              className="app-input"
+            >
+              <option value="">Brand</option>
+              {brands.map((b: string) => <option key={b} value={b}>{b}</option>)}
+              <option value="Others">Others</option>
+            </select>
+          </div>
+          <div>
+            <label className="app-label">Model</label>
+            <select
+              value={form.vehicle_model}
+              onChange={(e) => {
+                setForm((f) => ({ ...f, vehicle_model: e.target.value }));
+                setCustomModel('');
+              }}
+              disabled={!form.vehicle_brand || form.vehicle_brand === 'Others'}
+              className="app-input disabled:bg-slate-50 disabled:text-slate-400"
+            >
+              <option value="">Model</option>
+              {models.map((m: string) => <option key={m} value={m}>{m}</option>)}
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        {(form.vehicle_brand === 'Others' || form.vehicle_model === 'Other') && (
+          <div className="grid grid-cols-2 gap-3">
+            {form.vehicle_brand === 'Others' && (
+              <div>
+                <label className="app-label">Brand name</label>
+                <input type="text" value={customBrand} onChange={(e) => setCustomBrand(e.target.value)} placeholder="Porsche" className="app-input" required />
+              </div>
+            )}
+            <div>
+              <label className="app-label">Model name</label>
+              <input type="text" value={customModel} onChange={(e) => setCustomModel(e.target.value)} placeholder="Cayenne" className="app-input" required />
             </div>
           </div>
+        )}
 
-          {/* Notes */}
-          <div>
-            <label className="block text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wider">Notes</label>
-            <textarea
-              value={form.notes}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              rows={2}
-              placeholder="Any special instructions..."
-              className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-red-100 focus:border-red-300 outline-none resize-none"
-            />
+        <div>
+          <label className="app-label">Car type</label>
+          <div className="-mx-5 px-5 flex gap-2 overflow-x-auto no-scrollbar">
+            {VEHICLE_CATEGORIES.map((cat) => (
+              <button
+                type="button"
+                key={cat.value}
+                onClick={() => setForm((f) => ({ ...f, vehicle_category: cat.value }))}
+                className={`app-chip shrink-0 ${form.vehicle_category === cat.value ? 'app-chip-on' : 'app-chip-off'}`}
+              >
+                {cat.label}
+              </button>
+            ))}
           </div>
+        </div>
 
-          {/* Actions */}
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-2.5 bg-gray-50 text-gray-600 rounded-xl border border-gray-200 hover:bg-gray-100 text-sm font-semibold transition-all"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={createMutation.isPending}
-              className="flex-1 py-2.5 bg-[#D32F2F] text-white rounded-xl shadow-sm text-sm font-semibold transition-all hover:bg-[#b71c1c] disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {createMutation.isPending ? (
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <>
-                  <Plus size={16} />
-                  Book Wash
-                </>
-              )}
-            </button>
+        <div>
+          <label className="app-label">Wash</label>
+          <div className="grid grid-cols-2 gap-2">
+            {pickServices.map((svc: any) => {
+              const on = form.service_id === svc.id;
+              return (
+                <button
+                  type="button"
+                  key={svc.id}
+                  onClick={() => setForm((f) => ({ ...f, service_id: on ? undefined : svc.id }))}
+                  className={`rounded-2xl border p-3 text-left transition-colors ${on ? 'border-[#D32F2F] bg-red-50' : 'border-slate-200 bg-white'}`}
+                >
+                  <p className="font-display text-[13px] font-bold leading-tight text-slate-900 line-clamp-2">{svc.name}</p>
+                  {(() => {
+                    const p = priceForSegment(svc, form.vehicle_category);
+                    return p > 0 ? <p className="mt-1 font-display text-[13px] font-extrabold text-[#D32F2F]">₹{p.toLocaleString('en-IN')}</p> : null;
+                  })()}
+                </button>
+              );
+            })}
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+
+        <div>
+          <label className="app-label">Notes</label>
+          <textarea
+            value={form.notes}
+            onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+            rows={2}
+            placeholder="Any special instructions…"
+            className="app-input h-auto py-3 resize-none"
+          />
+        </div>
+
+        <button type="submit" disabled={createMutation.isPending} className="app-btn-primary w-full">
+          {createMutation.isPending ? <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> : <Plus size={17} />} Add to queue
+        </button>
+      </form>
+    </BottomSheet>
   );
 }

@@ -215,7 +215,7 @@ export default function CouponsPage() {
             </div>
             <div>
               <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Savings Granted</p>
-              <h3 className="text-xl font-bold text-slate-900 mt-0.5">₹{formatINR(totalSavings)}</h3>
+              <h3 className="text-xl font-bold text-slate-900 mt-0.5">{formatINR(totalSavings)}</h3>
             </div>
           </div>
         </AnimatedCard>
@@ -300,8 +300,8 @@ export default function CouponsPage() {
                     <td className="py-3.5 px-4 max-w-xs">
                       <p className="font-semibold text-slate-800 text-xs">{c.title}</p>
                       <p className="text-[11px] text-slate-400 mt-0.5">
-                        Min. Order: ₹{formatINR(c.min_order_amount)}
-                        {c.max_discount ? ` • Max: ₹${formatINR(c.max_discount)}` : ''}
+                        Min. Order: {formatINR(c.min_order_amount)}
+                        {c.max_discount ? ` • Max: ${formatINR(c.max_discount)}` : ''}
                       </p>
                     </td>
 
@@ -313,7 +313,7 @@ export default function CouponsPage() {
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-emerald-700">
-                          Flat ₹{formatINR(c.value)} OFF
+                          Flat {formatINR(c.value)} OFF
                         </span>
                       )}
                     </td>
@@ -329,7 +329,7 @@ export default function CouponsPage() {
                           {c.total_usage_limit ? ` / ${c.total_usage_limit}` : ''} used
                         </span>
                         <p className="text-[11px] text-emerald-600 font-medium">
-                          Saved: ₹{formatINR(c.total_savings_granted || 0)}
+                          Saved: {formatINR(c.total_savings_granted || 0)}
                         </p>
                       </button>
                     </td>
@@ -590,7 +590,7 @@ export default function CouponsPage() {
                     <p className="text-[11px] text-slate-400">{r.customer_mobile || 'Mobile N/A'} • {new Date(r.created_at).toLocaleDateString('en-IN')}</p>
                   </div>
                   <span className="font-bold text-emerald-600 text-xs">
-                    -₹{formatINR(r.discount_amount)}
+                    -{formatINR(r.discount_amount)}
                   </span>
                 </div>
               ))}

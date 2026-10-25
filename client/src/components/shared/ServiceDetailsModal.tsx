@@ -1,8 +1,10 @@
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Clock, CheckCircle2, ListChecks, ShieldCheck, ArrowRight, X } from 'lucide-react';
-import Modal from '../ui/Modal';
-import Button from '../ui/Button';
+import { Clock, CheckCircle2, ShieldCheck, ListChecks, Sparkles } from 'lucide-react';
+import { BottomSheet } from '../customer/ui';
+import ServiceImage from '../customer/ServiceImage';
+import { useActiveVehicle } from '../../api/hooks/useCustomerApp';
+import { ServiceMediaShowcase, ServiceBrands } from '../customer/ServiceMediaShowcase';
+import { SEGMENT_LABEL, priceForSegment, formatPrice } from '../../utils/pricing';
 
 interface ServiceDetailsModalProps {
   isOpen: boolean;
@@ -10,215 +12,151 @@ interface ServiceDetailsModalProps {
   service: any;
   isFirstWashEligible?: boolean;
   onSelect?: (service: any) => void;
+  /** Override the segment (e.g. the booking page's chosen vehicle). */
+  segment?: string;
 }
 
-export default function ServiceDetailsModal({ isOpen, onClose, service, onSelect }: ServiceDetailsModalProps) {
-  const navigate = useNavigate();
+const parseList = (field: any): string[] => {
+  if (!field) return [];
+  if (Array.isArray(field)) return field;
+  if (typeof field === 'string') {
+    try {
+      const parsed = JSON.parse(field);
+      return Array.isArray(parsed) ? parsed : [field];
+    } catch {
+      return field.split('\n').filter(Boolean);
+    }
+  }
+  return [];
+};
 
+export function warrantyLabel(months?: number) {
+  if (!months) return null;
+  if (months % 12 === 0) return `${months / 12} year${months > 12 ? 's' : ''} warranty`;
+  return `${months} month${months > 1 ? 's' : ''} warranty`;
+}
+
+export function durationLabel(mins?: number) {
+  const m = Number(mins) || 60;
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return r ? `${h} hr ${r} min` : `${h} hour${h > 1 ? 's' : ''}`;
+}
+
+export default function ServiceDetailsModal({ isOpen, onClose, service, onSelect, isFirstWashEligible, segment: segmentOverride }: ServiceDetailsModalProps) {
+  const navigate = useNavigate();
+  const { active, segment: activeSegment } = useActiveVehicle();
   if (!service) return null;
 
-  const isWash = service.name && service.name.toLowerCase().includes('wash');
+  const segment = segmentOverride || activeSegment;
+  const isWash = (service.name || '').toLowerCase().includes('wash');
+  const isBike = service.vehicle_type === 'bike';
+  const price = priceForSegment(service, segment);
 
-  // Parse JSON helper
-  const parseJson = (field: any) => {
-    if (!field) return [];
-    if (Array.isArray(field)) return field;
-    if (typeof field === 'string') {
-      try {
-        const parsed = JSON.parse(field);
-        return Array.isArray(parsed) ? parsed : [field];
-      } catch {
-        return field.split('\n').filter(Boolean);
-      }
-    }
-    return [];
-  };
-
-  let features = parseJson(service.features_json);
-  let whatsIncluded = parseJson(service.whats_included_json);
-  let processSteps = parseJson(service.process_json);
-
-  // Provide rich default English content if none saved by Admin yet
-  if (features.length === 0) {
+  let features = parseList(service.features_json);
+  let included = parseList(service.whats_included_json);
+  let steps = parseList(service.process_json);
+  if (!features.length) {
     features = isWash
-      ? ['Deep snow foam hand wash', 'pH-neutral shampoo formula', 'Microfiber scratch-free dry', 'High gloss paint protection']
-      : ['Aerospace grade protection', 'Multi-stage paint correction', 'High UV & swirl mark resistance', 'Artisan hand application'];
+      ? ['pH-neutral shampoo, safe on coatings', 'Scratch-free two-bucket hand wash', 'Microfiber blow-and-wipe dry']
+      : ['Professional-grade products', 'Trained, certified detailers', 'Final quality inspection'];
   }
-  if (whatsIncluded.length === 0) {
-    whatsIncluded = isWash
-      ? ['Underbody pressure wash', 'Interior vacuuming & dashboard wipe', 'Tyre dressing & rim clean', 'Glass streak-free polish']
-      : ['Surface clay bar decontamination', 'Paint defect & scratch removal', 'Full exterior sealant coating', 'Final studio QC inspection'];
-  }
-  if (processSteps.length === 0) {
-    processSteps = isWash
-      ? ['1. High pressure pre-rinse', '2. Snow foam soak & microfiber wash', '3. Underbody & wheel deep clean', '4. Blow dry & streak-free wipe']
-      : ['1. Vehicle prep & surface decontamination', '2. Precision machine compounding & polishing', '3. Protective layer application', '4. Curing & final studio sign-off'];
+  if (!included.length) {
+    included = isWash
+      ? ['Exterior foam wash', 'Tyre & rim clean', 'Glass cleaning', 'Interior quick vacuum']
+      : ['Surface preparation', 'Main treatment', 'Finishing & inspection'];
   }
 
   return (
-    <Modal
+    <BottomSheet
       open={isOpen}
       onClose={onClose}
-      title=""
-      size="lg"
       footer={
-        <div className="flex items-center justify-between w-full gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex-1">
+            <p className="text-[11px] text-slate-500">{isBike ? 'Bike price' : active ? `Price for your ${SEGMENT_LABEL[segment]}` : 'Starting price'}</p>
+            <p className="font-display text-xl font-extrabold text-slate-900">{formatPrice(price)}</p>
+          </div>
           <button
-            type="button"
-            onClick={onClose}
-            className="px-5 py-2 text-xs font-bold text-gray-500 hover:text-gray-800 transition-colors"
-          >
-            Close
-          </button>
-
-          <Button
             onClick={() => {
               onClose();
-              if (onSelect) {
-                onSelect(service);
-              } else {
-                navigate(`/customer/bookings/new?service_id=${service.id}`);
-              }
+              if (onSelect) onSelect(service);
+              else navigate(`/customer/bookings/new?service_id=${service.id}`);
             }}
-            className="bg-[#D32F2F] hover:bg-[#b52626] text-white py-2 px-5 font-bold text-xs rounded-xl shadow-md"
-            icon={<ArrowRight size={15} />}
+            className="app-btn-primary px-6"
           >
-            {onSelect ? 'Select This Service' : 'Book This Service Now'}
-          </Button>
+            {onSelect ? 'Select' : 'Book now'}
+          </button>
         </div>
       }
     >
-      <div className="space-y-5">
-        {/* Banner Header */}
-        <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-gray-900 via-zinc-900 to-[#1c1b1b] p-5 sm:p-6 text-white shadow-xl">
-          {/* Top-right close button */}
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute top-3.5 right-3.5 z-20 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-md transition-all shadow-sm"
-            aria-label="Close"
-          >
-            <X size={16} />
-          </button>
-
-          {service.image_url && (
-            <img
-              src={service.image_url}
-              alt={service.name}
-              className="absolute inset-0 w-full h-full object-cover opacity-20 pointer-events-none"
-            />
-          )}
-          <div className="relative z-10 space-y-2 pr-8">
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 bg-red-600/90 text-white text-[10px] font-black uppercase tracking-wider rounded-md">
-                {service.category_name || 'GK AutoHerb Service'}
-              </span>
-              {service.is_premium && (
-                <span className="px-2.5 py-0.5 bg-amber-500/90 text-black text-[10px] font-black uppercase tracking-wider rounded-md flex items-center gap-1">
-                  <Sparkles size={10} /> Premium
-                </span>
-              )}
-            </div>
-            <h2 className="text-xl sm:text-2xl font-black text-white">{service.name}</h2>
-            <p className="text-xs text-gray-300 max-w-xl leading-relaxed">
-              {service.description || 'Comprehensive professional car care service engineered for maximum protection and showroom finish.'}
-            </p>
-
-            <div className="flex items-center gap-4 pt-1.5 text-xs font-bold text-gray-300">
-              <div className="flex items-center gap-1.5">
-                <Clock size={14} className="text-red-500" />
-                <span>{service.duration_minutes || 60} Minutes</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <ShieldCheck size={14} className="text-emerald-500" />
-                <span>Studio Certified</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 2-Column Grid: Key Highlights & What's Included */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-          {/* Key Highlights */}
-          {features.length > 0 && (
-            <div className="p-3.5 sm:p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
-              <h4 className="text-xs font-black uppercase tracking-wider text-gray-700 flex items-center gap-2">
-                <Sparkles size={14} className="text-amber-500" />
-                Key Highlights
-              </h4>
-              <ul className="space-y-1.5 text-xs font-medium text-gray-700">
-                {features.map((item: string, idx: number) => (
-                  <li key={idx} className="flex items-start gap-2">
-                    <CheckCircle2 size={13} className="text-emerald-500 shrink-0 mt-0.5" />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* What's Included */}
-          {whatsIncluded.length > 0 && (
-            <div className="p-3.5 sm:p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
-              <h4 className="text-xs font-black uppercase tracking-wider text-gray-700 flex items-center gap-2">
-                <ListChecks size={14} className="text-blue-500" />
-                What's Included
-              </h4>
-              <ul className="space-y-1.5 text-xs font-medium text-gray-700">
-                {whatsIncluded.map((item: string, idx: number) => (
-                  <li key={idx} className="flex items-start gap-2">
-                    <CheckCircle2 size={13} className="text-blue-500 shrink-0 mt-0.5" />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-
-        {/* Process Steps */}
-        {processSteps.length > 0 && (
-          <div className="p-3.5 sm:p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
-            <h4 className="text-xs font-black uppercase tracking-wider text-gray-700 flex items-center gap-2">
-              <ShieldCheck size={14} className="text-purple-500" />
-              Service Process & Workflow
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-medium text-gray-700">
-              {processSteps.map((step: string, idx: number) => (
-                <div key={idx} className="p-2.5 bg-white rounded-xl border border-gray-200/60 shadow-2xs">
-                  {step}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Segment Pricing Table */}
-        <div>
-          <h4 className="text-xs font-black uppercase tracking-wider text-gray-500 mb-2">
-            Pricing by Vehicle Segment
-          </h4>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
-            {[
-              { label: 'Hatchback', key: 'price_hatchback' },
-              { label: 'Med Hatch', key: 'price_medium_hatchback' },
-              { label: 'Sedan', key: 'price_sedan' },
-              { label: 'Prem Sedan', key: 'price_premium_sedan' },
-              { label: 'SUV', key: 'price_suv' },
-            ].map((seg) => {
-              const val = parseFloat(service[seg.key]) || 0;
-              return (
-                <div key={seg.key} className="p-2.5 sm:p-3 bg-gray-50 rounded-xl border border-gray-200/60">
-                  <p className="text-[9px] font-bold text-gray-400 uppercase">{seg.label}</p>
-                  <p className="text-xs sm:text-sm font-black text-gray-900 mt-0.5">
-                    {val > 0 ? `₹${val}` : 'Ask Studio'}
-                  </p>
-                </div>
-              );
-            })}
+      <div className="-mx-5 -mt-1">
+        <div className="relative h-52">
+          <ServiceImage service={{ ...service, name: '' }} className="h-full w-full" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+          <div className="absolute bottom-3 left-5 right-5 text-white">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#ff8a80]">{service.category_name || 'GK AutoHerb'}</span>
+            <h2 className="font-display text-2xl font-extrabold leading-tight">{service.name}</h2>
           </div>
         </div>
       </div>
-    </Modal>
+
+      <div className="space-y-4 pt-4">
+        {service.description && <p className="text-sm text-slate-600 leading-relaxed">{service.description}</p>}
+
+        <div className="flex flex-wrap gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">
+            <Clock size={14} /> {durationLabel(service.duration_minutes)}
+          </span>
+          {warrantyLabel(service.warranty_months) && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+              <ShieldCheck size={14} /> {warrantyLabel(service.warranty_months)}
+            </span>
+          )}
+          {isWash && isFirstWashEligible && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1.5 text-xs font-bold text-[#C62828]">
+              <Sparkles size={14} /> 50% off your first wash
+            </span>
+          )}
+        </div>
+
+        <div className="rounded-2xl bg-slate-50 p-4">
+          <h4 className="font-display text-sm font-extrabold text-slate-900 mb-2 flex items-center gap-2"><ListChecks size={16} className="text-[#D32F2F]" /> What's included</h4>
+          <ul className="space-y-1.5">
+            {included.map((x, i) => (
+              <li key={i} className="flex gap-2 text-[13px] text-slate-700"><CheckCircle2 size={15} className="text-emerald-500 mt-0.5 shrink-0" />{x}</li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="rounded-2xl bg-slate-50 p-4">
+          <h4 className="font-display text-sm font-extrabold text-slate-900 mb-2 flex items-center gap-2"><Sparkles size={16} className="text-[#D32F2F]" /> Why customers pick it</h4>
+          <ul className="space-y-1.5">
+            {features.map((x, i) => (
+              <li key={i} className="flex gap-2 text-[13px] text-slate-700"><CheckCircle2 size={15} className="text-[#D32F2F] mt-0.5 shrink-0" />{x}</li>
+            ))}
+          </ul>
+        </div>
+
+        <ServiceBrands service={service} />
+
+        {service.id && <ServiceMediaShowcase serviceId={service.id} />}
+
+        {steps.length > 0 && (
+          <div>
+            <h4 className="font-display text-sm font-extrabold text-slate-900 mb-2">How we do it</h4>
+            <ol className="space-y-2">
+              {steps.map((x, i) => (
+                <li key={i} className="flex gap-3 text-[13px] text-slate-700">
+                  <span className="h-6 w-6 shrink-0 rounded-full bg-[#111] text-white text-[11px] font-bold flex items-center justify-center">{i + 1}</span>
+                  <span className="pt-0.5">{String(x).replace(/^\d+\.\s*/, '')}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+      </div>
+    </BottomSheet>
   );
 }

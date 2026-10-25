@@ -368,5 +368,15 @@ exports.initCronJobs = () => {
     }
   });
   
+  // 8. CUSTOMER AUTOMATIONS (IST): day-before reminders, birthday/anniversary wishes, warranty alerts
+  const automation = require('./automationJobs');
+  const IST = { timezone: 'Asia/Kolkata' };
+  cron.schedule('*/30 * * * *', () => automation.runBookingReminders().catch((e) => console.error('[CRON] reminders:', e.message)), IST);
+  cron.schedule('0 9 * * *', () => automation.runGreetings().catch((e) => console.error('[CRON] greetings:', e.message)), IST);
+  cron.schedule('30 10 * * *', () => automation.runWarrantyJobs().catch((e) => console.error('[CRON] warranty:', e.message)), IST);
+  cron.schedule('0 8 * * *', () => automation.runMorningReminders().catch((e) => console.error('[CRON] morning reminders:', e.message)), IST);
+  cron.schedule('0 10 * * *', () => automation.runPackageJobs().catch((e) => console.error('[CRON] package jobs:', e.message)), IST);
+  cron.schedule('*/5 * * * *', () => automation.runFestivalCampaigns().catch((e) => console.error('[CRON] festival:', e.message)), IST);
+
   console.log('[CRON] Jobs initialized successfully');
 };

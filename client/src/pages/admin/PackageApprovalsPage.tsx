@@ -141,7 +141,7 @@ export default function PackageApprovalsPage() {
         </div>
 
         {/* ─── Tab Bar ─── */}
-        <div className="bg-white rounded-3xl p-1.5 border border-slate-100 shadow-sm inline-flex items-center gap-1">
+        <div className="bg-white rounded-3xl p-1.5 border border-slate-100 shadow-sm inline-flex max-w-full overflow-x-auto no-scrollbar items-center gap-1 [&>*]:shrink-0">
           <button
             onClick={() => setActiveTab('pending')}
             className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition-all ${

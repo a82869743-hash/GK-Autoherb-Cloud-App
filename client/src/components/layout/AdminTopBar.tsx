@@ -50,7 +50,7 @@ export default function AdminTopBar({
           {showBackButton && (
             <button
               onClick={handleBack}
-              className="mt-0.5 sm:mt-0 w-8 h-8 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 shadow-2xs flex items-center justify-center text-slate-700 hover:text-slate-900 transition-all active:scale-95 shrink-0"
+              className="mt-0.5 sm:mt-0 w-10 h-10 rounded-full bg-white hover:bg-slate-100 shadow-app flex items-center justify-center text-slate-700 hover:text-slate-900 transition-all active:scale-95 shrink-0"
               aria-label="Go Back"
             >
               <ArrowLeft size={16} />
@@ -60,7 +60,7 @@ export default function AdminTopBar({
           <div>
             <div className="flex flex-wrap items-center gap-2 mb-0.5">
               {category && (
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-[#D32F2F]">
+                <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#D32F2F]">
                   {category}
                 </span>
               )}
@@ -71,12 +71,12 @@ export default function AdminTopBar({
               )}
             </div>
 
-            <h1 className="text-xl sm:text-[22px] font-semibold text-slate-900 tracking-tight leading-tight">
+            <h1 className="font-display text-[24px] font-extrabold text-slate-900 leading-tight">
               {title}
             </h1>
 
             {subtitle && (
-              <p className="text-xs text-slate-500 font-normal mt-0.5">
+              <p className="text-[13px] text-slate-500 font-normal mt-0.5">
                 {subtitle}
               </p>
             )}

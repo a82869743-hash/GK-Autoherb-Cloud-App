@@ -17,7 +17,7 @@ exports.create = async (req, res) => {
     const {
       customer_id, vehicle_id, service_id, package_id,
       vehicle_brand, vehicle_model, vehicle_reg_no, vehicle_category,
-      use_package, notes
+      use_package, notes, customer_name, customer_mobile
     } = req.body;
 
     // Validate
@@ -45,6 +45,52 @@ exports.create = async (req, res) => {
       }
     }
 
+    // Walk-in with a number plate but no customer picked: a booking must belong to a customer
+    // (bookings.customer_id is NOT NULL), so find the car's owner, else find / create the
+    // customer by mobile and link the car to them.
+    const cleanReg = resolvedRegNo ? String(resolvedRegNo).toUpperCase().replace(/\s/g, '') : null;
+    if (!resolvedCustomerId && cleanReg) {
+      const [owned] = await conn.query('SELECT id, customer_id FROM vehicles WHERE UPPER(REPLACE(registration_no, " ", "")) = ? LIMIT 1', [cleanReg]);
+      if (owned.length) {
+        resolvedCustomerId = owned[0].customer_id;
+        resolvedVehicleId = resolvedVehicleId || owned[0].id;
+      }
+    }
+    if (!resolvedCustomerId) {
+      const mobile = String(customer_mobile || '').replace(/\D/g, '').slice(-10);
+      if (mobile.length !== 10) {
+        await conn.rollback();
+        return res.status(400).json({ success: false, error: "New car — add the customer's 10-digit mobile number" });
+      }
+      const [users] = await conn.query("SELECT id FROM users WHERE mobile = ? AND role = 'customer' LIMIT 1", [mobile]);
+      if (users.length) {
+        resolvedCustomerId = users[0].id;
+      } else {
+        const bcrypt = require('bcryptjs');
+        const hash = await bcrypt.hash(require('crypto').randomBytes(16).toString('hex'), 10); // logs in with OTP
+        const [nu] = await conn.query(
+          "INSERT INTO users (name, mobile, password_hash, role, is_active) VALUES (?, ?, ?, 'customer', 1)",
+          [String(customer_name || '').trim() || 'Walk-in customer', mobile, hash]
+        );
+        resolvedCustomerId = nu.insertId;
+        await conn.query('INSERT IGNORE INTO loyalty (customer_id) VALUES (?)', [resolvedCustomerId]).catch(() => {});
+      }
+    }
+    if (!resolvedVehicleId && cleanReg && resolvedCustomerId) {
+      const [existing] = await conn.query('SELECT id FROM vehicles WHERE UPPER(REPLACE(registration_no, " ", "")) = ? LIMIT 1', [cleanReg]);
+      if (existing.length) {
+        resolvedVehicleId = existing[0].id;
+      } else if (resolvedBrand && resolvedModel) {
+        const { detectVehicleCategory } = require('../utils/vehicleCategory');
+        const [nv] = await conn.query(
+          'INSERT INTO vehicles (customer_id, brand, model, registration_no, category) VALUES (?, ?, ?, ?, ?)',
+          [resolvedCustomerId, resolvedBrand, resolvedModel, cleanReg, detectVehicleCategory(resolvedBrand, resolvedModel)]
+        );
+        resolvedVehicleId = nv.insertId;
+      }
+    }
+    resolvedRegNo = cleanReg || resolvedRegNo;
+
     // Get or create a "walk-in" slot for today
     const now = new Date();
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -71,7 +117,7 @@ exports.create = async (req, res) => {
     const queuePosition = (queueRows[0]?.cnt || 0) + 1;
 
     // Sanitize vehicle_category to valid ENUM values
-    const validCategories = ['hatchback', 'medium_hatchback', 'sedan', 'premium_sedan', 'suv'];
+    const validCategories = ['hatchback', 'medium_hatchback', 'sedan', 'premium_sedan', 'suv', 'luxury'];
     const safeCategory = validCategories.includes(vehicle_category) ? vehicle_category : null;
 
     // Handle package usage

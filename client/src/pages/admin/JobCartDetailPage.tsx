@@ -1,11 +1,12 @@
+import JobStagePanel from '../../components/admin/JobStagePanel';
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Truck, CheckCircle, Send, Plus, Trash2, X, Save, Loader2, Edit2, Package, Mail, Share2 } from 'lucide-react';
+import { ArrowLeft, Download, Truck, CheckCircle, Send, Plus, Trash2, X, Save, Loader2, Edit2, Package, Mail, Share2, Phone, MessageCircle, Sparkles, Wallet, Camera } from 'lucide-react';
+import { StatusPill, SectionTitle, EmptyBlock, Skeleton } from '../../components/ops/ui';
+import { segmentForVehicle, priceForSegment } from '../../utils/pricing';
 import { useJobCart, useSubmitJobCart, useCompleteJobCart, useAddService, useUpdateService as useUpdateJobService, useDeleteService as useDeleteJobService, useUploadPhoto, useDeletePhoto } from '../../api/hooks/useJobCarts';
 import { useMessagesLog } from '../../api/hooks/useMessages';
 import api from '../../api/axiosInstance';
-import AdminTopBar from '../../components/layout/AdminTopBar';
-import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
 import VehicleBrandBadge from '../../components/admin/VehicleBrandBadge';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
@@ -13,9 +14,7 @@ import Select from '../../components/ui/Select';
 import Textarea from '../../components/ui/Textarea';
 import Modal from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/shared/ConfirmDialog';
-import StatusBadge from '../../components/shared/StatusBadge';
 import ErrorState from '../../components/shared/ErrorState';
-import { SkeletonCard } from '../../components/ui/SkeletonLoader';
 import FileUpload from '../../components/ui/FileUpload';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
@@ -195,19 +194,20 @@ export default function JobCartDetailPage() {
       setName(''); setCustom(true); setPrice(0);
     } else {
       const svc = servicesCatalog.find(s => s.name === val);
-      setName(val); setCustom(false); setPrice(Number(svc?.price_sedan) || Number(svc?.price_hatchback) || 0);
+      setName(val); setCustom(false);
+      setPrice(priceForSegment(svc, segmentForVehicle(cart?.vehicle)) || Number(svc?.price_sedan) || Number(svc?.price_hatchback) || 0);
     }
   };
 
   // ─── Loading / Error ───────────────────
   if (isLoading) {
     return (
-      <>
-        <AdminTopBar title="Loading..." />
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {[1, 2, 3].map(i => <SkeletonCard key={i} />)}
-        </div>
-      </>
+      <div className="mx-auto max-w-5xl space-y-3">
+        <Skeleton className="h-10 w-48" />
+        <Skeleton className="h-44" />
+        <Skeleton className="h-28" />
+        <Skeleton className="h-28" />
+      </div>
     );
   }
 
@@ -450,7 +450,7 @@ export default function JobCartDetailPage() {
   const ProductEditor = ({ products, setProducts }: { products: ProductRow[]; setProducts: (p: ProductRow[]) => void }) => (
     <div className="mt-3">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#5f5e5e]">Products Used</span>
+        <span className="text-[13px] font-bold text-slate-700">Products used</span>
         <button onClick={() => setProducts([...products, emptyProduct()])} className="text-xs font-bold text-[#D32F2F] hover:underline flex items-center gap-1">
           <Plus size={12} /> Add Product
         </button>
@@ -546,385 +546,361 @@ export default function JobCartDetailPage() {
           <Input label="Labor Charges (₹)" type="number" value={svcLabor || ''} onChange={e => setSvcLabor(parseFloat(e.target.value) || 0)} />
         </div>
       )}
-      <ProductEditor products={products} setProducts={setProducts} />
+      {ProductEditor({ products, setProducts })}
     </div>
   );
 
-  return (
-    <div className="space-y-6 pb-28 lg:pb-12 max-w-[1600px] mx-auto font-sans">
-      <AdminHeaderBar
-        title={cart.vehicle?.registration_no || `Job Card #${cart.id}`}
-        subtitle={
-          cart.vehicle
-            ? `${cart.vehicle.brand} ${cart.vehicle.model}${cart.vehicle.car_year || cart.vehicle.manufacture_year ? ' (' + (cart.vehicle.car_year || cart.vehicle.manufacture_year) + ')' : ''} · Visit #${cart.visit_number}`
-            : `Visit #${cart.visit_number}`
-        }
-        badge={<VehicleBrandBadge brand={cart.vehicle?.brand} model={cart.vehicle?.model} showText={false} />}
-      >
-        <button
-          onClick={() => navigate(isStaff ? "/staff/job-carts" : "/admin/job-carts")}
-          className="px-3.5 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-2xl text-xs font-bold text-slate-700 transition-all inline-flex items-center gap-1.5"
-        >
-          <ArrowLeft size={14} />
-          <span>Back to Jobs</span>
-        </button>
-      </AdminHeaderBar>
+  const customer = (cart as any).customer || {};
+  const waPhone = customer.mobile ? `91${String(customer.mobile).replace(/\D/g, '').slice(-10)}` : '';
+  const advancePaid = Number((cart as any).advance_paid || 0);
+  const balanceDue = (cart as any).balance_due;
 
-      <div className="space-y-6">
-
-        {/* ─── Status Alert Card ─────────────────────── */}
-        {cart.status === 'complete' && canEdit && (
-          <div className="bg-amber-50 border border-amber-200/80 rounded-2xl p-4 text-xs text-amber-900 flex items-center gap-2.5 shadow-xs">
-            <Edit2 size={16} className="text-amber-600 shrink-0" />
-            <span className="font-bold">
-              {isAdmin 
-                ? "Admin Override: You have full permissions to edit this completed job cart." 
-                : `Edit Window Open: You have ${editTimeRemaining} hours left to edit this completed job cart.`}
-            </span>
+  const PhotoGrid = (list: JobPhoto[], label: string) =>
+    list.length > 0 ? (
+      <div className="grid grid-cols-3 gap-2">
+        {list.map((p: JobPhoto) => (
+          <div key={p.id} className="relative aspect-square">
+            <img src={p.url} alt={label} className="h-full w-full rounded-xl object-cover" />
+            <div className="absolute bottom-1 right-1 flex gap-1">
+              <button onClick={() => handleShareFile(p.url, `${label} Photo - Job #${id}`, 'image')} className="h-7 w-7 rounded-full bg-white/90 text-slate-800 flex items-center justify-center shadow" aria-label="Share photo">
+                <Share2 size={13} />
+              </button>
+              {canEdit && (
+                <button onClick={() => handleDeletePhoto(p.id)} className="h-7 w-7 rounded-full bg-[#D32F2F] text-white flex items-center justify-center shadow" aria-label="Delete photo">
+                  <Trash2 size={13} />
+                </button>
+              )}
+            </div>
           </div>
-        )}
+        ))}
+      </div>
+    ) : (
+      <p className="text-[12.5px] text-slate-400">No {label.toLowerCase()} photos yet</p>
+    );
 
-        <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/70 shadow-[0_4px_24px_rgba(0,0,0,0.03)]">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
-                <VehicleBrandBadge brand={cart.vehicle?.brand} model={cart.vehicle?.model} size="lg" showText={false} />
-                <div>
-                  <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">{cart.vehicle?.registration_no}</h3>
-                  <p className="text-xs font-bold text-slate-500">{cart.vehicle?.brand} {cart.vehicle?.model}</p>
+  const PhotoButton = (label: string, onPick: (files: File[]) => void) => (
+    <label className="mt-2 app-btn h-11 w-full bg-slate-100 text-slate-800 cursor-pointer">
+      {uploadPhotoMut.isPending ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />} {label}
+      <input
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          const files = Array.from(e.target.files || []);
+          e.target.value = '';
+          if (files.length) onPick(files);
+        }}
+      />
+    </label>
+  );
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-4 pb-44 font-sans">
+      {/* ─── Top bar ─── */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => navigate(isStaff ? '/staff/job-carts' : '/admin/job-carts')}
+          className="-ml-1 h-10 w-10 rounded-full flex items-center justify-center text-slate-900 active:bg-slate-200"
+          aria-label="Back to jobs"
+        >
+          <ArrowLeft size={22} />
+        </button>
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#D32F2F]">Job card #{cart.id}</p>
+          <h1 className="font-display text-[20px] font-extrabold text-slate-900 leading-tight truncate">{cart.vehicle?.registration_no || `Job #${cart.id}`}</h1>
+        </div>
+        <StatusPill status={cart.status} />
+      </div>
+
+      {cart.status === 'complete' && canEdit && (
+        <div className="app-card flex items-center gap-2.5 p-3 text-[12.5px] font-semibold text-amber-800 bg-amber-50">
+          <Edit2 size={16} className="text-amber-600 shrink-0" />
+          {isAdmin ? 'Admin override: you can still edit this completed job.' : `You have ${editTimeRemaining} hours left to edit this completed job.`}
+        </div>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:items-start">
+        <div className="space-y-4 min-w-0">
+          {/* ─── Car & customer ─── */}
+          <section className="app-card overflow-hidden">
+            <div className="relative bg-[#111] p-4 text-white">
+              <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-[#D32F2F]/30 blur-2xl" />
+              <div className="relative flex items-center gap-3">
+                <div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center shrink-0">
+                  <VehicleBrandBadge brand={cart.vehicle?.brand} model={cart.vehicle?.model} showText={false} />
                 </div>
-                <StatusBadge status={cart.status} />
+                <div className="min-w-0 flex-1">
+                  <p className="font-display text-[18px] font-extrabold truncate">{[cart.vehicle?.brand, cart.vehicle?.model].filter(Boolean).join(' ') || 'Vehicle'}</p>
+                  <p className="text-[12.5px] text-white/70">
+                    Visit #{cart.visit_number} · {formatDate(cart.visit_date)}
+                  </p>
+                </div>
                 {canEdit && !editingInfo && (
-                  <button onClick={handleStartEditInfo} className="p-1.5 rounded-xl text-slate-400 hover:text-[#D32F2F] hover:bg-red-50 transition-colors" title="Edit details">
-                    <Edit2 size={14} />
+                  <button onClick={handleStartEditInfo} className="h-9 w-9 rounded-full bg-white/10 flex items-center justify-center" aria-label="Edit details">
+                    <Edit2 size={15} />
                   </button>
+                )}
+              </div>
+            </div>
+
+            <div className="p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="h-10 w-10 rounded-full bg-red-50 text-[#D32F2F] flex items-center justify-center font-display font-extrabold">
+                  {(customer.name || 'C').charAt(0).toUpperCase()}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-display font-bold text-[15px] text-slate-900 truncate">{customer.name || 'Customer'}</p>
+                  {!isStaff && customer.mobile && <p className="text-[12.5px] text-slate-500">{customer.mobile}</p>}
+                </div>
+                {customer.mobile && (
+                  <div className="flex gap-2 shrink-0">
+                    <a href={`tel:${customer.mobile}`} className="h-10 w-10 rounded-full bg-slate-100 text-slate-800 flex items-center justify-center" aria-label="Call customer">
+                      <Phone size={17} />
+                    </a>
+                    <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noreferrer" className="h-10 w-10 rounded-full bg-emerald-500 text-white flex items-center justify-center" aria-label="WhatsApp customer">
+                      <MessageCircle size={17} />
+                    </a>
+                  </div>
                 )}
               </div>
 
               {editingInfo ? (
-                <div className="space-y-3 mt-3">
-                  <Input label="Visit Date" type="date" value={editDate} onChange={e => setEditDate(e.target.value)} />
-                  <Textarea label="Notes" value={editNotes} onChange={e => setEditNotes(e.target.value)} placeholder="Any special instructions..." />
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={handleSaveInfo} loading={savingInfo} icon={<Save size={14} />}>Save</Button>
-                    <Button size="sm" variant="ghost" onClick={() => setEditingInfo(false)} disabled={savingInfo}>Cancel</Button>
+                <div className="space-y-3 border-t border-slate-100 pt-3">
+                  <Input label="Visit date" type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+                  <Textarea label="Notes" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} placeholder="Any special instructions..." />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="secondary" onClick={() => setEditingInfo(false)} disabled={savingInfo}>Cancel</Button>
+                    <Button onClick={handleSaveInfo} loading={savingInfo} icon={<Save size={15} />}>Save</Button>
                   </div>
                 </div>
               ) : (
-                <div className="text-sm text-[#5f5e5e] space-y-0.5">
-                  <p>
-                    <span className="font-semibold">Customer:</span> {(cart as any).customer?.name || 'N/A'}
-                    {!isStaff && (cart as any).customer?.mobile && ` · ${(cart as any).customer?.mobile}`}
-                  </p>
-                  {cart.vehicle && (
-                    <p><span className="font-semibold">Vehicle:</span> {cart.vehicle.brand} {cart.vehicle.model}{cart.vehicle.car_year || cart.vehicle.manufacture_year ? ' (' + (cart.vehicle.car_year || cart.vehicle.manufacture_year) + ')' : ''}</p>
-                  )}
-                  <p><span className="font-semibold">Date:</span> {formatDate(cart.visit_date)} · <span className="font-semibold">Visit:</span> #{cart.visit_number}</p>
-                  {cart.notes && <p><span className="font-semibold">Notes:</span> {cart.notes}</p>}
-                  {cart.invoice_number && <p><span className="font-semibold">Invoice:</span> {cart.invoice_number}</p>}
-                </div>
+                (cart.notes || cart.invoice_number) && (
+                  <div className="space-y-1.5 border-t border-slate-100 pt-3 text-[13px]">
+                    {cart.notes && (
+                      <p className="text-slate-600"><span className="font-semibold text-slate-900">Notes: </span>{cart.notes}</p>
+                    )}
+                    {cart.invoice_number && (
+                      <p className="text-slate-600"><span className="font-semibold text-slate-900">Invoice: </span>{cart.invoice_number}</p>
+                    )}
+                  </div>
+                )
               )}
             </div>
+          </section>
 
-            {/* Total */}
-            {!isStaff && cart.total_amount !== undefined && (
-              <div className="text-left sm:text-right shrink-0 space-y-1.5">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[#5f5e5e]">Total Amount</p>
-                  <p className="text-xl sm:text-2xl font-semibold text-[#1c1b1b] tracking-tight">{formatINR(cart.total_amount)}</p>
-                  {(cart as any).pickup_charge > 0 && (
-                    <p className="text-[10px] text-gray-500 font-medium mt-0.5">
-                      Includes ₹{(cart as any).pickup_charge} Pickup & Drop ({(cart as any).pickup_type})
-                    </p>
-                  )}
-                </div>
-                {((cart as any).advance_paid || 0) > 0 ? (
-                  <>
-                    <div className="pt-1.5 border-t border-dashed border-gray-200">
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-[#D32F2F]">Advance Paid</p>
-                      <p className="text-sm font-bold text-[#D32F2F]">{formatINR((cart as any).advance_paid)}</p>
-                    </div>
-                    {(cart as any).balance_due !== undefined && (
-                      <div className="pt-0.5">
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500">Balance Due</p>
-                        <p className="text-base font-extrabold text-gray-800">{formatINR((cart as any).balance_due)}</p>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  cart.status !== 'complete' && (
-                    <button
-                      onClick={() => {
-                        setAdvanceAmountInput(String(Math.round((cart.total_amount || 0) * 0.3)));
-                        setCollectAdvanceOpen(true);
-                      }}
-                      className="mt-2 px-3 py-1.5 bg-[#D32F2F]/10 hover:bg-[#D32F2F]/20 text-[#D32F2F] border border-[#D32F2F]/20 text-xs font-bold rounded-lg transition-all"
-                    >
-                      Collect Advance
-                    </button>
-                  )
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+          {/* ─── Live stages ─── */}
+          {!isCustomer && cart.status !== 'draft' && <JobStagePanel jobId={cart.id} />}
 
-        {/* ─── Services ────────────────────────── */}
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h3 className="text-xs font-extrabold uppercase tracking-widest text-[#5f5e5e]">Services ({cart.services?.length || 0})</h3>
-            {canEdit && (
-              <button onClick={openAddService} className="text-xs font-bold text-[#D32F2F] hover:underline flex items-center gap-1">
-                <Plus size={14} /> Add Service
-              </button>
-            )}
-          </div>
-          {cart.services?.length ? (
-            <div className="divide-y divide-gray-50">
-              {cart.services.map((svc: any, idx: number) => (
-                <div key={svc.id || idx} className="px-6 py-4 group hover:bg-gray-50/50 transition-colors">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="font-bold text-[#1c1b1b]">{svc.service_name}</p>
-                        {canEdit && (
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() => openEditService(svc)}
-                              className="p-1 rounded text-gray-400 hover:text-[#D32F2F] hover:bg-red-50 transition-colors"
-                              title="Edit service"
-                            >
-                              <Edit2 size={13} />
-                            </button>
-                            <button
-                              onClick={() => { setDeleteSvcId(svc.id); setDeleteConfirmOpen(true); }}
-                              className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                              title="Remove service"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
+          {/* ─── Services ─── */}
+          <section>
+            <SectionTitle
+              action={
+                canEdit ? (
+                  <button onClick={openAddService} className="text-[13px] font-bold text-[#D32F2F] flex items-center gap-1">
+                    <Plus size={15} /> Add service
+                  </button>
+                ) : undefined
+              }
+            >
+              Services ({cart.services?.length || 0})
+            </SectionTitle>
+            {cart.services?.length ? (
+              <div className="space-y-2.5">
+                {cart.services.map((svc: any, idx: number) => (
+                  <div key={svc.id || idx} className="app-card p-3.5">
+                    <div className="flex items-start gap-3">
+                      <span className="h-10 w-10 rounded-xl bg-red-50 text-[#D32F2F] flex items-center justify-center shrink-0">
+                        <Sparkles size={18} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-display font-bold text-[14.5px] text-slate-900">{svc.service_name}</p>
+                        {!isStaff && (
+                          <p className="text-[12px] text-slate-500 mt-0.5">
+                            Service {formatINR(svc.service_price)}
+                            {Number(svc.labor_charges) > 0 ? ` · Labour ${formatINR(svc.labor_charges)}` : ''}
+                          </p>
                         )}
                       </div>
-                      {!isStaff && (
-                        <div className="text-xs text-[#5f5e5e] mt-1 space-x-3">
-                          <span>Price: {formatINR(svc.service_price)}</span>
-                          <span>Labor: {formatINR(svc.labor_charges)}</span>
-                        </div>
+                      {!isStaff && svc.subtotal !== undefined && (
+                        <span className="font-display font-extrabold text-[15px] text-slate-900 shrink-0">{formatINR(svc.subtotal)}</span>
                       )}
                     </div>
-                    {!isStaff && svc.subtotal !== undefined && (
-                      <span className="text-sm font-extrabold text-[#1c1b1b]">{formatINR(svc.subtotal)}</span>
+
+                    {svc.products?.length > 0 && (
+                      <div className="mt-3 rounded-xl bg-slate-50 p-2.5 space-y-1">
+                        {svc.products.map((p: any, pIdx: number) => (
+                          <div key={pIdx} className="flex justify-between gap-2 text-[12px] text-slate-600">
+                            <span className="flex items-center gap-1.5 min-w-0"><Package size={12} className="text-slate-400 shrink-0" /><span className="truncate">{p.product_name} × {p.quantity} {p.unit}</span></span>
+                            {!isStaff && <span className="shrink-0">{formatINR(p.quantity * p.unit_cost)}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {canEdit && (
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <button onClick={() => openEditService(svc)} className="app-btn h-9 bg-slate-100 text-slate-800 text-[13px]">
+                          <Edit2 size={14} /> Edit
+                        </button>
+                        <button onClick={() => { setDeleteSvcId(svc.id); setDeleteConfirmOpen(true); }} className="app-btn h-9 bg-red-50 text-[#D32F2F] text-[13px]">
+                          <Trash2 size={14} /> Remove
+                        </button>
+                      </div>
                     )}
                   </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyBlock
+                icon={<Package size={26} />}
+                title="No services yet"
+                text={canEdit ? 'Add what the customer asked for.' : undefined}
+                action={canEdit ? <button onClick={openAddService} className="app-btn-primary h-11"><Plus size={16} /> Add first service</button> : undefined}
+              />
+            )}
+          </section>
+        </div>
 
-                  {svc.products?.length > 0 && (
-                    <div className="mt-2 ml-4">
-                      {svc.products.map((p: any, pIdx: number) => (
-                        <div key={pIdx} className="text-xs text-[#5f5e5e] flex justify-between py-0.5">
-                          <span>• {p.product_name} × {p.quantity} {p.unit}</span>
-                          {!isStaff && <span>{formatINR(p.quantity * p.unit_cost)}</span>}
-                        </div>
-                      ))}
+        <div className="space-y-4 min-w-0">
+          {/* ─── Bill summary ─── */}
+          {!isStaff && cart.total_amount !== undefined && (
+            <section className="app-card p-4">
+              <p className="text-[12px] font-semibold text-slate-500">Total amount</p>
+              <p className="font-display text-[28px] font-extrabold text-slate-900 leading-tight">{formatINR(cart.total_amount)}</p>
+              {(cart as any).pickup_charge > 0 && (
+                <p className="text-[12px] text-slate-500 mt-0.5">Includes ₹{(cart as any).pickup_charge} pickup & drop ({(cart as any).pickup_type})</p>
+              )}
+              {advancePaid > 0 ? (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="rounded-xl bg-emerald-50 p-2.5">
+                    <p className="text-[11px] font-semibold text-emerald-700">Advance paid</p>
+                    <p className="font-display font-extrabold text-emerald-700">{formatINR(advancePaid)}</p>
+                  </div>
+                  {balanceDue !== undefined && (
+                    <div className="rounded-xl bg-slate-50 p-2.5">
+                      <p className="text-[11px] font-semibold text-slate-500">Balance due</p>
+                      <p className="font-display font-extrabold text-slate-900">{formatINR(balanceDue)}</p>
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="px-6 py-8 text-center">
-              <Package size={32} className="mx-auto text-gray-300 mb-2" />
-              <p className="text-sm text-[#5f5e5e]">No services added yet</p>
-              {canEdit && (
-                <button onClick={openAddService} className="mt-2 text-sm font-bold text-[#D32F2F] hover:underline">
-                  + Add First Service
-                </button>
+              ) : (
+                cart.status !== 'complete' && (
+                  <button
+                    onClick={() => {
+                      setAdvanceAmountInput(String(Math.round((cart.total_amount || 0) * 0.3)));
+                      setCollectAdvanceOpen(true);
+                    }}
+                    className="mt-3 app-btn h-10 w-full bg-red-50 text-[#D32F2F]"
+                  >
+                    <Wallet size={15} /> Collect advance
+                  </button>
+                )
               )}
-            </div>
+            </section>
           )}
-        </div>
 
-        {/* ─── Photos ──────────────────────────── */}
-        {(beforePhotos.length > 0 || afterPhotos.length > 0 || canEdit) && (
-          <div className="bg-white rounded-lg p-6 shadow-sm">
-            <h3 className="text-xs font-extrabold uppercase tracking-widest text-[#5f5e5e] mb-4">Photos</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          {/* ─── Photos ─── */}
+          {(beforePhotos.length > 0 || afterPhotos.length > 0 || canEdit) && (
+            <section className="app-card p-4 space-y-4">
+              <h3 className="font-display text-[16px] font-extrabold text-slate-900 flex items-center gap-2"><Camera size={17} className="text-[#D32F2F]" /> Photos</h3>
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2">Before</p>
-                {beforePhotos.length > 0 ? (
-                  <div className="grid grid-cols-3 gap-2 mb-4">
-                    {beforePhotos.map((p: JobPhoto) => (
-                      <div key={p.id} className="relative group/photo aspect-square w-full">
-                        <img src={p.url} alt="Before" className="rounded-lg object-cover w-full h-full" />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/photo:opacity-100 flex items-center justify-center gap-2 rounded-lg transition-opacity">
-                          <button
-                            onClick={() => handleShareFile(p.url, `Before Photo - Job #${id}`, 'image')}
-                            className="p-1.5 bg-white/90 hover:bg-white text-gray-800 rounded-md transition-colors shadow"
-                            title="Share photo"
-                          >
-                            <Share2 size={14} />
-                          </button>
-                          {canEdit && (
-                            <button
-                              onClick={() => handleDeletePhoto(p.id)}
-                              className="p-1.5 bg-red-600/90 hover:bg-red-600 text-white rounded-md transition-colors shadow"
-                              title="Delete photo"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400 italic mb-4">No before photos</p>
-                )}
-                {canEdit && (
-                  <FileUpload
-                    label="Upload Before Photo"
-                    files={beforeFiles}
-                    onChange={handleUploadBefore}
-                    maxFiles={1}
-                  />
-                )}
+                <p className="mb-2 text-[13px] font-bold text-slate-700">Before</p>
+                {PhotoGrid(beforePhotos, 'Before')}
+                {canEdit && PhotoButton('Take / add before photo', handleUploadBefore)}
               </div>
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-2">After</p>
-                {afterPhotos.length > 0 ? (
-                  <div className="grid grid-cols-3 gap-2 mb-4">
-                    {afterPhotos.map((p: JobPhoto) => (
-                      <div key={p.id} className="relative group/photo aspect-square w-full">
-                        <img src={p.url} alt="After" className="rounded-lg object-cover w-full h-full" />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/photo:opacity-100 flex items-center justify-center gap-2 rounded-lg transition-opacity">
-                          <button
-                            onClick={() => handleShareFile(p.url, `After Photo - Job #${id}`, 'image')}
-                            className="p-1.5 bg-white/90 hover:bg-white text-gray-800 rounded-md transition-colors shadow"
-                            title="Share photo"
-                          >
-                            <Share2 size={14} />
-                          </button>
-                          {canEdit && (
-                            <button
-                              onClick={() => handleDeletePhoto(p.id)}
-                              className="p-1.5 bg-red-600/90 hover:bg-red-600 text-white rounded-md transition-colors shadow"
-                              title="Delete photo"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400 italic mb-4">No after photos</p>
-                )}
-                {canEdit && (
-                  <FileUpload
-                    label="Upload After Photo"
-                    files={afterFiles}
-                    onChange={handleUploadAfter}
-                    maxFiles={1}
-                  />
-                )}
+                <p className="mb-2 text-[13px] font-bold text-slate-700">After</p>
+                {PhotoGrid(afterPhotos, 'After')}
+                {canEdit && PhotoButton('Take / add after photo', handleUploadAfter)}
               </div>
-            </div>
-          </div>
-        )}
+            </section>
+          )}
 
-        {/* ─── Action Buttons ──────────────────── */}
-        {!isCustomer && (
-          <div className="flex flex-wrap gap-3 pb-8">
-            {cart.status === 'draft' && (
-              <Button onClick={handleSubmit} loading={submitMut.isPending} icon={<Send size={14} />}>
-                Submit Job Cart
-              </Button>
-            )}
-            {cart.status === 'open' && !isStaff && (
-              <Button onClick={() => setLoyaltyOpen(true)} icon={<CheckCircle size={14} />}>
-                Mark Complete
-              </Button>
-            )}
-            {cart.status === 'complete' && (
-              <>
-                <Button onClick={handleDownloadInvoice} icon={<Download size={14} />}>
-                  Download Invoice
-                </Button>
-                <Button variant="secondary" onClick={() => handleShareFile(`/api/job-carts/${cart.id}/invoice`, `Invoice - Job #${cart.invoice_number || cart.id}`, 'pdf')} icon={<Share2 size={14} />}>
-                  Share Invoice
-                </Button>
-                {!isStaff && (
-                  <Button variant="secondary" onClick={openDeliveryModal} icon={<Truck size={14} />}>
-                    Send for Delivery
-                  </Button>
-                )}
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Customer: download invoice */}
-        {isCustomer && cart.status === 'complete' && (
-          <div className="pb-8">
-            <Button onClick={handleDownloadInvoice} icon={<Download size={14} />}>
-              Download Invoice
-            </Button>
-          </div>
-        )}
-
-        {/* ─── Messages Sent Section ──────────────────── */}
-        {!isCustomer && messages.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8 p-6">
-            <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-100">
-              <Mail className="text-[#D32F2F] w-5 h-5" />
-              <h2 className="text-lg font-bold text-[#1c1b1b]">Notification History</h2>
-            </div>
-            <div className="divide-y divide-gray-100 max-h-60 overflow-y-auto">
-              {messages.map((log: any) => {
-                const waLink = log.response_data?.wa_link;
-                return (
-                  <div key={log.id} className="py-3 flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                          log.status === 'sent' ? 'bg-green-100 text-green-700' : 
-                          log.status === 'failed' ? 'bg-red-100 text-red-700' : 
-                          log.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'
-                        }`}>
-                          {log.status}
-                        </span>
-                        <span className="text-xs uppercase font-bold text-gray-400 tracking-wider">
-                          {log.channel}
-                        </span>
-                        {log.template_name && (
-                          <span className="text-[10px] font-semibold text-[#D32F2F] bg-red-50 px-1.5 py-0.5 rounded">
-                            {log.template_name}
-                          </span>
-                        )}
+          {/* ─── Messages ─── */}
+          {!isCustomer && messages.length > 0 && (
+            <section className="app-card p-4">
+              <h3 className="font-display text-[16px] font-extrabold text-slate-900 flex items-center gap-2 mb-2"><Mail size={17} className="text-[#D32F2F]" /> Messages sent</h3>
+              <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
+                {messages.map((log: any) => {
+                  const waLink = log.response_data?.wa_link;
+                  return (
+                    <div key={log.id} className="py-2.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold capitalize ${
+                          log.status === 'sent' ? 'bg-emerald-50 text-emerald-700' : log.status === 'failed' ? 'bg-red-50 text-red-600' : log.status === 'pending' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'
+                        }`}>{log.status}</span>
+                        <span className="text-[11px] font-semibold text-slate-400 capitalize">{log.channel}</span>
+                        <span className="ml-auto text-[11px] text-slate-400">{new Date(log.sent_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>
                       </div>
-                      <p className="text-xs text-[#5f5e5e]">{log.message_body}</p>
+                      <p className="mt-1 text-[12.5px] text-slate-600">{log.message_body}</p>
                       {log.channel === 'whatsapp' && waLink && (
-                        <a 
-                          href={waLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 mt-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 transition-colors"
-                        >
-                          💬 Click to send via WhatsApp Web
+                        <a href={waLink} target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-flex items-center gap-1 text-[12px] font-bold text-emerald-600">
+                          <MessageCircle size={13} /> Send on WhatsApp
                         </a>
                       )}
                     </div>
-                    <div className="text-right text-[10px] text-gray-400 ml-4">
-                      {new Date(log.sent_at).toLocaleString()}
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+            </section>
+          )}
+        </div>
+      </div>
+
+      {/* ─── Sticky action bar ─── */}
+      {(() => {
+        const actions: JSX.Element[] = [];
+        if (!isCustomer && cart.status === 'draft') {
+          actions.push(
+            <button key="submit" onClick={handleSubmit} disabled={submitMut.isPending} className="app-btn-primary flex-1">
+              {submitMut.isPending ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />} Submit job card
+            </button>
+          );
+        }
+        if (!isCustomer && cart.status === 'open' && !isStaff) {
+          actions.push(
+            <button key="complete" onClick={() => setLoyaltyOpen(true)} className="app-btn-primary flex-1">
+              <CheckCircle size={17} /> Complete & bill
+            </button>
+          );
+        }
+        if (cart.status === 'complete') {
+          actions.push(
+            <button key="dl" onClick={handleDownloadInvoice} className={`${isCustomer ? 'app-btn-primary' : 'app-btn-dark'} flex-1`}>
+              <Download size={17} /> Invoice
+            </button>
+          );
+          if (!isCustomer) {
+            actions.push(
+              <button key="share" onClick={() => handleShareFile(`/api/job-carts/${cart.id}/invoice`, `Invoice - Job #${cart.invoice_number || cart.id}`, 'pdf')} className="app-btn-outline px-4" aria-label="Share invoice">
+                <Share2 size={17} />
+              </button>
+            );
+          }
+          if (!isCustomer && !isStaff) {
+            actions.push(
+              <button key="deliver" onClick={openDeliveryModal} className="app-btn-primary flex-1">
+                <Truck size={17} /> Deliver
+              </button>
+            );
+          }
+        }
+        if (!actions.length) return null;
+        return (
+          <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t border-slate-200/80 bg-white/95 backdrop-blur-md">
+            <div className="mx-auto flex max-w-5xl items-center gap-2 px-4 py-3">
+              {!isStaff && cart.total_amount !== undefined && (
+                <div className="mr-1 shrink-0">
+                  <p className="text-[11px] font-semibold text-slate-500 leading-none">Total</p>
+                  <p className="font-display text-[17px] font-extrabold text-slate-900">{formatINR(cart.total_amount)}</p>
+                </div>
+              )}
+              {actions}
             </div>
           </div>
-        )}
-      </div>
+        );
+      })()}
 
       {/* ─── Add Service Modal ──────────────────── */}
       <Modal
@@ -939,13 +915,13 @@ export default function JobCartDetailPage() {
           </>
         }
       >
-        <ServiceModalContent
-          svcName={newSvcName} setSvcName={setNewSvcName}
-          isCustom={newSvcIsCustom} setIsCustom={setNewSvcIsCustom}
-          svcPrice={newSvcPrice} setSvcPrice={setNewSvcPrice}
-          svcLabor={newSvcLabor} setSvcLabor={setNewSvcLabor}
-          products={newSvcProducts} setProducts={setNewSvcProducts}
-        />
+        {ServiceModalContent({
+          svcName: newSvcName, setSvcName: setNewSvcName,
+          isCustom: newSvcIsCustom, setIsCustom: setNewSvcIsCustom,
+          svcPrice: newSvcPrice, setSvcPrice: setNewSvcPrice,
+          svcLabor: newSvcLabor, setSvcLabor: setNewSvcLabor,
+          products: newSvcProducts, setProducts: setNewSvcProducts,
+        })}
       </Modal>
 
       {/* ─── Edit Service Modal ─────────────────── */}
@@ -961,13 +937,13 @@ export default function JobCartDetailPage() {
           </>
         }
       >
-        <ServiceModalContent
-          svcName={editSvcName} setSvcName={setEditSvcName}
-          isCustom={false} setIsCustom={() => {}}
-          svcPrice={editSvcPrice} setSvcPrice={setEditSvcPrice}
-          svcLabor={editSvcLabor} setSvcLabor={setEditSvcLabor}
-          products={editSvcProducts} setProducts={setEditSvcProducts}
-        />
+        {ServiceModalContent({
+          svcName: editSvcName, setSvcName: setEditSvcName,
+          isCustom: false, setIsCustom: () => {},
+          svcPrice: editSvcPrice, setSvcPrice: setEditSvcPrice,
+          svcLabor: editSvcLabor, setSvcLabor: setEditSvcLabor,
+          products: editSvcProducts, setProducts: setEditSvcProducts,
+        })}
       </Modal>
 
       {/* ─── Delete Service Confirm ─────────────── */}

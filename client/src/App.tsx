@@ -67,6 +67,7 @@ import StaffInquiryPage from './pages/staff/InquiryPage';
 import DashboardPage from './pages/admin/DashboardPage';
 import SettingsPage from './pages/admin/SettingsPage';
 import QuickBillingPage from './pages/admin/QuickBillingPage';
+import FestivalOffersPage from './pages/admin/FestivalOffersPage';
 import AllInvoicesPage from './pages/admin/AllInvoicesPage';
 import ArchivePage from './pages/admin/ArchivePage';
 import ReportsPage from './pages/admin/ReportsPage';
@@ -95,6 +96,7 @@ import QuotationCreatePage from './pages/admin/QuotationCreatePage';
 
 // Coupons & Automation pages
 import CouponsPage from './pages/admin/CouponsPage';
+import GreetingsPage from './pages/admin/GreetingsPage';
 
 // Phase 5 pages
 import RoleManagementPage from './pages/admin/RoleManagementPage';
@@ -104,6 +106,7 @@ import FeedbackFormPage from './pages/customer/FeedbackFormPage';
 import DeliveryPage from './pages/staff/DeliveryPage';
 import TrackingPage from './pages/customer/TrackingPage';
 import JobTrackingPage from './pages/customer/JobTrackingPage';
+import CompleteProfilePage from './pages/customer/CompleteProfilePage';
 
 // ─── Placeholder pages (replaced in later phases) ────────
 const Placeholder = ({ title }: { title: string }) => (
@@ -349,6 +352,8 @@ export default function App() {
         <Route path="whatsapp" element={<WhatsAppPage />} />
         <Route path="customer-rewards" element={<CustomerRewardsPage />} />
         <Route path="coupons" element={<CouponsPage />} />
+        <Route path="festival-offers" element={<FestivalOffersPage />} />
+        <Route path="greetings" element={<GreetingsPage />} />
         <Route path="roles" element={<RoleManagementPage />} />
         {/* ─── Quotations Routes ─── */}
         <Route path="quotations" element={<QuotationsListPage />} />
@@ -370,6 +375,7 @@ export default function App() {
         <Route path="buy-packages" element={<CustomerBuyPackagesPage />} />
         <Route path="products" element={<CustomerProductsPage />} />
         <Route path="profile" element={<ProfilePage />} />
+        <Route path="complete-profile" element={<CompleteProfilePage />} />
         <Route path="delivery/:id" element={<TrackingPage />} />
       </Route>
 

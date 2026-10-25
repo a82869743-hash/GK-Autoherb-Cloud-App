@@ -90,4 +90,9 @@ const pool = mysql.createPool({
   }
 })();
 
+// Every pooled connection runs in IST so NOW()/CURDATE() match slot times even on a UTC server
+pool.pool.on('connection', (conn) => {
+  conn.query("SET time_zone = '+05:30'");
+});
+
 module.exports = pool;

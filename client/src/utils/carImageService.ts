@@ -19,13 +19,31 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { CAR_MODEL_IMAGES } from './carModelImagesDataset';
+import { CAR_LIBRARY } from './carLibraryIndex';
+import { brandLogo } from './brandLogos';
 
-// Guaranteed local studio category fallback photos
+// Library photos found to show a different (or much older) model — never shown.
+// Those models get the brand logo instead of a misleading picture.
+const WRONG_PHOTOS = new Set([
+  'dc_avanti.jpg', 'icml_extreme.jpg', 'volkswagen_ameo.jpg', 'nissan_sunny.jpg', 'ford_freestyle.jpg',
+  'mahindra_verito_vibe.jpg', 'mercedes_amg_gt.jpg', 'maruti_alto.jpg', 'maruti_alto_k10.jpg',
+  'maruti_suzuki_wagon.jpg', 'bmw_5_series.jpg', 'bmw_x1.jpg', 'bmw_z4_roadster.jpg', 'fiat_abarth_avventura.jpg',
+  'mitsubishi_montero.jpg', 'tata_safari_storme.jpg', 'toyota_etios_cross.jpg', 'mahindra_e_verito.jpg',
+]);
+
+// Local white-background versions of the dataset photos (same keys) take priority
+const CAR_LIBRARY_URLS: Record<string, string> = Object.fromEntries(
+  Object.entries(CAR_LIBRARY)
+    .filter(([, file]) => !WRONG_PHOTOS.has(file))
+    .map(([key, file]) => [key, `/cars/library/${file}`])
+);
+
+// Guaranteed local fallback photos (white background, red / black paint)
 export const STUDIO_FALLBACKS: Record<string, string> = {
-  sports: '/cars/red_sports_light.jpg',
-  suv: '/cars/black_suv_light.jpg',
-  sedan: '/cars/white_sedan_light.jpg',
-  luxury: '/cars/luxury_sedan_studio.jpg',
+  sports: '/cars/white/red_sports.jpg',
+  suv: '/cars/white/black_suv.jpg',
+  sedan: '/cars/white/red_sedan.jpg',
+  luxury: '/cars/white/black_luxury.jpg',
 };
 
 // Global set to track any URLs that failed network loading in the current session
@@ -211,8 +229,10 @@ export const PRELOADED_CAR_IMAGES: Record<string, string> = {
   ...CAR_MODEL_IMAGES,
 };
 
+// Only white-background library photos are served; anything else falls back to the
+// white studio photo for the car's body type (the app shows cars on plain white only).
 export const ALL_VERIFIED_CAR_IMAGES: Record<string, string> = {
-  ...CAR_MODEL_IMAGES,
+  ...CAR_LIBRARY_URLS,
 };
 
 // In-memory runtime cache for dynamic lookups
@@ -347,7 +367,7 @@ export function getPreloadedCarImage(brand?: string, model?: string): string | n
       if (key.startsWith(`${b} `)) {
         const modelPart = key.substring(b.length + 1).trim();
         if (!modelPart) continue;
-        if (mClean.includes(modelPart) || modelPart.includes(mClean)) {
+        if (mClean === modelPart || mClean.startsWith(`${modelPart} `)) {
           const verified = checkUrl(ALL_VERIFIED_CAR_IMAGES[key]);
           if (verified) return verified;
         }
@@ -364,7 +384,7 @@ export function getPreloadedCarImage(brand?: string, model?: string): string | n
   // 9. Check localStorage cache
   try {
     const cached = localStorage.getItem(`gk_car_img_${fullKey}`);
-    if (cached) {
+    if (cached && cached.startsWith('/')) {
       const verified = checkUrl(cached);
       if (verified) {
         inMemoryCache[fullKey] = cached;
@@ -388,7 +408,7 @@ export function getSafeCarImage(
 ): string {
   const verified = getPreloadedCarImage(brand, model);
   if (verified) return verified;
-  return getStudioFallback(brand, model, fallbackType);
+  return brandLogo(brand) || getStudioFallback(brand, model, fallbackType);
 }
 
 /**
@@ -464,7 +484,7 @@ export function useCarImage(
   model?: string,
   fallbackType?: 'sports' | 'suv' | 'sedan' | 'luxury'
 ) {
-  const fallbackUrl = getStudioFallback(brand, model, fallbackType);
+  const fallbackUrl = brandLogo(brand) || getStudioFallback(brand, model, fallbackType);
   const initial = getPreloadedCarImage(brand, model);
 
   const [imageUrl, setImageUrl] = useState<string>(initial || fallbackUrl);
@@ -472,9 +492,8 @@ export function useCarImage(
   const [isLoading, setIsLoading] = useState<boolean>(!initial && !!(brand || model));
 
   useEffect(() => {
-    let isMounted = true;
     const pre = getPreloadedCarImage(brand, model);
-    const fb = getStudioFallback(brand, model, fallbackType);
+    const fb = brandLogo(brand) || getStudioFallback(brand, model, fallbackType);
 
     if (pre) {
       setImageUrl(pre);
@@ -490,26 +509,10 @@ export function useCarImage(
       return;
     }
 
-    setIsLoading(true);
-    resolveRealCarImage(brand, model)
-      .then((url) => {
-        if (isMounted) {
-          setImageUrl(url);
-          setIsFallback(url === fb);
-          setIsLoading(false);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setImageUrl(fb);
-          setIsFallback(true);
-          setIsLoading(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
+    // No runtime web lookups: those photos have street backgrounds. Use the white fallback.
+    setImageUrl(fb);
+    setIsFallback(true);
+    setIsLoading(false);
   }, [brand, model, fallbackType]);
 
   const markError = useCallback(() => {

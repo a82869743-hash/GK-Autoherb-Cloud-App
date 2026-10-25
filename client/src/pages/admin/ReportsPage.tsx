@@ -116,12 +116,12 @@ export default function ReportsPage() {
       {/* Date & Dimension Filter Bar */}
       {activeTab !== 'inventory' && activeTab !== 'welcomerewards' && (
         <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-100 shadow-sm flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 min-w-0 w-full sm:w-auto">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
               <Calendar size={15} className="text-[#D32F2F]" />
               <span>Period Range:</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto min-w-0">
               <input
                 type="date"
                 value={dateRange.from}

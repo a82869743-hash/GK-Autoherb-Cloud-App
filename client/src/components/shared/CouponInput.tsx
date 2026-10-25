@@ -52,7 +52,7 @@ export default function CouponInput({
           discount_amount: res.discount_amount,
           title: res.title,
         });
-        toast.success(`Coupon "${res.code}" applied! Saved ₹${formatINR(res.discount_amount)}`);
+        toast.success(`Coupon "${res.code}" applied! Saved ${formatINR(res.discount_amount)}`);
         setCouponCode('');
         setIsOffersOpen(false);
       }
@@ -74,7 +74,7 @@ export default function CouponInput({
               <p className="font-bold flex items-center gap-1">
                 <span>{appliedCoupon.code}</span>
                 <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded">
-                  -₹{formatINR(appliedCoupon.discount_amount)}
+                  -{formatINR(appliedCoupon.discount_amount)}
                 </span>
               </p>
               <p className="text-[10px] text-emerald-700 opacity-90 mt-0.5">
@@ -161,8 +161,8 @@ export default function CouponInput({
                     <p className="text-[10px] text-slate-500 mt-0.5">
                       {offer.type === 'percentage'
                         ? `${offer.value}% OFF (up to ₹${offer.max_discount || 'Unlimited'})`
-                        : `Flat ₹${formatINR(offer.value)} OFF`}
-                      {offer.min_order_amount > 0 ? ` on orders > ₹${formatINR(offer.min_order_amount)}` : ''}
+                        : `Flat ${formatINR(offer.value)} OFF`}
+                      {offer.min_order_amount > 0 ? ` on orders > ${formatINR(offer.min_order_amount)}` : ''}
                     </p>
                   </div>
                   <button

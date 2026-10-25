@@ -23,6 +23,32 @@ const getCampaignQuery = (campaign) => {
   return query;
 };
 
+// The legacy messages_log table only accepts these values (live schema ENUMs).
+// Map what the app sends onto them, and never let a history-row problem fail a send.
+const LEGACY_TYPES = {
+  bulk_free_wash: 'bulk_free_wash', free_wash_reminder: 'bulk_free_wash',
+  bulk_credits: 'bulk_credits', credits_reminder: 'bulk_credits',
+  bulk_reengagement: 'bulk_reengagement', reengagement: 'bulk_reengagement',
+  job_complete: 'job_complete', credits_awarded: 'credits_awarded', wash_awarded: 'wash_awarded',
+  booking_confirm: 'booking_confirm', delivery_started: 'delivery_started', monthly_reminder: 'monthly_reminder',
+};
+async function logLegacyMessage(customerId, mobile, type, channel, status, text) {
+  try {
+    await pool.query(
+      `INSERT INTO messages_log (customer_id, mobile, type, channel, status, message_preview) VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        customerId, mobile,
+        LEGACY_TYPES[type] || 'bulk_reengagement',
+        channel === 'sms' ? 'sms' : 'whatsapp',
+        status === 'sent' || status === 'failed' ? status : 'queued',
+        String(text || '').substring(0, 100),
+      ]
+    );
+  } catch (err) {
+    console.warn('messages_log write skipped:', err.message);
+  }
+}
+
 // ─── LIST MESSAGES LOG ────────────────────────
 exports.listLogs = async (req, res) => {
   try {
@@ -142,12 +168,8 @@ exports.sendBulk = async (req, res) => {
           INSERT INTO v2_notification_logs (customer_id, mobile, channel, template_name, message_body, status, attempts, last_attempt_at, response_data)
           VALUES (?, ?, ?, ?, ?, ?, 1, NOW(), ?)
         `, [user.id, user.mobile, channel, 'Bulk Campaign', message_content, status, JSON.stringify({ wa_link: waLink })]);
-
         // Log to legacy messages_log
-        await pool.query(`
-          INSERT INTO messages_log (customer_id, mobile, type, channel, status, message_preview)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `, [user.id, user.mobile, message_type, channel, status, message_content.substring(0, 100)]);
+        await logLegacyMessage(user.id, user.mobile, message_type, channel, status, message_content);
         
       } catch (e) {
         failed++;
@@ -203,12 +225,8 @@ exports.sendSingle = async (req, res) => {
       INSERT INTO v2_notification_logs (customer_id, mobile, channel, template_name, message_body, status, attempts, last_attempt_at, response_data)
       VALUES (?, ?, ?, ?, ?, ?, 1, NOW(), ?)
     `, [user.id, user.mobile, channel, 'Single Manual Message', message_content, status, JSON.stringify({ wa_link: waLink })]);
-
     // Log to legacy messages_log
-    await pool.query(`
-      INSERT INTO messages_log (customer_id, mobile, type, channel, status, message_preview)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `, [user.id, user.mobile, message_type || 'manual', channel, status, message_content.substring(0, 100)]);
+    await logLegacyMessage(user.id, user.mobile, message_type || 'manual', channel, status, message_content);
 
     res.json({ success: true, message: 'Message logged successfully', data: { wa_link: waLink } });
   } catch (err) {

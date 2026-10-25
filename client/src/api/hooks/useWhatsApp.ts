@@ -53,8 +53,9 @@ export const useWhatsAppTemplates = () => {
 export const useUpdateWhatsAppTemplate = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...body }: { id: number; body?: string; is_active?: boolean }) => {
-      const { data } = await api.put(`/whatsapp/templates/${id}`, body);
+    mutationFn: async ({ id, body, ...rest }: { id: number; body?: string; is_active?: boolean; provider_template_name?: string; send_sms?: boolean }) => {
+      // The API field is message_body (sending "body" silently saved nothing)
+      const { data } = await api.put(`/whatsapp/templates/${id}`, { ...rest, ...(body !== undefined ? { message_body: body } : {}) });
       return data;
     },
     onSuccess: () => {
@@ -70,7 +71,7 @@ export const useUpdateWhatsAppTemplate = () => {
 export const useTestWhatsAppTemplate = () => {
   return useMutation({
     mutationFn: async ({ id, recipient_number, variables }: { id: number; recipient_number: string; variables?: Record<string, string> }) => {
-      const { data } = await api.post(`/whatsapp/templates/${id}/test`, { recipient_number, variables });
+      const { data } = await api.post('/whatsapp/templates/test-send', { phone: recipient_number, template_id: id, variables });
       return data;
     },
     onSuccess: () => {
