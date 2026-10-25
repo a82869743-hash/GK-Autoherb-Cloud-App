@@ -19,8 +19,30 @@ export const SERVICE_CATEGORIES: { key: string; label: string }[] = [
   { key: 'coating_ppf', label: 'Coating & PPF Services' },
 ];
 
+// Groups worked out from the service name — used when services aren't assigned to categories
+// in Admin → Services (the home tiles link to these keys: Washing, Coating, Interior, Detailing).
+export const SMART_GROUPS: { key: string; label: string; test: RegExp }[] = [
+  { key: 'Washing', label: 'Washing', test: /wash|foam|spa\b/ },
+  { key: 'Coating', label: 'Coating & PPF', test: /coat|ceramic|graphene|ppf|protection film|teflon|\bwax\b|9h|10h/ },
+  { key: 'Interior', label: 'Interior', test: /interior|vacuum|dashboard|trim|seat|ac vent|odou?r|deep clean|cabin/ },
+  { key: 'Detailing', label: 'Polish & detailing', test: /polish|rubbing|compound|headlight|restoration|windshield|detailing|scratch/ },
+  { key: 'Care', label: 'Tyres, engine & underbody', test: /tyre|tire|alloy|engine|underbody|anti.?rust|rim/ },
+];
+
+export function smartGroupOf(svc: any): string | null {
+  const t = `${svc?.name || ''} ${svc?.category_name || ''}`.toLowerCase();
+  for (const g of SMART_GROUPS) if (g.test.test(t)) return g.key;
+  return null;
+}
+
 export function matchesServiceCategory(svc: any, cat: ServiceCategoryKey): boolean {
   if (!cat || cat === 'all') return true;
+  const smart = SMART_GROUPS.find((g) => g.key.toLowerCase() === String(cat).toLowerCase());
+  if (smart) {
+    // A real category with the same word still counts (e.g. "Washing" category in Admin)
+    if (String(svc.category_name || '').toLowerCase().includes(smart.key.toLowerCase())) return true;
+    return smartGroupOf(svc) === smart.key;
+  }
   const catName = String(svc.category_name || '').toLowerCase();
   const name = String(svc.name || '').toLowerCase();
   const isCoating = catName.includes('coating') || /coating|ppf|paint protection|ceramic coat/.test(name);
@@ -97,20 +119,28 @@ export default function CustomerServicesPage() {
   // Only show categories that actually have services for this vehicle type
   const catChips = useMemo(() => {
     const counts = new Map<string, number>();
+    let categorised = 0;
     typeServices.forEach((s) => {
-      if (s.category_name) counts.set(s.category_name, (counts.get(s.category_name) || 0) + 1);
+      if (s.category_name) {
+        counts.set(s.category_name, (counts.get(s.category_name) || 0) + 1);
+        categorised++;
+      }
     });
+    // Most services have no category set → offer name-based groups so filters always work
+    if (categorised < typeServices.length / 2) {
+      return SMART_GROUPS.map((g) => ({ key: g.key, label: g.label, count: typeServices.filter((s) => matchesServiceCategory(s, g.key)).length })).filter((c) => c.count > 0);
+    }
     return (categories as any[])
       .filter((c) => counts.has(c.name))
       .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
       .map((c) => ({ key: c.name, label: c.name, count: counts.get(c.name) || 0 }));
   }, [categories, typeServices]);
 
+  // A link to a group/category that doesn't exist here falls back to "All" instead of an empty list
   useEffect(() => {
-    if (cat !== 'all' && catChips.length && !catChips.some((c) => c.key.toLowerCase() === cat.toLowerCase() || String((categories as any[]).find((x) => x.name === c.key)?.id) === cat)) {
-      setCat('all');
-    }
-  }, [catChips]);
+    if (isLoading || !typeServices.length || cat === 'all') return;
+    if (!typeServices.some((s) => matchesServiceCategory(s, cat))) setCat('all');
+  }, [catChips, isLoading, typeServices.length]);
 
   const priceOf = (s: any) => priceForSegment(s, vehicleType === 'bike' ? 'hatchback' : segment);
 

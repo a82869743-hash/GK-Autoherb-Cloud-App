@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ArrowLeft, Search, Bike, ChevronRight, Loader2, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { carBrands as fallbackCarBrands, getModelsForBrand, getCategoryForModel } from '../../utils/carData';
@@ -145,8 +146,10 @@ export default function AddCarModal({ isOpen, onClose, editVehicle }: AddCarModa
   const title =
     step === 'type' ? 'Choose your vehicle type' : step === 'brand' ? 'Select brand' : step === 'model' ? `${brand} models` : editVehicle ? 'Edit vehicle' : 'Vehicle details';
 
-  return (
-    <div className="fixed inset-0 z-[110] bg-[#f8f9fb] flex flex-col animate-fade-in" role="dialog" aria-modal="true">
+  // Rendered on <body>: the car chip lives in headers that use backdrop-blur, which would trap a
+  // fixed overlay inside the header and let the bottom tab bar cover the "Add car" button.
+  return createPortal(
+    <div className="fixed inset-0 z-[120] bg-[#f8f9fb] flex flex-col animate-fade-in" role="dialog" aria-modal="true">
       {/* Header */}
       <div className="pt-safe bg-white border-b border-slate-100">
         <div className="mx-auto max-w-md px-3 h-14 flex items-center gap-1">
@@ -337,6 +340,7 @@ export default function AddCarModal({ isOpen, onClose, editVehicle }: AddCarModa
           </div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 }
