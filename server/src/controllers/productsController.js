@@ -167,6 +167,11 @@ exports.createOrder = async (req, res) => {
           receipt: `prod_order_${Date.now()}`
         };
         razorpayOrder = await razorpayInstance.orders.create(options);
+      } else if (process.env.NODE_ENV === 'production') {
+        // No gateway keys on the live server: never hand out fake orders that could be "paid" for free
+        const e = new Error('Online payment is not available yet. Please pay by UPI QR.');
+        e.status = 503;
+        throw e;
       } else {
         console.warn('[RAZORPAY MOCK MODE] Creating simulated order for product purchase');
         razorpayOrder = {
@@ -237,6 +242,7 @@ exports.createOrder = async (req, res) => {
 
   } catch (err) {
     await conn.rollback();
+    if (err.status === 503) return res.status(503).json({ success: false, error: err.message });
     console.error('createOrder error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
   } finally {
@@ -271,9 +277,9 @@ exports.verifyPayment = async (req, res) => {
 
     // Verification check
     let signatureIsValid = false;
-    if (razorpay_order_id.startsWith('order_mock_') || !razorpayInstance) {
+    if (!razorpayInstance && process.env.NODE_ENV !== 'production') {
       signatureIsValid = true;
-    } else {
+    } else if (process.env.RAZORPAY_KEY_SECRET) {
       const body = razorpay_order_id + "|" + razorpay_payment_id;
       const expectedSignature = crypto
         .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
@@ -452,7 +458,8 @@ exports.confirmQrOrder = async (req, res) => {
     // Update v2_payments status to captured if present
     try {
       await conn.query(
-        `UPDATE v2_payments SET status = 'captured' WHERE customer_id = ? AND status = 'pending'`,
+        `UPDATE v2_payments SET status = 'captured', paid_at = NOW()
+         WHERE customer_id = ? AND status = 'pending' AND product_id IS NOT NULL AND booking_id IS NULL`,
         [order.customer_id]
       );
     } catch (payErr) {

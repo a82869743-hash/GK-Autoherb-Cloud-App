@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
 const { awardWelcomeRewardInternal } = require('./customerRewardsController');
+const loginGuard = require('../utils/loginGuard');
 
 const generateToken = (user) => {
   if (!process.env.JWT_SECRET) {
@@ -206,32 +207,26 @@ exports.login = async (req, res) => {
     // Clean and normalize mobile number (strip non-digits and take last 10 digits)
     const cleanMobile = mobile.replace(/\D/g, '').slice(-10);
 
+    // Too many wrong passwords for this number or from this network: wait it out
+    const lockedFor = loginGuard.lockedMinutes(cleanMobile, req.ip);
+    if (lockedFor) {
+      return res.status(429).json({ success: false, error: `Too many wrong attempts. Please try again in ${lockedFor} minute(s) or log in with OTP.` });
+    }
+
     // Find user by mobile
     const [users] = await pool.query('SELECT * FROM users WHERE mobile = ?', [cleanMobile]);
-
-    if (users.length === 0) {
-      return res.status(401).json({ success: false, error: 'Invalid credentials: User not found' });
-    }
-
     const user = users[0];
 
-    // Verify password
-    let isMatch = await bcrypt.compare(password, user.password_hash);
+    // Same answer for an unknown number and a wrong password, so numbers can't be probed
+    const isMatch = user && user.password_hash ? await bcrypt.compare(password, user.password_hash) : false;
     if (!isMatch) {
-      // Friendly fallback for demo accounts so both role-specific and test123 passwords work seamlessly
-      const demoPassMap = {
-        '9000000001': ['admin123', 'test123'],
-        '9000000002': ['customer123', 'test123'],
-        '9000000003': ['staff123', 'test123'],
-        '9876543210': ['staff123', 'test123'],
-      };
-      if (demoPassMap[cleanMobile] && demoPassMap[cleanMobile].includes(password)) {
-        isMatch = true;
-      }
+      loginGuard.fail(cleanMobile, req.ip);
+      return res.status(401).json({ success: false, error: 'Invalid mobile number or password' });
     }
-    if (!isMatch) {
-      return res.status(401).json({ success: false, error: 'Invalid credentials: Password incorrect' });
+    if (user.is_active === 0) {
+      return res.status(403).json({ success: false, error: 'This account is disabled. Please contact the studio.' });
     }
+    loginGuard.success(cleanMobile);
 
     // Fetch user permissions
     let permissions = [];

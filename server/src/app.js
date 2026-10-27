@@ -30,6 +30,8 @@ app.set('io', io);
 global.__gkIo = io; // lets services (messaging, WhatsApp bot) push live events
 
 // ─── Middleware ──────────────────────────────────────
+// nginx sits in front: take the visitor's IP from X-Forwarded-For (needed by the OTP and login limits)
+app.set('trust proxy', 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({
   origin: allowedOrigins,

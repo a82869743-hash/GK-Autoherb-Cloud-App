@@ -713,6 +713,9 @@ exports.approve = async (req, res) => {
       return res.status(422).json({ success: false, error: `Cannot approve a ${booking.status} booking` });
     }
 
+    // A QR advance the customer reported becomes "received" on approval
+    await require('./paymentsController').captureQrPayment(conn, { booking_id: booking.id });
+
     // ─── DEFERRED DEDUCTION: Deduct package credit NOW (on approval) ───
     if (booking.booking_type === 'package' && booking.user_package_id) {
       let serviceNames = [];

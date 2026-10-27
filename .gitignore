@@ -30,3 +30,16 @@ api-test.js
 
 # Needed for deploys (safe: reads credentials from .env only)
 !server/scripts/run_migration_files.js
+
+# ─── Kept locally only (contained passwords / old copies) ───
+*.py
+askpass.bat
+server/alter.js
+server/run_vps_check.js
+server/scripts/check_foreign_keys.js
+server/scripts/check_v2_counts.js
+server/scripts/describe_job_carts.js
+server/scripts/execute_e2e_journeys.js
+server/scripts/get_users.js
+GK-Autoherb-Frontend-Only/
+Gk auto/

@@ -24,7 +24,7 @@ module.exports = { JOB_STAGES, STAGE_KEYS, getStage };
 /** Short signed token so the public tracker link can't be guessed by changing the id. */
 function trackingToken(jobId) {
   const crypto = require('crypto');
-  return crypto.createHmac('sha256', process.env.JWT_SECRET || 'gk-autoherb').update(`job:${jobId}`).digest('hex').slice(0, 12);
+  return crypto.createHmac('sha256', process.env.JWT_SECRET).update(`job:${jobId}`).digest('hex').slice(0, 12);
 }
 
 function trackingUrl(jobId) {

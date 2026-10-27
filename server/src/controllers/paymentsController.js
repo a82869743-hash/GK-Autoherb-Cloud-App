@@ -58,6 +58,9 @@ exports.createRazorpayOrder = async (req, res) => {
         receipt: receipt || `receipt_${Date.now()}`
       };
       order = await razorpayInstance.orders.create(options);
+    } else if (process.env.NODE_ENV === 'production') {
+      // No gateway keys on the live server: never hand out fake orders that could be "paid" for free
+      return res.status(503).json({ success: false, error: 'Online payment is not available yet. Please pay by UPI QR or at the studio.' });
     } else {
       console.warn('[RAZORPAY MOCK MODE] Creating simulated order because credentials are missing');
       order = {
@@ -248,10 +251,10 @@ exports.verifyRazorpayPayment = async (req, res) => {
     }
 
     let signatureIsValid = false;
-    if (razorpay_order_id.startsWith('order_mock_') || !razorpayInstance) {
+    if (!razorpayInstance && process.env.NODE_ENV !== 'production') {
       console.warn('[RAZORPAY MOCK MODE] Bypassing payment signature verification');
       signatureIsValid = true;
-    } else {
+    } else if (process.env.RAZORPAY_KEY_SECRET) {
       const body = razorpay_order_id + "|" + razorpay_payment_id;
       const expectedSignature = crypto
         .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
@@ -285,7 +288,10 @@ exports.verifyRazorpayPayment = async (req, res) => {
 
 // ─── Razorpay Webhook ──────────────────────────────
 exports.webhook = async (req, res) => {
-  const secret = process.env.RAZORPAY_WEBHOOK_SECRET || 'gka_webhook_secret_123';
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  if (!secret) {
+    return res.status(503).json({ success: false, error: 'Webhook is not configured' });
+  }
   const signature = req.headers['x-razorpay-signature'];
 
   if (!signature) {
@@ -725,12 +731,24 @@ exports.confirmQrPayment = async (req, res) => {
       await conn.rollback();
       return res.status(400).json({ success: false, error: 'Amount and transaction_id are required' });
     }
+    // Customers can only report payments for their own booking / package request
+    if (req.user.role === 'customer') {
+      const [own] = booking_id
+        ? await conn.query('SELECT id FROM bookings WHERE id = ? AND customer_id = ?', [booking_id, customerId])
+        : package_request_id
+          ? await conn.query('SELECT id FROM package_requests WHERE id = ? AND customer_id = ?', [package_request_id, customerId])
+          : [[]];
+      if (!own.length) {
+        await conn.rollback();
+        return res.status(403).json({ success: false, error: 'Not your booking or package request' });
+      }
+    }
 
     // Insert into v2_payments
     const [pResult] = await conn.query(
       `INSERT INTO v2_payments 
        (customer_id, booking_id, package_id, amount, payment_method, status, razorpay_payment_id, notes) 
-       VALUES (?, ?, ?, ?, 'qr', 'captured', ?, ?)`,
+       VALUES (?, ?, ?, ?, 'qr', 'pending', ?, ?)`,
       [
         customerId, 
         booking_id || null, 
@@ -778,7 +796,7 @@ exports.confirmQrPayment = async (req, res) => {
             amount,
             booking.total_amount || 0,
             balance,
-            `Manual QR Payment Ref: ${transaction_id}`
+            `QR payment ref ${transaction_id} (customer-reported, check before approving)`
           ]
         );
       }
@@ -796,3 +814,24 @@ exports.confirmQrPayment = async (req, res) => {
 };
 
 
+
+/**
+ * A customer's "I paid by QR" is saved as pending. When the admin approves the booking or
+ * package request (after checking the bank/UPI app), mark it received. Returns the payment id.
+ */
+exports.captureQrPayment = async (conn, { booking_id, package_request_id }) => {
+  const [rows] = booking_id
+    ? await conn.query(
+        "SELECT id FROM v2_payments WHERE payment_method = 'qr' AND status = 'pending' AND booking_id = ? ORDER BY id DESC LIMIT 1",
+        [booking_id]
+      )
+    : await conn.query(
+        `SELECT id FROM v2_payments WHERE payment_method = 'qr' AND status = 'pending' AND booking_id IS NULL
+           AND (CASE WHEN JSON_VALID(notes) THEN JSON_UNQUOTE(JSON_EXTRACT(notes, '$.package_request_id')) END) = ?
+         ORDER BY id DESC LIMIT 1`,
+        [String(package_request_id)]
+      );
+  if (!rows.length) return null;
+  await conn.query("UPDATE v2_payments SET status = 'captured', paid_at = NOW() WHERE id = ?", [rows[0].id]);
+  return rows[0].id;
+};

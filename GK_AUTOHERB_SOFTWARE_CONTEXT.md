@@ -1992,7 +1992,7 @@ DB_HOST=localhost
 DB_PORT=3306
 DB_NAME=gk_autoherb
 DB_USER=root
-DB_PASSWORD=1234
+DB_PASSWORD=your_mysql_password
 
 # Security Secrets
 JWT_SECRET=supersecret123

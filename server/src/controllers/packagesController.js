@@ -557,7 +557,9 @@ exports.approveRequest = async (req, res) => {
     await conn.beginTransaction();
     const { id } = req.params;
 
-    const result = await exports._approveRequestInternal(conn, id, null);
+    // A QR payment the customer reported becomes "received" now that the admin has checked it
+    const qrPaymentId = await require('./paymentsController').captureQrPayment(conn, { package_request_id: id });
+    const result = await exports._approveRequestInternal(conn, id, qrPaymentId);
     if (!result.success) {
       await conn.rollback();
       return res.status(404).json(result);

@@ -547,13 +547,14 @@ exports.serviceWiseReport = async (req, res) => {
     const { from_date, to_date, format = 'json' } = req.query;
     let query = `
       SELECT 
-        COALESCE(s.name, js.service_name) as service_name,
-        COALESCE(s.category, 'General') as category,
+        js.service_name as service_name,
+        COALESCE(MAX(sc.name), 'General') as category,
         COUNT(js.id) as booking_count,
         COALESCE(SUM(js.service_price + js.labor_charges), 0) as total_revenue
       FROM job_services js
       JOIN job_carts jc ON js.job_cart_id = jc.id
-      LEFT JOIN services s ON js.service_id = s.id
+      LEFT JOIN services s ON s.name = js.service_name
+      LEFT JOIN service_categories sc ON sc.id = s.category_id
       WHERE jc.status = 'complete'
     `;
     const params = [];
@@ -566,7 +567,7 @@ exports.serviceWiseReport = async (req, res) => {
       params.push(to_date);
     }
     query += `
-      GROUP BY service_name, category
+      GROUP BY js.service_name
       ORDER BY total_revenue DESC
     `;
 
