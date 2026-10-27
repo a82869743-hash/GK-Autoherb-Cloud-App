@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../../api/axiosInstance';
 import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
@@ -53,6 +54,22 @@ interface Pkg {
   price_suv: number;
   services?: PkgService[];
   pricing?: PkgPricing[];
+  emi_enabled?: number | boolean;
+  emi_months?: string | null;
+  emi_min_amount?: number | string;
+}
+
+/** EMI month options the admin allowed for this package at this price (empty = no EMI). */
+function emiOptions(pkg: Pkg, total: number): number[] {
+  if (!Number(pkg.emi_enabled) || total <= 0) return [];
+  if (Number(pkg.emi_min_amount) > 0 && total < Number(pkg.emi_min_amount)) return [];
+  return String(pkg.emi_months || '').split(',').map(Number).filter((m) => m >= 2).sort((a, b) => a - b);
+}
+
+/** Same split as the server: equal whole rupees, the first installment takes the remainder. */
+function emiSplit(total: number, months: number) {
+  const each = Math.floor(total / months);
+  return { first: Math.round((total - each * (months - 1)) * 100) / 100, each };
 }
 
 // Package tier colors
@@ -169,6 +186,8 @@ export default function BuyPackagesPage() {
   const [confirmPkg, setConfirmPkg] = useState<Pkg | null>(null);
   const [appliedCoupon, setAppliedCoupon] = useState<{ coupon_id: number; code: string; discount_amount: number; title?: string } | null>(null);
   const [myRequests, setMyRequests] = useState<any[]>([]);
+  const [emiChoice, setEmiChoice] = useState<number | null>(null);
+  const [emiPlans, setEmiPlans] = useState<any[]>([]);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
   
@@ -259,6 +278,9 @@ export default function BuyPackagesPage() {
     api.get('/packages/requests/my').then(res => {
       if (res.data.success) setMyRequests(res.data.data || []);
     }).catch(() => {});
+    api.get('/package-emi/my').then(res => {
+      if (res.data.success) setEmiPlans(res.data.data || []);
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -310,6 +332,7 @@ export default function BuyPackagesPage() {
       return;
     }
     setAppliedCoupon(null);
+    setEmiChoice(null);
     setConfirmPkg(pkg);
   };
 
@@ -328,12 +351,15 @@ export default function BuyPackagesPage() {
         car_type: filterCarType,
         coupon_id: appliedCoupon ? appliedCoupon.coupon_id : undefined,
         discount_amount: discount > 0 ? discount : undefined,
+        emi_months: emiChoice || undefined,
       });
       if (res.data.success) {
-        addToast('success', 'Package request submitted! Admin will review and approve it shortly.');
+        addToast('success', emiChoice
+          ? `EMI request sent! Pay the 1st installment of ₹${Number(res.data.pay_now).toLocaleString('en-IN')} at the studio to activate.`
+          : 'Package request submitted! Admin will review and approve it shortly.');
       }
-    } catch (err) {
-      addToast('error', 'Failed to submit package request. Please try again.');
+    } catch (err: any) {
+      addToast('error', err.response?.data?.error || 'Failed to submit package request. Please try again.');
     } finally {
       setSubmittingId(null);
       setConfirmPkg(null);
@@ -377,6 +403,7 @@ export default function BuyPackagesPage() {
         car_type: filterCarType,
         coupon_id: appliedCoupon ? appliedCoupon.coupon_id : undefined,
         discount_amount: discount > 0 ? discount : undefined,
+        emi_months: emiChoice || undefined,
       });
 
       if (!resRequest.data.success) {
@@ -384,10 +411,11 @@ export default function BuyPackagesPage() {
       }
 
       const requestId = resRequest.data.requestId;
+      const payNow = Number(resRequest.data.pay_now ?? finalAmount);
 
-      // 2. Create Razorpay order on backend with discounted finalAmount
+      // 2. Create Razorpay order on backend (EMI: the server charges installment 1 only)
       const resOrder = await api.post('/payments/razorpay/order', {
-        amount: finalAmount,
+        amount: payNow,
         package_id: confirmPkg.id,
         package_request_id: requestId
       });
@@ -404,7 +432,7 @@ export default function BuyPackagesPage() {
         amount: orderData.amount,
         currency: orderData.currency,
         name: 'GK AutoHerb',
-        description: `Car Care Package: ${confirmPkg.name}`,
+        description: emiChoice ? `${confirmPkg.name} · EMI 1 of ${emiChoice}` : `Car Care Package: ${confirmPkg.name}`,
         order_id: orderData.id,
         prefill: {
           name: user?.name || '',
@@ -447,7 +475,7 @@ export default function BuyPackagesPage() {
         setSandboxModal({
           isOpen: true,
           orderId: orderData.id,
-          amount: confirmPkg ? getPrice(confirmPkg) : 0,
+          amount: orderData.amount / 100,
           itemName: confirmPkg?.name || 'Membership Package',
           handler: options.handler,
           onDismiss: options.modal.ondismiss,
@@ -459,7 +487,7 @@ export default function BuyPackagesPage() {
       rzp.open();
     } catch (err: any) {
       console.error(err);
-      addToast('error', err.message || 'An error occurred during payment checkout.');
+      addToast('error', err.response?.data?.error || err.message || 'An error occurred during payment checkout.');
     } finally {
       setSubmittingOnline(false);
     }
@@ -482,6 +510,7 @@ export default function BuyPackagesPage() {
         car_type: filterCarType,
         coupon_id: appliedCoupon ? appliedCoupon.coupon_id : undefined,
         discount_amount: discount > 0 ? discount : undefined,
+        emi_months: emiChoice || undefined,
       });
 
       if (!resRequest.data.success) {
@@ -489,14 +518,14 @@ export default function BuyPackagesPage() {
       }
 
       const requestId = resRequest.data.requestId;
-      setQrAmount(finalAmount);
+      setQrAmount(Number(resRequest.data.pay_now ?? finalAmount));
       setActivePackageRequestId(requestId);
       setShowQrModal(true);
       setConfirmPkg(null);
       setAppliedCoupon(null);
     } catch (err: any) {
       console.error(err);
-      addToast('error', err.message || 'An error occurred during payment checkout.');
+      addToast('error', err.response?.data?.error || err.message || 'An error occurred during payment checkout.');
     } finally {
       setSubmittingOnline(false);
     }
@@ -640,6 +669,11 @@ export default function BuyPackagesPage() {
                   {price > 0 && (
                     <div className="text-center mt-4 pt-3 border-t border-gray-100">
                       <span className="text-2xl font-extrabold text-gray-900">₹{price.toLocaleString('en-IN')}</span>
+                      {emiOptions(pkg, price).length > 0 && (
+                        <p className="mt-1 text-[11px] font-bold text-[#D32F2F]">
+                          or EMI from ₹{emiSplit(price, Math.max(...emiOptions(pkg, price))).each.toLocaleString('en-IN')}/month
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -663,6 +697,25 @@ export default function BuyPackagesPage() {
           })}
         </div>
       )}
+
+      {emiPlans.some((p: any) => p.status === 'active') && (() => {
+        const due = emiPlans.filter((p: any) => p.status === 'active' && p.next_installment);
+        const next = due.map((p: any) => p.next_installment).sort((a: any, b: any) => +new Date(a.due_date) - +new Date(b.due_date))[0];
+        const late = due.some((p: any) => p.overdue_count > 0);
+        return (
+          <Link to="/customer/packages/emi"
+            className={`mt-6 flex items-center gap-3 rounded-2xl border p-4 ${late ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-white'}`}>
+            <CreditCard className={late ? 'text-[#D32F2F]' : 'text-gray-700'} size={22} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-extrabold text-gray-900">My EMI plans</p>
+              <p className={`text-xs ${late ? 'text-[#D32F2F] font-bold' : 'text-gray-500'}`}>
+                {next ? `${late ? 'Overdue' : 'Next'}: ₹${Number(next.amount).toLocaleString('en-IN')} · ${new Date(next.due_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : 'All paid'}
+              </p>
+            </div>
+            <ArrowRight size={16} className="text-gray-400" />
+          </Link>
+        );
+      })()}
 
       {/* ─── My Package Requests ─────────────────────── */}
       {myRequests.length > 0 && (() => {
@@ -864,6 +917,39 @@ export default function BuyPackagesPage() {
                     </span>
                   </div>
                 </div>
+
+                {(() => {
+                  const total = Math.max(0, getPrice(confirmPkg) - (appliedCoupon?.discount_amount || 0));
+                  const options = emiOptions(confirmPkg, total);
+                  if (!options.length) return null;
+                  const chosen = emiChoice && options.includes(emiChoice) ? emiChoice : null;
+                  return (
+                    <div className="border-t border-gray-200 pt-3">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">How do you want to pay?</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button type="button" onClick={() => setEmiChoice(null)}
+                          className={`rounded-xl border px-3 py-2 text-left ${!chosen ? 'border-[#D32F2F] bg-red-50' : 'border-gray-200 bg-white'}`}>
+                          <span className="block text-xs font-extrabold text-gray-900">Pay in full</span>
+                          <span className="block text-[11px] text-gray-500">₹{total.toLocaleString('en-IN')} once</span>
+                        </button>
+                        {options.map((m) => (
+                          <button key={m} type="button" onClick={() => setEmiChoice(m)}
+                            className={`rounded-xl border px-3 py-2 text-left ${chosen === m ? 'border-[#D32F2F] bg-red-50' : 'border-gray-200 bg-white'}`}>
+                            <span className="block text-xs font-extrabold text-gray-900">{m} month EMI</span>
+                            <span className="block text-[11px] text-gray-500">₹{emiSplit(total, m).each.toLocaleString('en-IN')}/month · no interest</span>
+                          </button>
+                        ))}
+                      </div>
+                      {chosen && (
+                        <div className="mt-3 rounded-xl bg-gray-900 text-white px-3 py-2.5 text-xs space-y-1">
+                          <div className="flex justify-between"><span className="text-white/70">Pay now (1 of {chosen})</span><span className="font-extrabold">₹{emiSplit(total, chosen).first.toLocaleString('en-IN')}</span></div>
+                          <div className="flex justify-between"><span className="text-white/70">Then every month × {chosen - 1}</span><span className="font-bold">₹{emiSplit(total, chosen).each.toLocaleString('en-IN')}</span></div>
+                          <p className="text-[10px] text-white/60 pt-1">Pay each month online or at the studio. Package bookings pause if an installment is more than 7 days late.</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="flex flex-col gap-2">
@@ -877,7 +963,7 @@ export default function BuyPackagesPage() {
                   ) : (
                     <>
                       <CreditCard size={16} />
-                      Pay Online (Razorpay)
+                      {emiChoice ? 'Pay 1st installment online' : 'Pay Online (Razorpay)'}
                     </>
                   )}
                 </button>
@@ -907,7 +993,7 @@ export default function BuyPackagesPage() {
                   ) : (
                     <>
                       <CheckCircle size={16} />
-                      Request Cash/Offline
+                      {emiChoice ? 'Pay 1st installment at studio' : 'Request Cash/Offline'}
                     </>
                   )}
                 </button>

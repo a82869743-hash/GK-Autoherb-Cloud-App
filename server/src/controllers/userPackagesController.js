@@ -538,6 +538,12 @@ exports.checkServiceAvailability = async (conn, userId, serviceName, vehicleId) 
   const packageId = activePackages[0].package_id;
   const packageName = activePackages[0].package_name;
 
+  // EMI package with an installment past the grace period: customer bookings pause until paid
+  const emiBlock = await require('../services/packageEmi').bookingBlockReason(conn, userPackageId);
+  if (emiBlock) {
+    return { has_package: true, can_use: false, remaining: 0, reason: emiBlock };
+  }
+
   // Get total_count for this service
   const serviceBreakdown = await getServiceBreakdown(conn, packageId, packageName);
   let serviceEntry = serviceBreakdown.find(s => s.service_name.toLowerCase().trim() === serviceName?.toLowerCase().trim());

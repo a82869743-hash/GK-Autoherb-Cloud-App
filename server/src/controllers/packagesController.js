@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const emi = require('../services/packageEmi');
 
 // Helper: fetch related services, products & pricing for a package
 async function enrichPackage(pkg) {
@@ -87,7 +88,8 @@ exports.create = async (req, res) => {
       visible_to_customer = true, is_custom = false,
       service_ids = [],       // Legacy format: array of service IDs (no count)
       services = [],          // New format: array of { service_id, total_count }
-      products = []
+      products = [],
+      emi_enabled, emi_months, emi_min_amount
     } = req.body;
 
     // ── Validation ──────────────────────────────────
@@ -124,6 +126,7 @@ exports.create = async (req, res) => {
       [name.trim(), description || null, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, wash_count, wax_count, is_published ? 1 : 0, visible_to_customer ? 1 : 0, is_custom ? 1 : 0]
     );
     const pkgId = result.insertId;
+    if (emi_enabled !== undefined) await saveEmiSettings(conn, pkgId, { emi_enabled, emi_months, emi_min_amount });
 
     // ── Insert service links (new format with total_count) ──
     if (services.length > 0) {
@@ -170,7 +173,8 @@ exports.update = async (req, res) => {
     const {
       name, description, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv,
       wash_count, wax_count, is_published, visible_to_customer, is_custom,
-      service_ids, services, products
+      service_ids, services, products,
+      emi_enabled, emi_months, emi_min_amount
     } = req.body;
 
     const [existing] = await conn.query('SELECT id FROM packages WHERE id = ?', [id]);
@@ -203,6 +207,7 @@ exports.update = async (req, res) => {
       params.push(id);
       await conn.query(`UPDATE packages SET ${updates.join(', ')} WHERE id = ?`, params);
     }
+    if (emi_enabled !== undefined) await saveEmiSettings(conn, id, { emi_enabled, emi_months, emi_min_amount });
 
     // Sync v2 pricing matrix table
     if (req.body.pricing && Array.isArray(req.body.pricing) && req.body.pricing.length > 0) {
@@ -276,6 +281,16 @@ exports.update = async (req, res) => {
   } finally { conn.release(); }
 };
 
+// Helper: EMI settings (migration 090). Months are kept as "3,6".
+async function saveEmiSettings(conn, packageId, { emi_enabled, emi_months, emi_min_amount }) {
+  const months = emi.parseMonths(Array.isArray(emi_months) ? emi_months.join(',') : emi_months);
+  const enabled = emi_enabled && months.length ? 1 : 0;
+  await conn.query(
+    'UPDATE packages SET emi_enabled = ?, emi_months = ?, emi_min_amount = ? WHERE id = ?',
+    [enabled, months.join(',') || null, Math.max(0, Number(emi_min_amount) || 0), packageId]
+  );
+}
+
 // Helper: Syncs updated package services to all active customer subscriptions for this package_id
 async function syncPackageServicesToUserPackages(conn, packageId) {
   // Nothing to copy: customers' package credits are read live from package_services
@@ -347,7 +362,7 @@ exports.delete = async (req, res) => {
 exports.createRequest = async (req, res) => {
   try {
     const customerId = req.user.id;
-    const { vehicle_id, package_id, price, pricing_type = 'basic', car_type, coupon_id, discount_amount } = req.body;
+    const { vehicle_id, package_id, price, pricing_type = 'basic', car_type, coupon_id, discount_amount, emi_months } = req.body;
 
     if (!vehicle_id || !package_id || price === undefined) {
       return res.status(400).json({ success: false, error: 'vehicle_id, package_id, and price are required' });
@@ -379,12 +394,26 @@ exports.createRequest = async (req, res) => {
     const discount = parseFloat(discount_amount || 0);
     const finalPrice = Math.max(0, listPrice - discount);
 
+    // EMI: only the month options the admin allowed for this package
+    const emiMonths = Number(emi_months) || null;
+    if (emiMonths) {
+      const [pkgRows] = await pool.query('SELECT * FROM packages WHERE id = ?', [package_id]);
+      const emiError = emi.validateChoice(pkgRows[0], emiMonths, finalPrice);
+      if (emiError) return res.status(400).json({ success: false, error: emiError });
+    }
+
     const [result] = await pool.query(
       "INSERT INTO package_requests (customer_id, vehicle_id, package_id, price, pricing_type, car_type, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')",
       [customerId, vehicle_id, package_id, finalPrice, pricing_type, effectiveCarType]
     );
 
     const requestId = result.insertId;
+    let emiPlan = null;
+    if (emiMonths) {
+      await pool.query('UPDATE package_requests SET emi_months = ? WHERE id = ?', [emiMonths, requestId]);
+      const amounts = emi.splitAmount(finalPrice, emiMonths);
+      emiPlan = { months: emiMonths, first_amount: amounts[0], installment_amount: amounts[emiMonths - 1] };
+    }
 
     if (coupon_id && discount > 0) {
       await pool.query(
@@ -394,7 +423,7 @@ exports.createRequest = async (req, res) => {
       ).catch(e => console.warn('Coupon redemption log error:', e.message));
     }
 
-    res.status(201).json({ success: true, requestId, price: finalPrice, car_type: effectiveCarType, message: 'Package request submitted to admin for approval' });
+    res.status(201).json({ success: true, requestId, price: finalPrice, pay_now: emiPlan ? emiPlan.first_amount : finalPrice, emi: emiPlan, car_type: effectiveCarType, message: 'Package request submitted to admin for approval' });
   } catch (err) {
     console.error('Package request create error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -406,7 +435,7 @@ exports.getMyRequests = async (req, res) => {
   try {
     const customerId = req.user.id;
     const [rows] = await pool.query(`
-      SELECT pr.id, pr.status, pr.price, pr.rejection_reason, pr.created_at,
+      SELECT pr.*, pr.id, pr.status, pr.price, pr.rejection_reason, pr.created_at,
              p.name as package_name, p.wash_count,
              v.registration_no, v.brand, v.model
       FROM package_requests pr
@@ -471,6 +500,7 @@ exports._approveRequestInternal = async (conn, id, paymentId = null) => {
     ]
   );
   const userPackageId = result.insertId;
+  const emiPlan = await emi.createPlanForRequest(conn, reqData, userPackageId, paymentId);
 
   // Create package_usage rows
   const [packages] = await conn.query('SELECT name FROM packages WHERE id = ?', [reqData.package_id]);
@@ -492,14 +522,16 @@ exports._approveRequestInternal = async (conn, id, paymentId = null) => {
       `INSERT INTO v2_package_renewals
        (customer_id, package_id, customer_package_id, renewal_date, amount_paid, payment_id, renewed_by, notes)
        VALUES (?, ?, ?, CURDATE(), ?, ?, 'customer', 'Initial package purchase')`,
-      [reqData.customer_id, reqData.package_id, userPackageId, reqData.price || 0, paymentId]
+      [reqData.customer_id, reqData.package_id, userPackageId, emiPlan ? emiPlan.firstAmount : reqData.price || 0, paymentId]
     );
   } catch (dbErr) {
     console.warn('Failed to write initial purchase log:', dbErr.message);
   }
 
   // Fire-and-forget "package is active" message (editable template PACKAGE_APPROVED; WhatsApp + SMS fallback)
-  try {
+  if (emiPlan) {
+    emi.notifyStarted(reqData.customer_id, packageName, emiPlan);
+  } else try {
     const messagingService = require('../services/messagingService');
     const [upRows] = await conn.query('SELECT start_date, end_date FROM user_packages WHERE id = ?', [userPackageId]);
     const fmt = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : '');
@@ -515,7 +547,7 @@ exports._approveRequestInternal = async (conn, id, paymentId = null) => {
     console.warn('Package activation message error:', err.message);
   }
 
-  return { success: true, userPackageId };
+  return { success: true, userPackageId, emiPlanId: emiPlan?.planId || null };
 };
 
 // ─── ADMIN: APPROVE PACKAGE REQUEST ─────────

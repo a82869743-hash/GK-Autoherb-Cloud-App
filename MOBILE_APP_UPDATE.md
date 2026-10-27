@@ -145,6 +145,16 @@ Fixed along the way: a customer could change their car's type (e.g. SUV → hatc
 
 All wording is editable in Admin → WhatsApp. Offer-type messages skip customers who opted out. For the live WhatsApp API, each template needs Meta approval (marketing category for festival / next-wash / expired).
 
+## 3f. Package EMI — studio installments (Oct 27)
+
+- **Admin turns it on per package:** Packages → Edit → *Allow EMI* → pick the month options (2/3/4/6/9/12) and an optional minimum price. Cards show an "EMI · 3 / 6 months" badge.
+- **Customer:** Buy package → *How do you want to pay?* → Pay in full or N-month EMI (no interest, equal whole-rupee parts, the first part takes any remainder). Pay installment 1 online, by UPI QR, or at the studio (admin approves the request as usual). Package cards say "or EMI from ₹X/month".
+- **My EMI plans** (`/customer/packages/emi`, linked from the packages page): progress, next due, *Pay now* online, full schedule.
+- **Admin → All apps → Package EMI** (`/admin/package-emi`): outstanding / overdue / due-in-7-days totals, Running / Overdue / Completed tabs, *Collect* (cash / UPI / card / bank + reference; adds an accounts entry), *Waive* (admin only), *Send reminder*.
+- **Rules:** server prices every installment (browser amounts ignored); package bookings by the customer pause when an installment is more than 7 days late (`EMI_GRACE_DAYS`), staff/admin can still serve; `user_packages.price_paid` grows with each payment.
+- **WhatsApp:** PACKAGE_EMI_STARTED (instead of "package active"), PACKAGE_EMI_DUE (2 days before, 9:30 AM), PACKAGE_EMI_OVERDUE (day after due, once), PACKAGE_EMI_PAID (receipt). Editable in Admin → WhatsApp.
+- **Database:** migration `090_package_emi.sql` — new columns `packages.emi_enabled / emi_months / emi_min_amount`, `package_requests.emi_months`, new tables `package_emi_plans`, `package_emi_installments`, 4 templates. Additive only, no sample data.
+
 ## 4. Bugs found and fixed along the way
 
 - WhatsApp template edits were never saved (wrong field name), the edit box opened empty, and "Send test" called a missing endpoint.

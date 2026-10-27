@@ -10,7 +10,8 @@ work and short progress updates. Full change log + deploy steps: `MOBILE_APP_UPD
 - `server/` Express + MySQL (mysql2), socket.io, node-cron (IST). Messaging: `services/messagingService.js`
   (WhatsApp Cloud API with queued click-to-chat fallback + SMS), templates in `v2_whatsapp_templates`.
 - Migrations: run single files with `node scripts/run_migration_files.js <file>` — never replay all.
-  Latest: 087 (mobile app), 088 (service media roles + PPF/ceramic brands), 089 (WhatsApp journey).
+  Latest: 087 (mobile app), 088 (service media roles + PPF/ceramic brands), 089 (WhatsApp journey),
+  090 (package EMI, see `services/packageEmi.js`).
 - Local test run (no real SMS): in `server/`: `MSG91_AUTH_KEY= TWO_FACTOR_API_KEY= MESSAGES_ENABLED=false node src/app.js`.
   Client: `npm run dev` in `client/` (port 5173, proxies /api to 5000).
 - Local DB schema differs a lot from live (extra legacy tables, generated settings columns).
@@ -37,7 +38,8 @@ create job, quick wash, bookings, quick bill, invoices); brand logos (car-logos-
 logo picker; before/after + process-video slots; PPF/ceramic brands (Garware, Astonish); full WhatsApp
 journey (morning reminder, package start/renew/expired/next-wash, festival offers page); deployed live
 22 Oct with migrations 086(safe)/087(safe)/088/089 + backfill; live bug fixes (quick-wash walk-in,
-chatbot context, bulk messages, package sync, package consume).
+chatbot context, bulk messages, package sync, package consume). 27 Oct: package EMI (studio installments,
+admin sets months per package) with migration 090. Backup before it: `/root/backups/gk-before-emi-20261027-180649`.
 
 ## Open items
 1. SMS: 2Factor rejects all non-OTP SMS (needs DLT templates) — Aryan to register, or connect Meta WhatsApp API

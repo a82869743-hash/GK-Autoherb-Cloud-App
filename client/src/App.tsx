@@ -68,6 +68,8 @@ import DashboardPage from './pages/admin/DashboardPage';
 import SettingsPage from './pages/admin/SettingsPage';
 import QuickBillingPage from './pages/admin/QuickBillingPage';
 import FestivalOffersPage from './pages/admin/FestivalOffersPage';
+import AdminPackageEmiPage from './pages/admin/PackageEmiPage';
+import CustomerPackageEmiPage from './pages/customer/PackageEmiPage';
 import AllInvoicesPage from './pages/admin/AllInvoicesPage';
 import ArchivePage from './pages/admin/ArchivePage';
 import ReportsPage from './pages/admin/ReportsPage';
@@ -353,6 +355,7 @@ export default function App() {
         <Route path="customer-rewards" element={<CustomerRewardsPage />} />
         <Route path="coupons" element={<CouponsPage />} />
         <Route path="festival-offers" element={<FestivalOffersPage />} />
+        <Route path="package-emi" element={<AdminPackageEmiPage />} />
         <Route path="greetings" element={<GreetingsPage />} />
         <Route path="roles" element={<RoleManagementPage />} />
         {/* ─── Quotations Routes ─── */}
@@ -373,6 +376,7 @@ export default function App() {
         <Route path="loyalty" element={<LoyaltyPage />} />
         <Route path="vehicles" element={<VehiclesPage />} />
         <Route path="buy-packages" element={<CustomerBuyPackagesPage />} />
+        <Route path="packages/emi" element={<CustomerPackageEmiPage />} />
         <Route path="products" element={<CustomerProductsPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="complete-profile" element={<CompleteProfilePage />} />

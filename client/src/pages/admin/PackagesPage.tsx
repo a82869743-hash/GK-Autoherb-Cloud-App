@@ -158,6 +158,11 @@ export default function PackagesPage() {
   // Custom package settings
   const [packageValidity, setPackageValidity] = useState(12);
   const [pickupEnabled, setPickupEnabled] = useState(false);
+
+  // EMI (studio installments) — admin picks the month options per package
+  const [emiEnabled, setEmiEnabled] = useState(false);
+  const [emiMonths, setEmiMonths] = useState<number[]>([3]);
+  const [emiMinAmount, setEmiMinAmount] = useState(0);
   
   // Legacy: selected products (checkboxes, no count)
   const [selectedProducts, setSelectedProducts] = useState<any[]>([]);
@@ -195,6 +200,7 @@ export default function PackagesPage() {
     setSelectedProducts([]);
     setPackageValidity(12);
     setPickupEnabled(false);
+    setEmiEnabled(false); setEmiMonths([3]); setEmiMinAmount(0);
     setModalOpen(true);
   };
 
@@ -245,6 +251,10 @@ export default function PackagesPage() {
     
     setPackageValidity(pkg.package_validity || 12);
     setPickupEnabled(!!pkg.pickup_enabled);
+    setEmiEnabled(!!Number(pkg.emi_enabled));
+    const savedMonths = String(pkg.emi_months || '').split(',').map(Number).filter(Boolean);
+    setEmiMonths(savedMonths.length ? savedMonths : [3]);
+    setEmiMinAmount(Number(pkg.emi_min_amount) || 0);
     setModalOpen(true);
   };
 
@@ -270,6 +280,9 @@ export default function PackagesPage() {
         products: selectedProducts,
         package_validity: packageValidity,
         pickup_enabled: pickupEnabled,
+        emi_enabled: emiEnabled && emiMonths.length > 0,
+        emi_months: emiMonths.join(','),
+        emi_min_amount: emiMinAmount,
         pricing: [
           // Basic Pricing
           { car_type: 'SMALL_HATCHBACK', pricing_type: 'basic', price: prices.price_hatchback || 0 },
@@ -466,6 +479,14 @@ export default function PackagesPage() {
                     <button onClick={() => { setDeleteId(pkg.id); setDeleteOpen(true); }} className="p-1 rounded hover:bg-red-50"><Trash2 size={13} className="text-gray-400" /></button>
                   </div>
                 </div>
+
+                {!!Number(pkg.emi_enabled) && (
+                  <div className="px-4 pt-2">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-50 text-[#D32F2F] border border-red-100 text-[8px] font-bold uppercase tracking-wider rounded-md">
+                      EMI · {String(pkg.emi_months || '').split(',').join(' / ')} months
+                    </span>
+                  </div>
+                )}
 
                 {/* ─── Visibility Badge ─── */}
                 {!pkg.visible_to_customer && (
@@ -702,6 +723,47 @@ export default function PackagesPage() {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* ── EMI (studio installments) ───────────────────── */}
+            <div className="rounded-2xl border border-gray-200 p-4">
+              <label className="flex items-center justify-between gap-3 cursor-pointer">
+                <span>
+                  <span className="block font-semibold text-gray-800">Allow EMI</span>
+                  <span className="block text-xs text-gray-500">Customer pays the 1st installment now, the rest every month (online or at the studio).</span>
+                </span>
+                <input type="checkbox" className="w-5 h-5 accent-[#D32F2F] shrink-0" checked={emiEnabled} onChange={e => setEmiEnabled(e.target.checked)} />
+              </label>
+              {emiEnabled && (
+                <div className="mt-4 space-y-3">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-600 mb-2">Months the customer can choose</p>
+                    <div className="flex flex-wrap gap-2">
+                      {[2, 3, 4, 6, 9, 12].map(m => {
+                        const on = emiMonths.includes(m);
+                        return (
+                          <button key={m} type="button"
+                            onClick={() => setEmiMonths(on ? emiMonths.filter(x => x !== m) : [...emiMonths, m].sort((a, b) => a - b))}
+                            className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${on ? 'bg-[#D32F2F] text-white border-[#D32F2F]' : 'bg-white text-gray-700 border-gray-300'}`}>
+                            {m} months
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {emiMonths.length === 0 && <p className="text-xs text-red-600 mt-1">Pick at least one option, or EMI stays off.</p>}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-600 mb-1">Minimum package price for EMI (₹, 0 = any)</p>
+                    <input type="number" min="0" className="w-40 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      value={emiMinAmount} onChange={e => setEmiMinAmount(Math.max(0, parseFloat(e.target.value) || 0))} />
+                  </div>
+                  {prices.price_sedan > 0 && emiMonths.length > 0 && (
+                    <p className="text-xs text-gray-500">
+                      Example (sedan {formatINR(prices.price_sedan)}): {emiMonths.map(m => `${m} × ${formatINR(Math.floor(prices.price_sedan / m))}`).join('  ·  ')}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* ── Inventory Products ──────────────────────────── */}

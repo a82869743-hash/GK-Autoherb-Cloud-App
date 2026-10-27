@@ -53,6 +53,7 @@ export default function AdminAppLauncherDrawer({ isOpen, onClose }: AdminAppLaun
         { name: 'Add Customer', desc: 'Manual walk-in registration', to: '/admin/add-customer', icon: PlusCircle, color: 'text-rose-600', bgColor: 'bg-rose-50 border-rose-100' },
         { name: 'Packages Catalog', desc: 'Tier pricing & inclusions', to: '/admin/packages', icon: Layers, color: 'text-blue-600', bgColor: 'bg-blue-50 border-blue-100' },
         { name: 'Package Approvals', desc: 'Customer membership orders', to: '/admin/package-approvals', icon: Package, color: 'text-amber-600', bgColor: 'bg-amber-50 border-amber-100', badge: stats?.pending_package_requests || undefined },
+        { name: 'Package EMI', desc: 'Installments, dues & collections', to: '/admin/package-emi', icon: CreditCard, color: 'text-[#D32F2F]', bgColor: 'bg-red-50 border-red-100' },
         { name: 'Package Tracking', desc: 'Active subscription quotas', to: '/admin/package-tracking', icon: Layers, color: 'text-cyan-600', bgColor: 'bg-cyan-50 border-cyan-100' },
         { name: 'Loyalty Points', desc: 'Points ratio & customer lookup', to: '/admin/loyalty', icon: Star, color: 'text-yellow-600', bgColor: 'bg-yellow-50 border-yellow-100' },
         { name: 'Customer Rewards', desc: 'Welcome wash & gift perks', to: '/admin/customer-rewards', icon: Gift, color: 'text-pink-600', bgColor: 'bg-pink-50 border-pink-100' },

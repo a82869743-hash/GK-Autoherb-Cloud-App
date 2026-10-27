@@ -16,17 +16,31 @@ if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
 // ─── Razorpay Order Creation ───────────────────────
 exports.createRazorpayOrder = async (req, res) => {
   try {
-    const { currency = 'INR', receipt, package_id, booking_id, invoice_id, user_package_id, package_request_id } = req.body;
+    const { currency = 'INR', receipt, package_id, booking_id, invoice_id, user_package_id, package_request_id, emi_installment_id } = req.body;
     let { amount } = req.body;
 
     // Charge what the server priced, not what the browser sent
-    if (package_request_id) {
-      const [reqRows] = await pool.query('SELECT price, customer_id FROM package_requests WHERE id = ?', [package_request_id]);
+    if (emi_installment_id) {
+      const [instRows] = await pool.query(
+        `SELECT ei.amount, ei.status, ep.customer_id FROM package_emi_installments ei
+         JOIN package_emi_plans ep ON ep.id = ei.plan_id WHERE ei.id = ?`,
+        [emi_installment_id]
+      );
+      if (!instRows.length) return res.status(404).json({ success: false, error: 'Installment not found' });
+      if (req.user.role === 'customer' && Number(instRows[0].customer_id) !== Number(req.user.id)) {
+        return res.status(403).json({ success: false, error: 'Not your installment' });
+      }
+      if (instRows[0].status !== 'pending') return res.status(400).json({ success: false, error: 'This installment is already paid' });
+      amount = Number(instRows[0].amount);
+    } else if (package_request_id) {
+      const [reqRows] = await pool.query('SELECT * FROM package_requests WHERE id = ?', [package_request_id]);
       if (reqRows.length) {
         if (req.user.role === 'customer' && Number(reqRows[0].customer_id) !== Number(req.user.id)) {
           return res.status(403).json({ success: false, error: 'Not your package request' });
         }
-        amount = Number(reqRows[0].price);
+        // EMI purchase: only installment 1 is charged now
+        const months = Number(reqRows[0].emi_months);
+        amount = months ? require('../services/packageEmi').splitAmount(reqRows[0].price, months)[0] : Number(reqRows[0].price);
       }
     } else if (booking_id && req.user.role === 'customer') {
       const [bkRows] = await pool.query('SELECT advance_amount, customer_id FROM bookings WHERE id = ?', [booking_id]);
@@ -55,7 +69,7 @@ exports.createRazorpayOrder = async (req, res) => {
     }
 
     // Save pending payment record to v2_payments
-    const metadata = { user_package_id, package_request_id };
+    const metadata = { user_package_id, package_request_id, emi_installment_id };
     await pool.query(
       `INSERT INTO v2_payments 
        (customer_id, booking_id, invoice_id, package_id, amount, currency, payment_method, status, razorpay_order_id, notes)
@@ -108,8 +122,16 @@ exports._processCapturedPayment = async (connection, razorpayOrderId, razorpayPa
     }
   }
 
+  // 5a. EMI installment paid online
+  if (metadata.emi_installment_id) {
+    const emi = require('../services/packageEmi');
+    const r = await emi.markInstallmentPaid(connection, metadata.emi_installment_id, { method: 'razorpay', ref: razorpayPaymentId, v2PaymentId: payment.id });
+    if (r.error) console.warn('EMI installment update failed during payment processing:', r.error);
+    else emi.notifyPaid(r.plan, r.installment);
+  }
+
   // 5. Handle package purchase request
-  if (metadata.package_request_id) {
+  else if (metadata.package_request_id) {
     const packagesController = require('./packagesController');
     const appResult = await packagesController._approveRequestInternal(connection, metadata.package_request_id, payment.id);
     if (!appResult.success) {
