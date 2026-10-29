@@ -83,15 +83,12 @@ exports.sendOtp = async (req, res) => {
       [cleanMobile, otpHash, purpose, expiresAt, ipAddress]
     );
 
-    // 5. Send via SMS service
+    // 5. Send by SMS through 2Factor's OTP route (works without our own DLT templates — the
+    //    custom-text route used before was rejected by 2Factor, so no login code ever arrived)
     const isProd = process.env.NODE_ENV === 'production';
-    const dltTemplateId = process.env.MSG91_OTP_TEMPLATE_ID || process.env.TWO_FACTOR_OTP_TEMPLATE || 'OTP_LOGIN';
-    const smsMessage = `Your GK AutoHerb verification code is ${rawOtp}. Valid for 5 minutes. Please do not share this OTP with anyone.`;
-
-    const smsRes = await messagingService.sendSMS(cleanMobile, dltTemplateId, null, {
-      otp: rawOtp,
-      content: smsMessage
-    });
+    const hasSmsKey = !!(process.env.TWO_FACTOR_API_KEY || process.env.MSG91_AUTH_KEY);
+    const smsSent = await require('../utils/sendOtp')(cleanMobile, rawOtp);
+    const smsRes = { success: smsSent };
 
     // Also over WhatsApp when the Cloud API + an approved authentication template are set up
     let waRes = { success: false };
@@ -102,6 +99,13 @@ exports.sendOtp = async (req, res) => {
       }
     } catch (waErr) {
       console.warn('[WA OTP] failed:', waErr.message);
+    }
+
+    // Tell the customer if nothing could be sent (instead of "code sent" and a code that never arrives)
+    if (hasSmsKey && !smsRes.success && !waRes.success) {
+      await pool.query('UPDATE otp_requests SET expires_at = NOW() WHERE mobile = ? AND is_verified = 0 AND expires_at > NOW()', [cleanMobile]);
+      console.error(`[OTP] Could not send to ******${cleanMobile.slice(-4)} (SMS and WhatsApp both failed)`);
+      return res.status(502).json({ success: false, error: 'Could not send the code right now. Please try again in a minute or log in with your password.' });
     }
 
     // Never write live OTP codes into production logs
