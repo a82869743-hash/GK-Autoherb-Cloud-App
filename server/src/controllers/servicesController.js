@@ -1,5 +1,33 @@
 const pool = require('../config/db');
 
+// Before/after photos + process video per service, for the showcase on service cards (one query)
+async function attachMediaPreview(rows) {
+  if (!rows.length) return;
+  try {
+    const [media] = await pool.query(
+      `SELECT service_id, media_role, media_type, url, external_url, thumbnail_url FROM service_media
+       WHERE is_active = 1 AND service_id IN (?) ORDER BY sort_order ASC, created_at ASC`,
+      [rows.map((r) => r.id)]
+    );
+    for (const r of rows) {
+      const mine = media.filter((m) => m.service_id === r.id);
+      const before = mine.find((m) => m.media_role === 'before' && m.media_type === 'image');
+      const after = mine.find((m) => m.media_role === 'after' && m.media_type === 'image');
+      const video = mine.find((m) => m.media_role === 'process' || m.media_type === 'video');
+      if (before || after || video) {
+        r.media_preview = {
+          before: before?.url || null,
+          after: after?.url || null,
+          video: video ? video.url || video.external_url : null,
+          poster: video?.thumbnail_url || null,
+        };
+      }
+    }
+  } catch (e) {
+    // service_media missing on an old schema: cards just show the photo
+  }
+}
+
 // ─── LIST ───────────────────────────────────
 exports.list = async (req, res) => {
   try {
@@ -17,6 +45,7 @@ exports.list = async (req, res) => {
        WHERE ${where} ORDER BY sc.sort_order ASC, s.name ASC`,
       params
     );
+    await attachMediaPreview(rows);
     res.json({ success: true, data: rows });
   } catch (err) {
     console.error('Services list error:', err);

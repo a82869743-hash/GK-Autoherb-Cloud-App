@@ -9,6 +9,7 @@ import { VehicleChip } from '../../components/customer/VehicleSheet';
 import { AppPageHeader, BottomSheet, EmptyBlock, SegmentedTabs, Skeleton } from '../../components/customer/ui';
 import { SEGMENT_LABEL, priceForSegment, formatPrice } from '../../utils/pricing';
 import ServiceImage from '../../components/customer/ServiceImage';
+import { ServiceCardShowcase } from '../../components/customer/ServiceMediaShowcase';
 
 // ─── Kept for BookingPage, which groups services the same way ───
 export type ServiceCategoryKey = string;
@@ -156,6 +157,8 @@ export default function CustomerServicesPage() {
     if (sort === 'price_asc') list = [...list].sort((a, b) => priceOf(a) - priceOf(b));
     else if (sort === 'price_desc') list = [...list].sort((a, b) => priceOf(b) - priceOf(a));
     else if (sort === 'name') list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    // Recommended: services with before/after or a process video lead the list (stable sort keeps the rest in order)
+    else list = [...list].sort((a, b) => Number(!!b.media_preview) - Number(!!a.media_preview));
     return list;
   }, [typeServices, cat, query, sort, maxPrice, warrantyOnly, segment, vehicleType]);
 
@@ -226,8 +229,9 @@ export default function CustomerServicesPage() {
             const isWash = /wash/i.test(s.name);
             return (
               <div key={s.id} className="app-card p-3">
+                {s.media_preview && <div className="mb-3"><ServiceCardShowcase media={s.media_preview} onOpen={() => setDetails(s)} /></div>}
                 <button onClick={() => setDetails(s)} className="flex gap-3 w-full text-left">
-                  <ServiceImage service={s} className="h-[104px] w-[104px] shrink-0 rounded-xl" />
+                  {!s.media_preview && <ServiceImage service={s} className="h-[104px] w-[104px] shrink-0 rounded-xl" />}
                   <span className="flex-1 min-w-0 py-0.5">
                     <span className="block font-display text-[16px] font-extrabold text-slate-900 leading-snug">{s.name}</span>
                     <span className="flex items-baseline gap-2 mt-1">

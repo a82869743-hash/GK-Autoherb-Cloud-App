@@ -1,9 +1,9 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Camera, PlayCircle, ShieldCheck } from 'lucide-react';
 import { useServiceMedia, useProductBrands, coatingKind, ProductBrand } from '../../api/hooks/useServiceExtras';
 
 /** Draggable before/after comparison. */
-function BeforeAfterSlider({ before, after }: { before: string; after: string }) {
+export function BeforeAfterSlider({ before, after, className = 'h-52 rounded-2xl' }: { before: string; after: string; className?: string }) {
   const [pos, setPos] = useState(50);
   const ref = useRef<HTMLDivElement>(null);
   const move = (clientX: number) => {
@@ -14,11 +14,13 @@ function BeforeAfterSlider({ before, after }: { before: string; after: string })
   return (
     <div
       ref={ref}
-      className="relative h-52 overflow-hidden rounded-2xl bg-slate-100 select-none touch-none"
+      className={`relative overflow-hidden bg-slate-100 select-none touch-pan-y ${className}`}
       onPointerDown={(e) => {
+        e.stopPropagation();
         (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
         move(e.clientX);
       }}
+      onClick={(e) => e.stopPropagation()}
       onPointerMove={(e) => e.buttons && move(e.clientX)}
     >
       <img src={after} alt="After" className="absolute inset-0 h-full w-full object-cover" draggable={false} />
@@ -30,6 +32,54 @@ function BeforeAfterSlider({ before, after }: { before: string; after: string })
       </div>
       <span className="absolute left-2.5 top-2.5 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-bold text-white">Before</span>
       <span className="absolute right-2.5 top-2.5 rounded-full bg-[#D32F2F] px-2.5 py-1 text-[11px] font-bold text-white">After</span>
+    </div>
+  );
+}
+
+export type MediaPreview = { before: string | null; after: string | null; video: string | null; poster: string | null };
+
+/** Video that plays (muted, looping) only while on screen — saves data and battery on long lists. */
+function InViewVideo({ src, poster }: { src: string; poster?: string | null }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const v = ref.current;
+    if (!v || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([e]) => (e.isIntersecting ? v.play().catch(() => {}) : v.pause()), { threshold: 0.5 });
+    io.observe(v);
+    return () => io.disconnect();
+  }, [src]);
+  return <video ref={ref} src={src} poster={poster || undefined} muted loop playsInline preload="metadata" className="absolute inset-0 h-full w-full object-cover" />;
+}
+
+/** Top of a service card: process video and a before/after slider, with a small switch between them. */
+export function ServiceCardShowcase({ media, onOpen }: { media: MediaPreview; onOpen?: () => void }) {
+  const hasPair = !!(media.before && media.after);
+  const hasVideo = !!media.video && !embedUrl(media.video);
+  const [tab, setTab] = useState<'video' | 'compare'>(hasVideo ? 'video' : 'compare');
+  if (!hasPair && !hasVideo) return null;
+  return (
+    <div className="relative h-48 overflow-hidden rounded-xl bg-black">
+      {tab === 'video' && hasVideo ? (
+        <button type="button" onClick={onOpen} className="absolute inset-0" aria-label="See the process">
+          <InViewVideo src={media.video!} poster={media.poster} />
+          <span className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/60 to-transparent" />
+          <span className="absolute left-3 bottom-2.5 flex items-center gap-1.5 text-[12px] font-bold text-white">
+            <PlayCircle size={15} /> See the process
+          </span>
+        </button>
+      ) : (
+        <BeforeAfterSlider before={media.before!} after={media.after!} className="h-full" />
+      )}
+      {hasPair && hasVideo && (
+        <div className="absolute right-2.5 bottom-2.5 flex rounded-full bg-black/55 p-0.5 backdrop-blur-sm" onClick={(e) => e.stopPropagation()}>
+          {(['video', 'compare'] as const).map((k) => (
+            <button key={k} type="button" onClick={() => setTab(k)}
+              className={`h-7 rounded-full px-3 text-[11.5px] font-bold transition-colors ${tab === k ? 'bg-white text-slate-900' : 'text-white/85'}`}>
+              {k === 'video' ? 'Video' : 'Before / After'}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
