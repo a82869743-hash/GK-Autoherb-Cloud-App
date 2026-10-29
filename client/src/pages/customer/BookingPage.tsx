@@ -23,7 +23,7 @@ import Modal from '../../components/ui/Modal';
 import ServiceDetailsModal from '../../components/shared/ServiceDetailsModal';
 import CouponInput from '../../components/shared/CouponInput';
 import { SERVICE_CATEGORIES, ServiceCategoryKey, matchesServiceCategory } from './ServicesPage';
-import { priceForSegment, segmentForVehicle, SEGMENT_LABEL } from '../../utils/pricing';
+import { priceForSegment, offerPriceForSegment, offerBadge, segmentForVehicle, SEGMENT_LABEL } from '../../utils/pricing';
 import { useGarageStore } from '../../store/garageStore';
 import { useMyVouchers } from '../../api/hooks/useCustomerApp';
 import { AppPageHeader } from '../../components/customer/ui';
@@ -358,14 +358,14 @@ export default function BookingPage() {
     const cat = filter !== 'all' ? filter : 'sedan';
     return selectedServicesObjs.reduce((sum, s) => {
       if (!s.name || !s.name.toLowerCase().includes('wash')) return sum;
-      return sum + priceForSegment(s, cat);
+      return sum + offerPriceForSegment(s, cat);
     }, 0);
   }, [isPackageBooking, filter, selectedServicesObjs]);
 
   const estimatedTotal = useMemo(() => {
     if (isPackageBooking) return 0;
     const cat = filter !== 'all' ? filter : 'sedan';
-    return selectedServicesObjs.reduce((sum, s) => sum + priceForSegment(s, cat), 0);
+    return selectedServicesObjs.reduce((sum, s) => sum + offerPriceForSegment(s, cat), 0);
   }, [isPackageBooking, filter, selectedServicesObjs]);
 
   const activePackageHasFreePickup = useMemo(() => {
@@ -408,7 +408,7 @@ export default function BookingPage() {
       appliedVoucher.reward_type === 'free_service' ? Number(svc.id) === Number(appliedVoucher.service_id) : /wash/i.test(svc.name || '')
     );
     if (!matches.length) return 0;
-    return Math.min(...matches.map((svc) => priceForSegment(svc, filter)));
+    return Math.min(...matches.map((svc) => offerPriceForSegment(svc, filter)));
   }, [appliedVoucher, selectedServicesObjs, filter, isPackageBooking]);
 
   const finalTotal = useMemo(() => {
@@ -1123,7 +1123,9 @@ export default function BookingPage() {
                           <div className="grid gap-3.5">
                             {activeList.map((svc) => {
                               const isSelected = selectedServices.includes(svc.id);
-                              const p = priceForSegment(svc, filter);
+                              const listPrice = priceForSegment(svc, filter);
+                              const p = offerPriceForSegment(svc, filter);
+                              const offer = p < listPrice ? offerBadge(svc) : null;
                               const isWash = svc.name && svc.name.toLowerCase().includes('wash');
                               const hasDiscount = isFirstWashEligible && isWash && !isPackageBooking && p > 0;
                               const discounted = hasDiscount ? Math.round(p * 0.50) : p;
@@ -1225,9 +1227,15 @@ export default function BookingPage() {
                                           <span className="text-xs font-bold text-slate-600">Ask Studio</span>
                                         ) : hasDiscount ? (
                                           <div className="flex items-center gap-2">
-                                            <span className="line-through text-slate-400 text-xs font-medium">₹{p}</span>
+                                            <span className="line-through text-slate-400 text-xs font-medium">₹{listPrice}</span>
                                             <span className="text-base font-black text-[#D32F2F]">₹{discounted}</span>
                                             <span className="text-[9px] font-black bg-red-100 text-red-700 px-1.5 py-0.5 rounded">First Wash</span>
+                                          </div>
+                                        ) : offer ? (
+                                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                            <span className="line-through text-slate-400 text-xs font-medium">₹{listPrice}</span>
+                                            <span className="text-base font-black text-[#D32F2F]">₹{p}</span>
+                                            <span className="text-[9px] font-black bg-red-100 text-red-700 px-1.5 py-0.5 rounded">{svc.discount_label || offer}</span>
                                           </div>
                                         ) : (
                                           <span className="text-base font-black text-[#1c1b1b]">₹{p}</span>

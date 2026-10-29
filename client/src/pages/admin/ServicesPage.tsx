@@ -49,6 +49,28 @@ export default function ServicesPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [premium, setPremium] = useState(false);
 
+  // Offer / discount shown to customers and charged on online bookings
+  const [discOn, setDiscOn] = useState(false);
+  const [discType, setDiscType] = useState<'percent' | 'flat'>('percent');
+  const [discValue, setDiscValue] = useState(0);
+  const [discLabel, setDiscLabel] = useState('');
+  const [discFrom, setDiscFrom] = useState('');
+  const [discTo, setDiscTo] = useState('');
+  const resetDiscount = (svc?: any) => {
+    const on = !!svc?.discount_type && Number(svc?.discount_value) > 0;
+    setDiscOn(on);
+    setDiscType(svc?.discount_type === 'flat' ? 'flat' : 'percent');
+    setDiscValue(on ? Number(svc.discount_value) : 0);
+    setDiscLabel(svc?.discount_label || '');
+    setDiscFrom(svc?.discount_starts_on || '');
+    setDiscTo(svc?.discount_ends_on || '');
+  };
+  const discounted = (p: number) => {
+    if (!discOn || !(discValue > 0) || !(p > 0)) return p;
+    const off = discType === 'percent' ? (p * Math.min(discValue, 100)) / 100 : discValue;
+    return Math.max(0, Math.round(p - off));
+  };
+
   const services = data?.data || [];
 
   const updatePrice = (key: string, val: number) => setPrices(prev => ({ ...prev, [key]: val }));
@@ -70,7 +92,7 @@ export default function ServicesPage() {
   const openAdd = () => {
     setEditItem(null); setName(''); setDesc(''); setFeatures(''); setWhatsIncluded(''); setProcessSteps(''); setImageUrl('');
     setPrices({ price_hatchback: 0, price_medium_hatchback: 0, price_sedan: 0, price_premium_sedan: 0, price_suv: 0 });
-    setActive(true); setPremium(false); setDurationMinutes(60); setModalOpen(true);
+    setActive(true); setPremium(false); setDurationMinutes(60); resetDiscount(); setModalOpen(true);
   };
 
   const openEdit = (svc: any) => {
@@ -86,11 +108,14 @@ export default function ServicesPage() {
       price_premium_sedan: parseFloat(svc.price_premium_sedan) || 0,
       price_suv: parseFloat(svc.price_suv) || 0,
     });
-    setActive(!!svc.is_active); setPremium(!!svc.is_premium); setDurationMinutes(svc.duration_minutes || 60); setModalOpen(true);
+    setActive(!!svc.is_active); setPremium(!!svc.is_premium); setDurationMinutes(svc.duration_minutes || 60); resetDiscount(svc); setModalOpen(true);
   };
 
   const handleSave = async () => {
     if (!name.trim()) { toast('error', 'Name is required'); return; }
+    if (discOn && !(discValue > 0)) { toast('error', 'Enter the discount amount, or switch the offer off'); return; }
+    if (discOn && discType === 'percent' && discValue > 90) { toast('error', 'Percent discount can be at most 90%'); return; }
+    if (discOn && discFrom && discTo && discTo < discFrom) { toast('error', 'Offer end date is before the start date'); return; }
     try {
       const payload = {
         name,
@@ -102,7 +127,12 @@ export default function ServicesPage() {
         ...prices,
         is_active: active,
         is_premium: premium,
-        duration_minutes: durationMinutes
+        duration_minutes: durationMinutes,
+        discount_type: discOn ? discType : null,
+        discount_value: discOn ? discValue : 0,
+        discount_label: discOn ? discLabel.trim() : null,
+        discount_starts_on: discOn && discFrom ? discFrom : null,
+        discount_ends_on: discOn && discTo ? discTo : null,
       };
       if (editItem) {
         await updateMut.mutateAsync({ id: editItem.id, ...payload });
@@ -223,6 +253,12 @@ export default function ServicesPage() {
                             <Sparkles size={10} /> Premium
                           </span>
                         ) : null}
+                        {svc.discount_type && Number(svc.discount_value) > 0 ? (
+                          <span className={`text-[9px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full border ${svc.discount_active ? 'bg-red-50 text-[#D32F2F] border-red-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}
+                            title={svc.discount_active ? 'Offer running now' : 'Offer scheduled or ended'}>
+                            {svc.discount_type === 'percent' ? `${Number(svc.discount_value)}% off` : `₹${Number(svc.discount_value)} off`}{svc.discount_active ? '' : ' · not live'}
+                          </span>
+                        ) : null}
                         {svc.duration_minutes ? (
                           <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
                             <Clock size={11} className="text-slate-400" /> {svc.duration_minutes} mins
@@ -339,6 +375,55 @@ export default function ServicesPage() {
                 <Input key={cat.key} label={cat.label} type="number" value={prices[cat.key] || ''} onChange={e => updatePrice(cat.key, parseFloat(e.target.value) || 0)} />
               ))}
             </div>
+          </div>
+
+          <div className={`rounded-2xl border p-4 ${discOn ? 'border-red-200 bg-red-50/40' : 'border-slate-200'}`}>
+            <label className="flex items-center justify-between gap-3 cursor-pointer">
+              <span>
+                <span className="block text-sm font-bold text-slate-900">Offer / discount</span>
+                <span className="block text-[11px] text-slate-500">Customers see the offer price with the old price struck out. Online bookings are charged the offer price.</span>
+              </span>
+              <button type="button" onClick={() => setDiscOn(!discOn)} className={`w-10 h-5 shrink-0 rounded-full transition-colors ${discOn ? 'bg-[#D32F2F]' : 'bg-slate-300'}`}>
+                <div className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform ${discOn ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+            </label>
+            {discOn && (
+              <div className="mt-4 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Discount type</label>
+                    <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+                      {(['percent', 'flat'] as const).map(t => (
+                        <button key={t} type="button" onClick={() => setDiscType(t)}
+                          className={`h-9 rounded-lg text-xs font-bold ${discType === t ? 'bg-white text-slate-900 shadow' : 'text-slate-500'}`}>
+                          {t === 'percent' ? '% off' : '₹ off'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <Input label={discType === 'percent' ? 'Discount %' : 'Discount ₹'} type="number" value={discValue || ''}
+                    onChange={e => setDiscValue(Math.max(0, parseFloat(e.target.value) || 0))} placeholder={discType === 'percent' ? '20' : '200'} />
+                </div>
+                <Input label="Offer name (optional, shown to customers)" value={discLabel} maxLength={60}
+                  onChange={e => setDiscLabel(e.target.value)} placeholder="e.g. Diwali offer" />
+                <div className="grid grid-cols-2 gap-3">
+                  <Input label="Starts (optional)" type="date" value={discFrom} onChange={e => setDiscFrom(e.target.value)} />
+                  <Input label="Ends (optional)" type="date" value={discTo} onChange={e => setDiscTo(e.target.value)} />
+                </div>
+                <p className="text-[11px] text-slate-500">Leave dates empty to run the offer until you switch it off.</p>
+                {discValue > 0 && (
+                  <div className="grid grid-cols-5 gap-1">
+                    {CATEGORY_LABELS.map(cat => (
+                      <div key={cat.key} className="text-center bg-white p-1.5 rounded-xl border border-slate-100 min-w-0">
+                        <p className="text-[8px] font-extrabold uppercase tracking-wider text-slate-400 leading-tight">{cat.short}</p>
+                        <p className="text-[10px] text-slate-400 line-through">{prices[cat.key] ? formatINR(prices[cat.key]) : '—'}</p>
+                        <p className="text-[11px] font-black text-[#D32F2F]">{prices[cat.key] ? formatINR(discounted(prices[cat.key])) : '—'}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-6 pt-2">
             <label className="flex items-center gap-3 cursor-pointer">

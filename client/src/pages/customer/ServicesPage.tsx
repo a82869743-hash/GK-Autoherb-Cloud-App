@@ -7,7 +7,7 @@ import { useActiveVehicle } from '../../api/hooks/useCustomerApp';
 import ServiceDetailsModal, { durationLabel, warrantyLabel } from '../../components/shared/ServiceDetailsModal';
 import { VehicleChip } from '../../components/customer/VehicleSheet';
 import { AppPageHeader, BottomSheet, EmptyBlock, SegmentedTabs, Skeleton } from '../../components/customer/ui';
-import { SEGMENT_LABEL, priceForSegment, formatPrice } from '../../utils/pricing';
+import { SEGMENT_LABEL, priceForSegment, offerPriceForSegment, offerBadge, formatPrice } from '../../utils/pricing';
 import ServiceImage from '../../components/customer/ServiceImage';
 import { ServiceCardShowcase } from '../../components/customer/ServiceMediaShowcase';
 
@@ -143,7 +143,8 @@ export default function CustomerServicesPage() {
     if (!typeServices.some((s) => matchesServiceCategory(s, cat))) setCat('all');
   }, [catChips, isLoading, typeServices.length]);
 
-  const priceOf = (s: any) => priceForSegment(s, vehicleType === 'bike' ? 'hatchback' : segment);
+  const listPriceOf = (s: any) => priceForSegment(s, vehicleType === 'bike' ? 'hatchback' : segment);
+  const priceOf = (s: any) => offerPriceForSegment(s, vehicleType === 'bike' ? 'hatchback' : segment);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -226,6 +227,8 @@ export default function CustomerServicesPage() {
         ) : (
           visible.map((s) => {
             const price = priceOf(s);
+            const listPrice = listPriceOf(s);
+            const offer = price < listPrice ? offerBadge(s) : null;
             const isWash = /wash/i.test(s.name);
             return (
               <div key={s.id} className="app-card p-3">
@@ -235,9 +238,15 @@ export default function CustomerServicesPage() {
                   <span className="flex-1 min-w-0 py-0.5">
                     <span className="block font-display text-[16px] font-extrabold text-slate-900 leading-snug">{s.name}</span>
                     <span className="flex items-baseline gap-2 mt-1">
-                      <span className="font-display text-lg font-extrabold text-slate-900">{formatPrice(price)}</span>
+                      <span className={`font-display text-lg font-extrabold ${offer ? 'text-[#D32F2F]' : 'text-slate-900'}`}>{formatPrice(price)}</span>
+                      {offer && <span className="text-[12px] text-slate-400 line-through">{formatPrice(listPrice)}</span>}
                       {isWash && firstWashEligible && price > 0 && <span className="text-[11px] font-bold text-emerald-600">50% OFF 1st wash</span>}
                     </span>
+                    {offer && (
+                      <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-extrabold text-[#D32F2F]">
+                        {offer}{s.discount_label ? ` · ${s.discount_label}` : ''}
+                      </span>
+                    )}
                     <span className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-slate-500">
                       <span className="flex items-center gap-1"><Clock size={13} />{durationLabel(s.duration_minutes)}</span>
                       {warrantyLabel(s.warranty_months) && <span className="flex items-center gap-1 text-emerald-700"><ShieldCheck size={13} />{warrantyLabel(s.warranty_months)}</span>}

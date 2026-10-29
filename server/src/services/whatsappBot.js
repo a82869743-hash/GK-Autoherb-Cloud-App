@@ -16,6 +16,7 @@ const whatsapp = require('./whatsappProvider');
 const bookingActions = require('./bookingActions');
 const { getStage } = require('./jobStages');
 const { resolveServicePrice, detectVehicleCategory } = require('../utils/vehicleCategory');
+const { applyServiceDiscount } = require('../utils/serviceDiscount');
 
 const SEGMENT_LABEL = {
   hatchback: 'Hatchback', medium_hatchback: 'Premium hatchback', sedan: 'Sedan',
@@ -172,9 +173,14 @@ async function handleIncoming({ from, name = null, text = '', providerMessageId 
         "SELECT * FROM services WHERE is_active = 1 AND vehicle_type = 'car' ORDER BY sort_order, id LIMIT 8"
       );
       const lines = svcs
-        .map((s) => ({ name: s.name, price: resolveServicePrice(s, segment) }))
+        .map((s) => {
+          const list = resolveServicePrice(s, segment);
+          return { name: s.name, list, price: applyServiceDiscount(s, list), label: s.discount_label };
+        })
         .filter((x) => x.price > 0)
-        .map((x) => `• ${x.name}: ₹${x.price.toLocaleString('en-IN')}`);
+        .map((x) => x.price < x.list
+          ? `• ${x.name}: ₹${x.price.toLocaleString('en-IN')} (was ₹${x.list.toLocaleString('en-IN')}${x.label ? `, ${x.label}` : ''})`
+          : `• ${x.name}: ₹${x.price.toLocaleString('en-IN')}`);
       action = 'prices_shared';
       autoReply = `Hi ${firstName}, prices for your ${SEGMENT_LABEL[segment] || 'car'}:\n${lines.join('\n')}\n\nFull menu & booking: ${base}/customer/services`;
     } else if (category === 'booking_query') {

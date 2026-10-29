@@ -44,6 +44,26 @@ export function priceForSegment(service: any, segment: Segment | string): number
   return Number(service?.price) || 0;
 }
 
+/** Price after the admin's service offer (same rule as the server; the server decides if it's running today). */
+export function applyOffer(service: any, price: number): number {
+  if (!(price > 0) || !service?.discount_active) return price;
+  const v = Number(service.discount_value) || 0;
+  const off = service.discount_type === 'percent' ? (price * Math.min(v, 100)) / 100 : v;
+  return Math.max(0, Math.round(price - off));
+}
+
+/** What the customer pays for this service on their car (segment price minus any running offer). */
+export function offerPriceForSegment(service: any, segment: Segment | string): number {
+  return applyOffer(service, priceForSegment(service, segment));
+}
+
+/** Short badge text for a running offer, e.g. "20% OFF" or "₹200 OFF". */
+export function offerBadge(service: any): string | null {
+  if (!service?.discount_active) return null;
+  const v = Number(service.discount_value) || 0;
+  return service.discount_type === 'percent' ? `${v % 1 ? v : Math.round(v)}% OFF` : `₹${Math.round(v).toLocaleString('en-IN')} OFF`;
+}
+
 export function formatPrice(n: number): string {
   return n > 0 ? `₹${Math.round(n).toLocaleString('en-IN')}` : 'Price on inspection';
 }

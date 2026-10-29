@@ -4,7 +4,7 @@ import { BottomSheet } from '../customer/ui';
 import ServiceImage from '../customer/ServiceImage';
 import { useActiveVehicle } from '../../api/hooks/useCustomerApp';
 import { ServiceMediaShowcase, ServiceBrands } from '../customer/ServiceMediaShowcase';
-import { SEGMENT_LABEL, priceForSegment, formatPrice } from '../../utils/pricing';
+import { SEGMENT_LABEL, priceForSegment, offerPriceForSegment, offerBadge, formatPrice } from '../../utils/pricing';
 
 interface ServiceDetailsModalProps {
   isOpen: boolean;
@@ -52,7 +52,9 @@ export default function ServiceDetailsModal({ isOpen, onClose, service, onSelect
   const segment = segmentOverride || activeSegment;
   const isWash = (service.name || '').toLowerCase().includes('wash');
   const isBike = service.vehicle_type === 'bike';
-  const price = priceForSegment(service, segment);
+  const listPrice = priceForSegment(service, segment);
+  const price = offerPriceForSegment(service, segment);
+  const offer = price < listPrice ? offerBadge(service) : null;
 
   let features = parseList(service.features_json);
   let included = parseList(service.whats_included_json);
@@ -76,7 +78,11 @@ export default function ServiceDetailsModal({ isOpen, onClose, service, onSelect
         <div className="flex items-center gap-3">
           <div className="flex-1">
             <p className="text-[11px] text-slate-500">{isBike ? 'Bike price' : active ? `Price for your ${SEGMENT_LABEL[segment]}` : 'Starting price'}</p>
-            <p className="font-display text-xl font-extrabold text-slate-900">{formatPrice(price)}</p>
+            <p className="flex items-baseline gap-2">
+              <span className={`font-display text-xl font-extrabold ${offer ? 'text-[#D32F2F]' : 'text-slate-900'}`}>{formatPrice(price)}</span>
+              {offer && <span className="text-[13px] text-slate-400 line-through">{formatPrice(listPrice)}</span>}
+            </p>
+            {offer && <p className="text-[11px] font-extrabold text-[#D32F2F]">{offer}{service.discount_label ? ` · ${service.discount_label}` : ''}</p>}
           </div>
           <button
             onClick={() => {

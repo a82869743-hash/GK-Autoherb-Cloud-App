@@ -12,7 +12,7 @@ import { SectionTitle, Skeleton, StatusPill } from '../../components/customer/ui
 import ServiceImage from '../../components/customer/ServiceImage';
 import { BrandCard } from '../../components/customer/ServiceMediaShowcase';
 import { useProductBrands } from '../../api/hooks/useServiceExtras';
-import { SEGMENT_LABEL, priceForSegment, formatPrice } from '../../utils/pricing';
+import { SEGMENT_LABEL, priceForSegment, offerPriceForSegment, offerBadge, formatPrice } from '../../utils/pricing';
 import { calculateHaversineDistance, estimateDriveMinutes, resolveStudioLocation } from '../../utils/locationService';
 import { formatTime } from '../../utils/formatters';
 import { useUIStore } from '../../store/uiStore';
@@ -288,7 +288,15 @@ export default function CustomerDashboardPage() {
                   <ServiceImage service={s} className="h-28 w-full" />
                   <span className="block p-3">
                     <span className="block font-display text-[14px] font-bold text-slate-900 leading-tight line-clamp-2 min-h-[36px]">{s.name}</span>
-                    <span className="block mt-1.5 font-display font-extrabold text-[#C62828]">{formatPrice(priceForSegment(s, segment))}</span>
+                    <span className="mt-1.5 flex items-baseline gap-1.5">
+                      <span className="font-display font-extrabold text-[#C62828]">{formatPrice(offerPriceForSegment(s, segment))}</span>
+                      {offerPriceForSegment(s, segment) < priceForSegment(s, segment) && (
+                        <span className="text-[11px] text-slate-400 line-through">{formatPrice(priceForSegment(s, segment))}</span>
+                      )}
+                    </span>
+                    {offerBadge(s) && offerPriceForSegment(s, segment) < priceForSegment(s, segment) && (
+                      <span className="mt-1 inline-block rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-extrabold text-[#D32F2F]">{offerBadge(s)}</span>
+                    )}
                   </span>
                 </button>
               ))}

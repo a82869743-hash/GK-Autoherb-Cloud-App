@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { withDiscountInfo } = require('../utils/serviceDiscount');
 
 // Before/after photos + process video per service, for the showcase on service cards (one query)
 async function attachMediaPreview(rows) {
@@ -28,6 +29,21 @@ async function attachMediaPreview(rows) {
   }
 }
 
+// Discount fields from a create/update body (migration 091). Type null or value 0 switches it off.
+// Returns { values } in column order, { error }, or {} when the body doesn't touch the discount.
+function discountFields(body) {
+  const { discount_type, discount_value, discount_label, discount_starts_on, discount_ends_on } = body;
+  if (discount_type === undefined && discount_value === undefined) return {};
+  const type = discount_type === 'percent' || discount_type === 'flat' ? discount_type : null;
+  const value = Math.max(0, Number(discount_value) || 0);
+  if (type === 'percent' && value > 90) return { error: 'Percent discount can be at most 90%' };
+  const from = discount_starts_on || null;
+  const to = discount_ends_on || null;
+  if (from && to && to < from) return { error: 'Offer end date is before the start date' };
+  const on = !!type && value > 0;
+  return { values: [on ? type : null, on ? value : 0, on ? String(discount_label || '').trim().slice(0, 60) || null : null, on ? from : null, on ? to : null] };
+}
+
 // ─── LIST ───────────────────────────────────
 exports.list = async (req, res) => {
   try {
@@ -46,7 +62,7 @@ exports.list = async (req, res) => {
       params
     );
     await attachMediaPreview(rows);
-    res.json({ success: true, data: rows });
+    res.json({ success: true, data: rows.map(withDiscountInfo) });
   } catch (err) {
     console.error('Services list error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -58,7 +74,7 @@ exports.getOne = async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM services WHERE id = ?', [req.params.id]);
     if (!rows.length) return res.status(404).json({ success: false, error: 'Service not found' });
-    res.json({ success: true, data: rows[0] });
+    res.json({ success: true, data: withDiscountInfo(rows[0]) });
   } catch (err) {
     console.error('Service getOne error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -70,6 +86,8 @@ exports.create = async (req, res) => {
   try {
     const { name, description, features_json, whats_included_json, process_json, image_url, price_hatchback = 0, price_medium_hatchback = 0, price_sedan = 0, price_premium_sedan = 0, price_suv = 0, duration_minutes = 60, category_id, is_active = true } = req.body;
     if (!name) return res.status(400).json({ success: false, error: 'Service name is required' });
+    const disc = discountFields(req.body);
+    if (disc.error) return res.status(400).json({ success: false, error: disc.error });
 
     const [result] = await pool.query(
       'INSERT INTO services (name, description, features_json, whats_included_json, process_json, image_url, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, duration_minutes, category_id, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -83,6 +101,12 @@ exports.create = async (req, res) => {
         price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, duration_minutes, category_id || null, is_active ? 1 : 0
       ]
     );
+    if (disc.values) {
+      await pool.query(
+        'UPDATE services SET discount_type = ?, discount_value = ?, discount_label = ?, discount_starts_on = ?, discount_ends_on = ? WHERE id = ?',
+        [...disc.values, result.insertId]
+      );
+    }
     res.status(201).json({ success: true, data: { id: result.insertId }, message: 'Service created' });
   } catch (err) {
     console.error('Service create error:', err);
@@ -114,6 +138,13 @@ exports.update = async (req, res) => {
     if (is_active !== undefined) { updates.push('is_active = ?'); params.push(is_active ? 1 : 0); }
     if (is_premium !== undefined) { updates.push('is_premium = ?'); params.push(is_premium ? 1 : 0); }
     if (sort_order !== undefined) { updates.push('sort_order = ?'); params.push(sort_order); }
+
+    const disc = discountFields(req.body);
+    if (disc.error) return res.status(400).json({ success: false, error: disc.error });
+    if (disc.values) {
+      updates.push('discount_type = ?', 'discount_value = ?', 'discount_label = ?', 'discount_starts_on = ?', 'discount_ends_on = ?');
+      params.push(...disc.values);
+    }
 
     if (!updates.length) return res.status(400).json({ success: false, error: 'No fields to update' });
     params.push(req.params.id);

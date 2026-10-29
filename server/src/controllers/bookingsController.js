@@ -3,6 +3,9 @@ const { cancelReservation } = require('./userPackagesController');
 const bookingActions = require('../services/bookingActions');
 const messagingService = require('../services/messagingService');
 const { detectVehicleCategory, resolveServicePrice, VALID_CATEGORIES } = require('../utils/vehicleCategory');
+const { applyServiceDiscount } = require('../utils/serviceDiscount');
+// What the customer pays for a service on their car: segment price minus any running admin discount
+const offerPrice = (service, category) => applyServiceDiscount(service, resolveServicePrice(service, category));
 
 // ─── LIST BOOKINGS ──────────────────────────
 exports.list = async (req, res) => {
@@ -375,7 +378,7 @@ exports.create = async (req, res) => {
 
     if (allServiceIds.length > 0) {
       const [sRows] = await conn.query(
-        `SELECT id, name, price, price_hatchback, price_medium_hatchback, price_sedan, price_premium_sedan, price_suv, price_luxury FROM services WHERE id IN (?)`,
+        `SELECT * FROM services WHERE id IN (?)`,
         [allServiceIds]
       );
       fetchedServicesList = sRows;
@@ -386,7 +389,7 @@ exports.create = async (req, res) => {
       nonWashServicesTotal = 0;
 
       for (const s of fetchedServicesList) {
-        const price = resolveServicePrice(s, cat);
+        const price = offerPrice(s, cat);
         if (s.name && s.name.toLowerCase().includes('wash')) {
           washServicesTotal += price;
         } else {
@@ -524,7 +527,7 @@ exports.create = async (req, res) => {
             error: v.reward_type === 'free_wash' ? 'Add a wash service to use this free-wash voucher' : 'Add the rewarded service to use this voucher',
           });
         }
-        rewardDiscount = Math.min(...candidates.map((svc) => resolveServicePrice(svc, cat)));
+        rewardDiscount = Math.min(...candidates.map((svc) => offerPrice(svc, cat)));
       }
       rewardDiscount = Math.min(rewardDiscount, calculatedTotal);
       calculatedTotal = Math.max(0, calculatedTotal - rewardDiscount);
@@ -585,7 +588,7 @@ exports.create = async (req, res) => {
           ? fetchedServicesList.map(s => ({
               id: s.id,
               name: s.name,
-              price: resolveServicePrice(s, cat),
+              price: offerPrice(s, cat),
               is_wash: s.name && s.name.toLowerCase().includes('wash')
             }))
           : null);
