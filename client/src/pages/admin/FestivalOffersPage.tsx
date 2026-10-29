@@ -114,8 +114,8 @@ export default function FestivalOffersPage() {
     <div className="mx-auto max-w-5xl space-y-5 pb-28 font-sans">
       <OpsPageTitle kicker="WhatsApp" title="Festival offers" subtitle="Send a festive offer to your customers now, or schedule it for the morning of the festival." />
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-start">
-        <section className="app-card p-4 space-y-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-start">
+        <section className="app-card p-4 space-y-4 min-w-0">
           <div>
             <p className="app-label">Festival</p>
             <div className="-mx-4 px-4 flex gap-2 overflow-x-auto no-scrollbar">
@@ -138,7 +138,8 @@ export default function FestivalOffersPage() {
           </div>
           <div>
             <label className="app-label">Coupon code (optional)</label>
-            <input className="app-input uppercase" value={coupon} onChange={(e) => setCoupon(e.target.value.toUpperCase())} placeholder="DIWALI20 — create it in Coupons first" />
+            <input className="app-input uppercase" value={coupon} onChange={(e) => setCoupon(e.target.value.toUpperCase())} placeholder="e.g. DIWALI20" />
+            <p className="mt-1 text-[11.5px] text-slate-400">Create the code in Coupons first.</p>
           </div>
 
           <div>
@@ -173,10 +174,10 @@ export default function FestivalOffersPage() {
           </button>
         </section>
 
-        <section className="space-y-3">
+        <section className="space-y-3 min-w-0">
           <SectionTitle>Preview</SectionTitle>
           <div className="rounded-3xl bg-[#e7ddd4] p-4">
-            <div className="ml-auto max-w-[92%] whitespace-pre-wrap rounded-2xl rounded-tr-sm bg-[#dcf8c6] px-3.5 py-2.5 text-[13.5px] leading-snug text-slate-900 shadow-sm">{preview}</div>
+            <div className="ml-auto max-w-[92%] whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm bg-[#dcf8c6] px-3.5 py-2.5 text-[13.5px] leading-snug text-slate-900 shadow-sm">{preview}</div>
           </div>
           <p className="text-[12px] text-slate-500">
             Before the WhatsApp API is connected, messages are queued in Admin → WhatsApp with a one-tap send link. For the live API, Meta must approve the "Festival Offer" template first.
@@ -191,9 +192,9 @@ export default function FestivalOffersPage() {
         ) : !campaigns.length ? (
           <EmptyBlock icon={<PartyPopper size={26} />} title="No campaigns yet" text="Schedule your first festival offer above." />
         ) : (
-          <div className="grid gap-2.5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
             {campaigns.map((c) => (
-              <div key={c.id} className="app-card p-3.5">
+              <div key={c.id} className="app-card p-3.5 min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-display font-extrabold text-[15px] text-slate-900 truncate">{c.title}</p>
@@ -210,7 +211,7 @@ export default function FestivalOffersPage() {
                     {c.status === 'sent' ? `Sent ${c.sent_count}/${c.recipients}` : c.status === 'sending' ? 'Sending' : c.status === 'cancelled' ? 'Cancelled' : 'Scheduled'}
                   </span>
                 </div>
-                <p className="mt-2 text-[12.5px] text-slate-600 line-clamp-2">{c.message}</p>
+                <p className="mt-2 text-[12.5px] text-slate-600 line-clamp-2 break-words">{c.message}</p>
                 {c.coupon_code && <p className="mt-1 text-[12px] font-bold text-[#D32F2F]">Code {c.coupon_code}</p>}
                 {c.status === 'scheduled' && (
                   <button onClick={() => cancel.mutate(c.id)} className="mt-2 inline-flex items-center gap-1 text-[12.5px] font-bold text-slate-500">
