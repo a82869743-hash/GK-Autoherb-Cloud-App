@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User } from '../types';
+import { unlinkPushOnLogout } from '../utils/push';
 
 interface AuthStore {
   user: User | null;
@@ -19,6 +20,7 @@ export const useAuthStore = create<AuthStore>()(
       isAuthenticated: false,
       login: (token, user) => set({ token, user, isAuthenticated: true }),
       logout: () => {
+        unlinkPushOnLogout(get().token);
         set({ token: null, user: null, isAuthenticated: false });
         // Also clear any legacy localStorage entry
         try { localStorage.removeItem('gk-auth-v1'); } catch {}

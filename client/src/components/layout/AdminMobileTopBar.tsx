@@ -5,6 +5,8 @@ import { useAuthStore } from '../../store/authStore';
 import { useDashboardStats } from '../../api/hooks/useDashboard';
 import LiveSearch from '../shared/LiveSearch';
 import { BottomSheet } from '../customer/ui';
+import { useUnreadNotifications } from '../../api/hooks/useAppNotifications';
+import { NotificationsList, PushCard } from '../shared/NotificationsInbox';
 
 /** Light app header (customer-app style) with search, alerts and profile sheets. */
 export default function AdminMobileTopBar() {
@@ -16,7 +18,8 @@ export default function AdminMobileTopBar() {
   const [showNotif, setShowNotif] = useState(false);
   const [showUser, setShowUser] = useState(false);
 
-  const pendingCount = (stats?.pending_service_bookings || 0) + (stats?.pending_package_requests || 0) + (stats?.pending_product_orders || 0);
+  const { data: unread = 0 } = useUnreadNotifications();
+  const pendingCount = (stats?.pending_service_bookings || 0) + (stats?.pending_package_requests || 0) + (stats?.pending_product_orders || 0) + unread;
   const firstName = user?.name?.split(' ')[0] || 'Admin';
   const initial = firstName.charAt(0).toUpperCase();
 
@@ -82,6 +85,7 @@ export default function AdminMobileTopBar() {
       </BottomSheet>
 
       <BottomSheet open={showNotif} onClose={() => setShowNotif(false)} title="Alerts">
+        <div className="mb-4"><PushCard /></div>
         {alerts.length === 0 ? (
           <div className="py-8 text-center">
             <p className="font-display font-bold text-slate-900">All caught up</p>
@@ -100,6 +104,8 @@ export default function AdminMobileTopBar() {
             ))}
           </div>
         )}
+        <p className="mt-5 mb-2 font-display text-[15px] font-extrabold text-slate-900">Recent notifications</p>
+        <NotificationsList onNavigate={() => setShowNotif(false)} />
       </BottomSheet>
 
       <BottomSheet open={showUser} onClose={() => setShowUser(false)} title={user?.name || 'Administrator'}>

@@ -423,6 +423,12 @@ exports.createRequest = async (req, res) => {
       ).catch(e => console.warn('Coupon redemption log error:', e.message));
     }
 
+    require('../services/appNotify').notifyRoles(['admin'], {
+      title: 'New package request 📦',
+      body: `${req.user.name || 'A customer'} wants a package · ₹${Math.round(finalPrice)}${emiPlan ? ` on ${emiPlan.months}-month EMI` : ''}`,
+      url: '/admin/package-approvals', event: 'ADMIN_PACKAGE_REQUEST', refType: 'package_request', refId: requestId,
+    }).catch(() => {});
+
     res.status(201).json({ success: true, requestId, price: finalPrice, pay_now: emiPlan ? emiPlan.first_amount : finalPrice, emi: emiPlan, car_type: effectiveCarType, message: 'Package request submitted to admin for approval' });
   } catch (err) {
     console.error('Package request create error:', err);

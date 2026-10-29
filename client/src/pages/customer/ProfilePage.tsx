@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { PushCard } from '../../components/shared/NotificationsInbox';
 import {
   ChevronRight, CalendarDays, Car, Headphones, Share2, MapPin, ShieldCheck, ClipboardList, ShoppingBag,
   Package, Bell, LogOut, Gift, Cake, Heart, Pencil,
@@ -159,6 +160,7 @@ export default function ProfilePage() {
       </BottomSheet>
 
       <BottomSheet open={prefsOpen} onClose={() => setPrefsOpen(false)} title="Notifications">
+        <div className="mb-3"><PushCard /></div>
         {profile && (
           <div className="space-y-2 pb-2">
             {[

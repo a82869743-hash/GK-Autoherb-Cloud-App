@@ -130,7 +130,14 @@ exports._processCapturedPayment = async (connection, razorpayOrderId, razorpayPa
     const emi = require('../services/packageEmi');
     const r = await emi.markInstallmentPaid(connection, metadata.emi_installment_id, { method: 'razorpay', ref: razorpayPaymentId, v2PaymentId: payment.id });
     if (r.error) console.warn('EMI installment update failed during payment processing:', r.error);
-    else emi.notifyPaid(r.plan, r.installment);
+    else {
+      emi.notifyPaid(r.plan, r.installment);
+      require('../services/appNotify').notifyRoles(['admin'], {
+        title: 'EMI paid online',
+        body: `${r.plan.customer_name || 'Customer'} paid installment ${r.installment.installment_no}/${r.plan.months} (₹${Number(r.installment.amount)}) · ${r.plan.package_name}`,
+        url: '/admin/package-emi', event: 'ADMIN_EMI_PAID',
+      }).catch(() => {});
+    }
   }
 
   // 5. Handle package purchase request
@@ -803,6 +810,11 @@ exports.confirmQrPayment = async (req, res) => {
     }
 
     await conn.commit();
+    require('../services/appNotify').notifyRoles(['admin'], {
+      title: 'QR payment to check 💳',
+      body: `₹${amount} reported by ${req.user.name || 'a customer'} (ref ${transaction_id}). Check your bank/UPI app, then approve.`,
+      url: booking_id ? '/admin/customer-bookings' : '/admin/package-approvals', event: 'ADMIN_QR_PAYMENT',
+    }).catch(() => {});
     res.json({ success: true, message: 'QR payment reference submitted successfully for admin verification.' });
   } catch (err) {
     await conn.rollback();

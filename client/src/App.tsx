@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
+import { refreshPushSubscription } from './utils/push';
 import { useInactivityTimer, useTokenRefresh } from './utils/useInactivityTimer';
 import AdminLayout from './components/layout/AdminLayout';
 import CustomerLayout from './components/layout/CustomerLayout';
@@ -70,6 +71,7 @@ import QuickBillingPage from './pages/admin/QuickBillingPage';
 import FestivalOffersPage from './pages/admin/FestivalOffersPage';
 import AdminPackageEmiPage from './pages/admin/PackageEmiPage';
 import CustomerPackageEmiPage from './pages/customer/PackageEmiPage';
+import CustomerNotificationsPage from './pages/customer/NotificationsPage';
 import AllInvoicesPage from './pages/admin/AllInvoicesPage';
 import ArchivePage from './pages/admin/ArchivePage';
 import ReportsPage from './pages/admin/ReportsPage';
@@ -132,6 +134,11 @@ export default function App() {
 
   // Silent token refresh (checks expiry on mount, refreshes every 45 min)
   useTokenRefresh();
+
+  // Phone already allowed notifications? Link it to whoever is logged in now
+  useEffect(() => {
+    if (isAuthenticated && user?.id) refreshPushSubscription();
+  }, [isAuthenticated, user?.id]);
 
   // Global Theme Overrides Effect
   useEffect(() => {
@@ -377,6 +384,7 @@ export default function App() {
         <Route path="vehicles" element={<VehiclesPage />} />
         <Route path="buy-packages" element={<CustomerBuyPackagesPage />} />
         <Route path="packages/emi" element={<CustomerPackageEmiPage />} />
+        <Route path="notifications" element={<CustomerNotificationsPage />} />
         <Route path="products" element={<CustomerProductsPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="complete-profile" element={<CompleteProfilePage />} />

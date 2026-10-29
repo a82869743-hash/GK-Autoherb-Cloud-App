@@ -95,7 +95,15 @@ class MessagingService {
    * Goes out through the Cloud API when configured, otherwise is queued with a click-to-chat link.
    */
   async sendWhatsApp(to, templateName, defaultParams = {}, meta = {}) {
+    // Some callers pass the message itself as the 2nd argument
+    if (!defaultParams.body && typeof templateName === 'string' && /\s/.test(templateName)) {
+      defaultParams = { ...defaultParams, body: templateName };
+      templateName = 'manual_message';
+    }
     const messageBody = defaultParams.body || `Template: ${templateName}`;
+    if (defaultParams.body) {
+      require('./appNotify').notifyUser({ userId: meta.customer_id || null, mobile: to, event: templateName === 'manual_message' ? 'MESSAGE' : templateName || meta.message_type, body: defaultParams.body }).catch(() => {});
+    }
     const result = await whatsapp.sendText(to, messageBody);
     try {
       const [ins] = await pool.query(
@@ -133,6 +141,12 @@ class MessagingService {
    */
   async deliver({ customerId = null, mobile, template, variables, references = {} }) {
     const messageBody = renderTemplate(template.message_body, variables);
+
+    // Same message in the app inbox + phone notification (free, works even before WhatsApp is connected)
+    require('./appNotify').notifyUser({
+      userId: customerId, mobile, event: template.event_trigger, body: messageBody,
+      refType: references.type || null, refId: references.id || null,
+    }).catch(() => {});
 
     let waResult;
     if (template.provider_template_name) {

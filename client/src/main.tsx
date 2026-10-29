@@ -6,6 +6,9 @@ import { Toaster } from 'react-hot-toast';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import App from './App';
 import './index.css';
+import { registerServiceWorker } from './utils/push';
+
+registerServiceWorker();
 
 const queryClient = new QueryClient({
   defaultOptions: {

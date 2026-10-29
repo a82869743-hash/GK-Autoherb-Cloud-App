@@ -670,6 +670,15 @@ exports.create = async (req, res) => {
 
     console.log(`[BOOKING] #${bookingId} created — status=${targetStatus}, customer=${customerId}, slot=${slot_id}, type=${bookingType}`);
 
+    // Phone alert for the studio team
+    if (req.user.role === 'customer') {
+      require('../services/appNotify').notifyRoles(['admin'], {
+        title: 'New booking 📅',
+        body: `Booking #${bookingId} from ${req.user.name || 'a customer'}${calculatedTotal ? ` · ₹${Math.round(calculatedTotal)}` : ''}${targetStatus === 'pending_approval' ? ' — needs your approval' : ''}`,
+        url: '/admin/customer-bookings', event: 'ADMIN_NEW_BOOKING', refType: 'booking', refId: bookingId,
+      }).catch(() => {});
+    }
+
     res.status(201).json({
       success: true,
       data: {
@@ -1113,6 +1122,13 @@ exports.cancel = async (req, res) => {
     const io = req.app.get('io');
     if (io) io.emit('booking_updated', { bookingId: b.id, status: 'cancelled', by: req.user.role });
 
+    if (req.user.role === 'customer') {
+      require('../services/appNotify').notifyRoles(['admin'], {
+        title: 'Booking cancelled',
+        body: `${req.user.name || 'A customer'} cancelled booking #${id}.`,
+        url: '/admin/customer-bookings', event: 'ADMIN_BOOKING_CANCELLED', refType: 'booking', refId: Number(id),
+      }).catch(() => {});
+    }
     res.json({ success: true, message: 'Booking cancelled', data: { refund_note: result.refundNote } });
   } catch (err) {
     await conn.rollback();

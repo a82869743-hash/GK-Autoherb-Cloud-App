@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { useMyAttendance } from '../../api/hooks/useStaff';
-import { Clock, LogOut, Sparkles, Award, PlusCircle, ChevronRight } from 'lucide-react';
+import { Clock, LogOut, Sparkles, Award, PlusCircle, ChevronRight, Bell } from 'lucide-react';
+import { useUnreadNotifications } from '../../api/hooks/useAppNotifications';
+import { NotificationsList, PushCard, BellBadge } from '../shared/NotificationsInbox';
 import { BottomSheet } from '../customer/ui';
 
 /** Light app header (customer-app style): brand, attendance chip, profile sheet. */
@@ -34,8 +36,15 @@ export default function StaffTopBar() {
     { to: '/staff/benefits', label: 'My benefits & bonus', icon: Award, tone: 'bg-amber-50 text-amber-600' },
   ];
 
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const { data: unread = 0 } = useUnreadNotifications();
+
   return (
     <>
+      <BottomSheet open={inboxOpen} onClose={() => setInboxOpen(false)} title="Notifications">
+        <div className="mb-4"><PushCard /></div>
+        <NotificationsList onNavigate={() => setInboxOpen(false)} />
+      </BottomSheet>
       <header className="fixed top-0 inset-x-0 z-40 bg-[#f3f4f6]/95 backdrop-blur-md pt-safe">
         <div className="mx-auto max-w-md px-4 h-14 flex items-center justify-between gap-2">
           <Link to="/staff/job-carts" className="flex items-center gap-2.5 min-w-0">
@@ -60,6 +69,10 @@ export default function StaffTopBar() {
               <span className={`h-2 w-2 rounded-full ${isClockedIn ? 'bg-emerald-500 animate-pulse' : isShiftComplete ? 'bg-slate-400' : 'bg-amber-500'}`} />
               {isClockedIn ? 'On shift' : isShiftComplete ? 'Shift done' : 'Clock in'}
             </Link>
+            <button onClick={() => setInboxOpen(true)} className="relative h-9 w-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-700" aria-label="Notifications">
+              <Bell size={17} />
+              <BellBadge count={unread} />
+            </button>
             <button
               onClick={() => setMenuOpen(true)}
               className="h-9 w-9 rounded-full bg-gradient-to-br from-[#e53935] to-[#b71c1c] text-white font-display font-extrabold text-sm"

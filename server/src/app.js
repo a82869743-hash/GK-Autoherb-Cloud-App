@@ -97,6 +97,7 @@ app.use('/api/services',   require('./routes/services'));
 app.use('/api/product-brands', require('./routes/productBrands'));
 app.use('/api/festival-campaigns', require('./routes/festivalCampaigns'));
 app.use('/api/package-emi', require('./routes/packageEmi'));
+app.use('/api/app-notifications', require('./routes/appNotifications'));
 app.use('/api/packages',   require('./routes/packages'));
 app.use('/api/loyalty',    require('./routes/loyalty'));
 app.use('/api/staff',      require('./routes/staff'));

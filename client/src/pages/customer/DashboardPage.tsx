@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { MapPin, ChevronDown, ChevronRight, Truck, Gift, Clock, CalendarClock, ShieldCheck, Sparkles, Package, CheckCircle2, Navigation } from 'lucide-react';
+import { MapPin, ChevronDown, ChevronRight, Truck, Gift, Clock, CalendarClock, ShieldCheck, Sparkles, Package, CheckCircle2, Navigation, Bell } from 'lucide-react';
+import { useUnreadNotifications } from '../../api/hooks/useAppNotifications';
+import { PushCard } from '../../components/shared/NotificationsInbox';
 import { useCustomerDashboard } from '../../api/hooks/useDashboard';
 import { useServices } from '../../api/hooks/useServices';
 import { usePublicSettings } from '../../api/hooks/useSettings';
@@ -66,6 +68,7 @@ export default function CustomerDashboardPage() {
   const upcoming: any[] = d.upcoming_bookings || [];
   const activeJob = (d.recent_jobs || []).find((j: any) => j.status === 'open' || j.status === 'draft');
   const defaultAddress = profile?.addresses?.find((a) => a.is_default) || profile?.addresses?.[0];
+  const { data: unread = 0 } = useUnreadNotifications();
   const studio = useMemo(() => resolveStudioLocation(settingsRes?.data), [settingsRes]);
 
   const distanceKm = useMemo(() => {
@@ -150,7 +153,17 @@ export default function CustomerDashboardPage() {
                 </span>
               )}
             </button>
-            <VehicleChip dark />
+            <div className="flex shrink-0 items-center gap-2">
+              <Link to="/customer/notifications" className="relative h-10 w-10 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center text-white" aria-label="Notifications">
+                <Bell size={19} />
+                {unread > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#D32F2F] text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-black/40">
+                    {unread > 99 ? '99+' : unread}
+                  </span>
+                )}
+              </Link>
+              <VehicleChip dark />
+            </div>
           </div>
 
           <div className="mt-10 text-white">
@@ -171,6 +184,10 @@ export default function CustomerDashboardPage() {
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="px-4 mt-4">
+        <PushCard compact />
       </div>
 
       {/* ── Content sheet ── */}
