@@ -63,6 +63,19 @@ exports.updateAll = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid payload' });
     }
 
+    // Studio pin must be a real point in/near Vadodara (a phone in another city once saved Gwalior here)
+    if (updates.studio_lat !== undefined || updates.studio_lng !== undefined) {
+      const lat = Number(updates.studio_lat);
+      const lng = Number(updates.studio_lng);
+      const toRad = (d) => (d * Math.PI) / 180;
+      const km = 6371 * 2 * Math.asin(Math.sqrt(
+        Math.sin(toRad(lat - 22.3072) / 2) ** 2 + Math.cos(toRad(lat)) * Math.cos(toRad(22.3072)) * Math.sin(toRad(lng - 73.1812) / 2) ** 2
+      ));
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || !(km <= 60)) {
+        return res.status(400).json({ success: false, error: `Studio location must be in Vadodara (this one is ${Number.isFinite(km) ? Math.round(km) + ' km' : 'invalid'} away).` });
+      }
+    }
+
     await conn.beginTransaction();
 
     for (const [key, value] of Object.entries(updates)) {

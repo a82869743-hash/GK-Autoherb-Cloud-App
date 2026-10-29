@@ -48,8 +48,13 @@ export const OWNER_STUDIO_LOCATION: StudioInfo = {
  */
 export function resolveStudioLocation(settings?: Record<string, string> | null): StudioInfo {
   if (!settings) return OWNER_STUDIO_LOCATION;
-  const lat = parseFloat(settings.studio_lat || '') || OWNER_STUDIO_LOCATION.lat;
-  const lng = parseFloat(settings.studio_lng || '') || OWNER_STUDIO_LOCATION.lng;
+  let lat = parseFloat(settings.studio_lat || '') || OWNER_STUDIO_LOCATION.lat;
+  let lng = parseFloat(settings.studio_lng || '') || OWNER_STUDIO_LOCATION.lng;
+  // A pin far from Vadodara is a mistake (e.g. captured on a phone in another city): don't use it
+  if (calculateHaversineDistance(lat, lng, 22.3072, 73.1812) > 60) {
+    lat = OWNER_STUDIO_LOCATION.lat;
+    lng = OWNER_STUDIO_LOCATION.lng;
+  }
   return {
     name: settings.studio_name || OWNER_STUDIO_LOCATION.name,
     address: settings.studio_address || OWNER_STUDIO_LOCATION.address,
@@ -85,12 +90,34 @@ export function calculateHaversineDistance(
   return Math.round(d * 10) / 10;
 }
 
+/** Centre of Vadodara and how far the studio serves. A studio pin or address outside this is a mistake. */
+export const SERVICE_AREA = { lat: 22.3072, lng: 73.1812, radiusKm: 60, city: 'Vadodara' };
+
+export function kmFromServiceArea(lat: number, lng: number): number {
+  return calculateHaversineDistance(lat, lng, SERVICE_AREA.lat, SERVICE_AREA.lng);
+}
+
+export function isInServiceArea(lat: number, lng: number): boolean {
+  return Number.isFinite(lat) && Number.isFinite(lng) && kmFromServiceArea(lat, lng) <= SERVICE_AREA.radiusKm;
+}
+
 /**
- * Estimates city road drive time in minutes
+ * Road distance between two points in the city, in km (straight line × 1.3, the usual city detour).
+ * Returns null when either point is outside the service area — a wrong pin (e.g. a test address in
+ * another city) would otherwise show hundreds of km.
+ */
+export function roadDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number | null {
+  if (!isInServiceArea(lat1, lng1) || !isInServiceArea(lat2, lng2)) return null;
+  const km = calculateHaversineDistance(lat1, lng1, lat2, lng2) * 1.3;
+  return Math.max(0.1, Math.round(km * 10) / 10);
+}
+
+/**
+ * Estimates city road drive time in minutes (from road km)
  */
 export function estimateDriveMinutes(distanceKm: number): number {
   if (distanceKm <= 0.5) return 3;
-  return Math.max(5, Math.round(distanceKm * 2.8 + 3));
+  return Math.max(5, Math.round(distanceKm * 2.4 + 3)); // ~25 km/h city traffic + parking
 }
 
 /**

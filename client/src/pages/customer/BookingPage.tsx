@@ -31,13 +31,16 @@ import ServiceImage from '../../components/customer/ServiceImage';
 import { 
   getDeviceLiveLocation, 
   reverseGeocodeCoords, 
-  calculateHaversineDistance, 
+ roadDistanceKm,
+  isInServiceArea,
+  resolveStudioLocation,
+  SERVICE_AREA,
   estimateDriveMinutes, 
   getRouteUrlToStudio, 
   getMapPinUrl,
-  OWNER_STUDIO_LOCATION,
   LocationCoordinates 
 } from '../../utils/locationService';
+import { usePublicSettings } from '../../api/hooks/useSettings';
 
 const CATEGORY_LABELS: Record<string, string> = {
   hatchback: 'Hatchback',
@@ -165,6 +168,9 @@ export default function BookingPage() {
   const [customerCoords, setCustomerCoords] = useState<LocationCoordinates | null>(null);
   const [distanceToStudio, setDistanceToStudio] = useState<number | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+  // Studio pin from Admin → Settings (same source as the home screen and tracking map)
+  const { data: settingsRes } = usePublicSettings();
+  const studio = useMemo(() => resolveStudioLocation((settingsRes as any)?.data), [settingsRes]);
   const [gpsSuccessFlash, setGpsSuccessFlash] = useState(false);
 
   // Autocomplete data
@@ -528,13 +534,11 @@ export default function BookingPage() {
       const coords = await getDeviceLiveLocation();
       setCustomerCoords(coords);
 
-      const distKm = calculateHaversineDistance(
-        coords.lat,
-        coords.lng,
-        OWNER_STUDIO_LOCATION.lat,
-        OWNER_STUDIO_LOCATION.lng
-      );
+      const distKm = roadDistanceKm(coords.lat, coords.lng, studio.lat, studio.lng);
       setDistanceToStudio(distKm);
+      if (distKm === null && !isInServiceArea(coords.lat, coords.lng)) {
+        setLocationError(`Your phone shows a location outside ${SERVICE_AREA.city}. Pickup is only for ${SERVICE_AREA.city} — check that GPS is on, or type your address.`);
+      }
 
       if (autoFillAddress) {
         const geo = await reverseGeocodeCoords(coords.lat, coords.lng);
@@ -1641,18 +1645,18 @@ export default function BookingPage() {
                   </div>
                   <h4 className="text-sm sm:text-base font-black text-gray-900 flex items-center gap-1.5">
                     <MapPin size={16} className="text-[#D32F2F] shrink-0" />
-                    {OWNER_STUDIO_LOCATION.name}
+                    {studio.name}
                   </h4>
                   <p className="text-xs text-gray-600 leading-snug">
-                    {OWNER_STUDIO_LOCATION.address}
+                    {studio.address}
                   </p>
                   <p className="text-[11px] text-gray-400 font-mono">
-                    Studio GPS: {OWNER_STUDIO_LOCATION.lat.toFixed(4)}° N, {OWNER_STUDIO_LOCATION.lng.toFixed(4)}° E
+                    Studio GPS: {studio.lat.toFixed(4)}° N, {studio.lng.toFixed(4)}° E
                   </p>
                 </div>
 
                 <a
-                  href={getMapPinUrl(OWNER_STUDIO_LOCATION.lat, OWNER_STUDIO_LOCATION.lng, OWNER_STUDIO_LOCATION.name)}
+                  href={getMapPinUrl(studio.lat, studio.lng, studio.name)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 hover:text-[#D32F2F] hover:border-red-200 shadow-2xs transition-all text-xs font-bold shrink-0 self-start sm:self-center"
@@ -1698,9 +1702,9 @@ export default function BookingPage() {
                   {distanceToStudio !== null && (
                     <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
                       <div className="p-2.5 bg-slate-50 rounded-lg text-center border border-slate-100">
-                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Live Road Distance</p>
+                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Road Distance</p>
                         <p className="text-base font-black text-gray-900 mt-0.5">
-                          {distanceToStudio} km
+                          ~{distanceToStudio} km
                         </p>
                         <p className="text-[9px] text-gray-400">To Bhayli-Gotri Studio</p>
                       </div>
@@ -1719,7 +1723,7 @@ export default function BookingPage() {
                       GPS: {customerCoords.lat.toFixed(5)}° N, {customerCoords.lng.toFixed(5)}° E
                     </span>
                     <a
-                      href={getRouteUrlToStudio(customerCoords.lat, customerCoords.lng)}
+                      href={getRouteUrlToStudio(customerCoords.lat, customerCoords.lng, studio.lat, studio.lng)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 font-bold text-xs text-[#D32F2F] hover:underline"

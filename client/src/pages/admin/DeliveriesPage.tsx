@@ -1,3 +1,4 @@
+import { calculateHaversineDistance } from '../../utils/locationService';
 import { useState, useEffect } from 'react';
 import { Truck, MapPin, CheckCircle2, Clock, RefreshCw, User, Car, Phone, Navigation, Eye, Radio, ExternalLink } from 'lucide-react';
 import api from '../../api/axiosInstance';
@@ -101,13 +102,23 @@ export default function DeliveriesPage() {
     if (!isBroadcastingGps || !trackingId) return;
 
     let watchId: number;
+    let lastSent: { lat: number; lng: number; at: number } | null = null;
     if (navigator.geolocation) {
       addToast('success', 'Live Device GPS broadcasting enabled');
       watchId = navigator.geolocation.watchPosition(
         async (pos) => {
           const lat = pos.coords.latitude;
           const lng = pos.coords.longitude;
-          setLiveLocation({ lat, lng, timestamp: Date.now() });
+          // Rough Wi-Fi/IP fixes (hundreds of metres off) make the car jump on the customer's map
+          if (pos.coords.accuracy > 80) return;
+          const now = Date.now();
+          if (lastSent) {
+            const moved = calculateHaversineDistance(lat, lng, lastSent.lat, lastSent.lng) * 1000;
+            if (moved < 15 && now - lastSent.at < 30000) return;
+            if (now - lastSent.at < 5000) return;
+          }
+          lastSent = { lat, lng, at: now };
+          setLiveLocation({ lat, lng, timestamp: now });
           try {
             await api.patch(`/deliveries/${trackingId}/location`, { lat, lng });
           } catch (e) {

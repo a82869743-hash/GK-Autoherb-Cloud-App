@@ -13,7 +13,7 @@ import ServiceImage from '../../components/customer/ServiceImage';
 import { BrandCard } from '../../components/customer/ServiceMediaShowcase';
 import { useProductBrands } from '../../api/hooks/useServiceExtras';
 import { SEGMENT_LABEL, priceForSegment, offerPriceForSegment, offerBadge, formatPrice } from '../../utils/pricing';
-import { calculateHaversineDistance, estimateDriveMinutes, resolveStudioLocation } from '../../utils/locationService';
+import { roadDistanceKm, estimateDriveMinutes, resolveStudioLocation } from '../../utils/locationService';
 import { formatTime } from '../../utils/formatters';
 import { useUIStore } from '../../store/uiStore';
 
@@ -72,7 +72,7 @@ export default function CustomerDashboardPage() {
     const lat = Number(defaultAddress?.latitude);
     const lng = Number(defaultAddress?.longitude);
     if (!lat || !lng) return null;
-    return calculateHaversineDistance(lat, lng, studio.lat, studio.lng);
+    return roadDistanceKm(lat, lng, studio.lat, studio.lng);
   }, [defaultAddress, studio]);
 
   const services: any[] = (servicesRes?.data || []).filter((s: any) => s.vehicle_type !== 'bike');
@@ -146,7 +146,7 @@ export default function CustomerDashboardPage() {
               <span className="block text-[13px] text-white/80 truncate max-w-[200px]">{addressLine(defaultAddress)}</span>
               {distanceKm !== null && (
                 <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-semibold text-white/90">
-                  <Navigation size={11} /> {distanceKm} km from studio · ~{estimateDriveMinutes(distanceKm)} min
+                  <Navigation size={11} /> ~{distanceKm} km from studio · ~{estimateDriveMinutes(distanceKm)} min
                 </span>
               )}
             </button>

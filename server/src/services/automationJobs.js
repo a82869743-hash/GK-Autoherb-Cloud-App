@@ -204,8 +204,13 @@ async function studioInfo() {
   try {
     const { getSettings } = require('../utils/settingsStore');
     const st = await getSettings(['studio_address', 'studio_lat', 'studio_lng']);
-    const lat = parseFloat(st.studio_lat) || STUDIO_DEFAULT.lat;
-    const lng = parseFloat(st.studio_lng) || STUDIO_DEFAULT.lng;
+    let lat = parseFloat(st.studio_lat) || STUDIO_DEFAULT.lat;
+    let lng = parseFloat(st.studio_lng) || STUDIO_DEFAULT.lng;
+    // Ignore a pin that isn't in Vadodara (~0.55° ≈ 60 km)
+    if (Math.abs(lat - 22.3072) > 0.55 || Math.abs(lng - 73.1812) > 0.6) {
+      lat = STUDIO_DEFAULT.lat;
+      lng = STUDIO_DEFAULT.lng;
+    }
     return { address: st.studio_address || STUDIO_DEFAULT.address, maps: `https://maps.google.com/?q=${lat},${lng}` };
   } catch {
     return { address: STUDIO_DEFAULT.address, maps: `https://maps.google.com/?q=${STUDIO_DEFAULT.lat},${STUDIO_DEFAULT.lng}` };

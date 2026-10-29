@@ -8,7 +8,7 @@ import { useSettings, useUpdateSettings } from '../../api/hooks/useSettings';
 import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
 import { SkeletonCard } from '../../components/ui/SkeletonLoader';
 import { useUIStore } from '../../store/uiStore';
-import { getDeviceLiveLocation } from '../../utils/locationService';
+import { getDeviceLiveLocation, isInServiceArea, kmFromServiceArea } from '../../utils/locationService';
 import api from '../../api/axiosInstance';
 import Modal from '../../components/ui/Modal';
 
@@ -48,13 +48,22 @@ export default function SettingsPage() {
   const handleDetectStudioGps = async () => {
     try {
       setDetectingGps(true);
-      const coords = await getDeviceLiveLocation();
+      const coords = await getDeviceLiveLocation({ desiredAccuracy: 25, timeoutMs: 20000 });
+      const away = kmFromServiceArea(coords.lat, coords.lng);
+      if (!isInServiceArea(coords.lat, coords.lng)) {
+        toast('error', `This phone is ${Math.round(away)} km from Vadodara — stand inside the studio to set its location.`);
+        return;
+      }
+      if ((coords.accuracy ?? 0) > 100) {
+        toast('error', `GPS is only accurate to ~${Math.round(coords.accuracy!)} m. Step outside the studio door and try again.`);
+        return;
+      }
       setForm(prev => ({
         ...prev,
         studio_lat: coords.lat.toFixed(6),
         studio_lng: coords.lng.toFixed(6),
       }));
-      toast('success', `Studio GPS coordinates captured: ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`);
+      toast('success', `Studio location captured (±${Math.round(coords.accuracy ?? 0)} m). Check the map link, then Save.`);
     } catch (err: any) {
       toast('error', err.message || 'Failed to capture GPS coordinates');
     } finally {

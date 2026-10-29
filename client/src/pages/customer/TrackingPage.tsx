@@ -8,7 +8,7 @@ import { useAuthStore } from '../../store/authStore';
 import { createSocket } from '../../lib/socket';
 import LiveMap from '../../components/customer/LiveMap';
 import { AppPageHeader } from '../../components/customer/ui';
-import { calculateHaversineDistance, estimateDriveMinutes, resolveStudioLocation } from '../../utils/locationService';
+import { roadDistanceKm, estimateDriveMinutes, resolveStudioLocation } from '../../utils/locationService';
 
 type Fix = { lat: number; lng: number; at: number };
 
@@ -66,7 +66,7 @@ export default function TrackingPage() {
   const studio = useMemo(() => resolveStudioLocation(settingsRes?.data), [settingsRes]);
   const home = profile?.addresses?.find((a) => a.is_default) || profile?.addresses?.[0];
   const destination = home?.latitude && home?.longitude ? { lat: Number(home.latitude), lng: Number(home.longitude) } : null;
-  const kmLeft = fix && destination ? calculateHaversineDistance(fix.lat, fix.lng, destination.lat, destination.lng) : null;
+  const kmLeft = fix && destination ? roadDistanceKm(fix.lat, fix.lng, destination.lat, destination.lng) : null;
 
   if (isLoading) {
     return <div className="py-24 flex justify-center"><div className="h-8 w-8 rounded-full border-4 border-slate-200 border-t-[#D32F2F] animate-spin" /></div>;
