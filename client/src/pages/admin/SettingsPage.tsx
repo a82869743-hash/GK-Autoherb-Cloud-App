@@ -177,6 +177,45 @@ export default function SettingsPage() {
       </div>
 
       <div className="space-y-6">
+        {/* Customer app home style (saves on tap, only this one key) */}
+        {(activeSection === 'all' || activeSection === 'studio') && (
+          <section className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-100 shadow-sm">
+            <h3 className="font-extrabold text-base text-slate-900">Customer app home style</h3>
+            <p className="text-xs text-slate-400 mt-0.5 mb-4">Changes the look of the customer home screen for everyone. Classic is the default.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                { key: 'classic', name: 'Classic', desc: 'Photo banner, tile grid, sliding cards', swatch: 'from-[#1a1a1a] to-[#5a1010]' },
+                { key: 'bold', name: 'Bold Studio', desc: 'Dark header, big Book button, large photo cards', swatch: 'from-black to-[#D32F2F]' },
+                { key: 'minimal', name: 'Clean Minimal', desc: 'Light, search first, icon grid and simple list', swatch: 'from-white to-red-100' },
+              ].map((s) => {
+                const on = (form.customer_home_style || 'classic') === s.key;
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    disabled={updateMut.isPending}
+                    onClick={() => {
+                      if (on) return;
+                      updateMut.mutate({ customer_home_style: s.key }, {
+                        onSuccess: () => { handleChange('customer_home_style', s.key); toast('success', `Customer home set to ${s.name}`); },
+                        onError: () => toast('error', 'Could not change the style'),
+                      });
+                    }}
+                    className={`text-left rounded-2xl border-2 p-3 transition-all ${on ? 'border-[#D32F2F] bg-red-50/40' : 'border-slate-200 hover:border-slate-300'}`}
+                  >
+                    <span className={`block h-16 rounded-xl bg-gradient-to-br ${s.swatch} border border-slate-100`} />
+                    <span className="mt-2 flex items-center justify-between">
+                      <span className="text-sm font-extrabold text-slate-900">{s.name}</span>
+                      {on && <span className="text-[10px] font-bold text-white bg-[#D32F2F] rounded-full px-2 py-0.5">Active</span>}
+                    </span>
+                    <span className="block text-[11px] text-slate-500 mt-0.5">{s.desc}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
         {/* Studio Info Section */}
         {(activeSection === 'all' || activeSection === 'studio') && (
           <section className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-100 shadow-sm transition-all">

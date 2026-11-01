@@ -26,7 +26,8 @@ exports.getPublic = async (req, res) => {
       'studio_email', 'studio_gst', 'studio_lat', 'studio_lng',
       'pickup_charge', 'drop_charge', 'pickup_drop_charge',
       'bookings_paused', 'bookings_paused_message',
-      'advance_type', 'advance_value', 'is_gst_applicable'
+      'advance_type', 'advance_value', 'is_gst_applicable',
+      'customer_home_style'
     ];
     const [rows] = await pool.query(
       'SELECT key_name, value FROM settings WHERE key_name IN (?)',

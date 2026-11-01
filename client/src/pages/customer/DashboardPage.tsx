@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { MapPin, ChevronDown, ChevronRight, Truck, Gift, Clock, CalendarClock, ShieldCheck, Sparkles, Package, CheckCircle2, Navigation, Bell } from 'lucide-react';
+import { MapPin, ChevronDown, ChevronRight, Truck, Gift, Clock, CalendarClock, ShieldCheck, Sparkles, Package, CheckCircle2, Navigation, Bell, Search } from 'lucide-react';
 import { useUnreadNotifications } from '../../api/hooks/useAppNotifications';
 import { PushCard } from '../../components/shared/NotificationsInbox';
 import { useCustomerDashboard } from '../../api/hooks/useDashboard';
@@ -124,74 +124,8 @@ export default function CustomerDashboardPage() {
 
   const current = slides[slide % slides.length];
 
-  return (
-    <div className="-mx-4">
-      {/* ── Hero: location + vehicle chip over a promo banner (Hoora style) ── */}
-      <div className="relative h-[330px] overflow-hidden bg-black">
-        {slides.map((s, i) => (
-          <img
-            key={s.img}
-            src={s.img}
-            alt=""
-            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${i === slide % slides.length ? 'opacity-100' : 'opacity-0'}`}
-          />
-        ))}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/75 via-black/20 to-black/80" />
-
-        <div className="relative z-10 px-4 pt-safe">
-          <div className="flex items-start justify-between gap-3 pt-3">
-            <button onClick={() => setAddressOpen(true)} className="min-w-0 text-left text-white">
-              <span className="flex items-center gap-1.5 font-display text-[17px] font-extrabold">
-                <MapPin size={18} className="text-[#ff5252]" />
-                {defaultAddress ? addressTitle(defaultAddress) : 'Set location'}
-                <ChevronDown size={16} />
-              </span>
-              <span className="block text-[13px] text-white/80 truncate max-w-[200px]">{addressLine(defaultAddress)}</span>
-              {distanceKm !== null && (
-                <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-semibold text-white/90">
-                  <Navigation size={11} /> ~{distanceKm} km from studio · ~{estimateDriveMinutes(distanceKm)} min
-                </span>
-              )}
-            </button>
-            <div className="flex shrink-0 items-center gap-2">
-              <Link to="/customer/notifications" className="relative h-10 w-10 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center text-white" aria-label="Notifications">
-                <Bell size={19} />
-                {unread > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#D32F2F] text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-black/40">
-                    {unread > 99 ? '99+' : unread}
-                  </span>
-                )}
-              </Link>
-              <VehicleChip dark />
-            </div>
-          </div>
-
-          <div className="mt-10 text-white">
-            <p className="text-[12px] font-bold uppercase tracking-[0.18em] text-[#ff8a80]">{current.kicker}</p>
-            <h1 className="font-display text-[30px] leading-[1.08] font-extrabold whitespace-pre-line mt-1.5">{current.title}</h1>
-            <button onClick={() => navigate(current.to)} className="mt-4 app-btn h-10 px-4 bg-white text-slate-900">
-              {current.cta} <ChevronRight size={16} />
-            </button>
-          </div>
-          <div className="absolute bottom-10 right-4 flex gap-1.5">
-            {slides.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => setSlide(i)}
-                className={`h-1.5 rounded-full transition-all ${i === slide % slides.length ? 'w-6 bg-white' : 'w-1.5 bg-white/50'}`}
-                aria-label={`Banner ${i + 1}`}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="px-4 mt-4">
-        <PushCard compact />
-      </div>
-
-      {/* ── Content sheet ── */}
-      <div className="relative -mt-6 rounded-t-[28px] bg-[#f3f4f6] px-4 pt-5 space-y-6">
+  const liveCards = (
+    <>
         {/* Live delivery */}
         {d.active_delivery && (
           <Link to={`/customer/delivery/${d.active_delivery.id}`} className="app-card flex items-center gap-3 p-4 border border-red-100">
@@ -262,6 +196,287 @@ export default function CustomerDashboardPage() {
             </div>
           </div>
         )}
+    </>
+  );
+
+  // Admin → Settings → Customer home style. Missing / unknown value = Classic.
+  const homeStyle = String(settingsRes?.data?.customer_home_style || 'classic');
+  const firstName = String((profile as any)?.name || '').trim().split(' ')[0];
+  const greeting = (() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; })();
+  const vehicleName = active ? [(active as any).brand, (active as any).model].filter(Boolean).join(' ') || 'My car' : 'Add your car';
+  const sheets = (
+    <>
+      <AddressSheet open={addressOpen} onClose={() => setAddressOpen(false)} />
+      <CancelBookingSheet booking={cancelFor} onClose={() => setCancelFor(null)} />
+      <RescheduleSheet booking={rescheduleFor} onClose={() => setRescheduleFor(null)} />
+    </>
+  );
+  const priceTag = (s: any) => formatPrice(offerPriceForSegment(s, segment));
+
+  // ── Style B: Bold Studio (dark header, big booking button, large photo cards) ──
+  if (homeStyle === 'bold') {
+    return (
+      <div className="-mx-4 bg-[#0b0b0b] min-h-screen">
+        <div className="px-4 pt-safe pb-5 space-y-4">
+          <div className="flex items-center justify-between gap-3 pt-3">
+            <div className="min-w-0">
+              <p className="text-[13px] text-white/50">{greeting},</p>
+              <p className="font-display text-[24px] font-extrabold text-white truncate">{firstName || 'Welcome'} 👋</p>
+            </div>
+            <Link to="/customer/notifications" className="relative h-11 w-11 rounded-full bg-white/10 flex items-center justify-center text-white" aria-label="Notifications">
+              <Bell size={19} />
+              {unread > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#D32F2F] text-white text-[10px] font-bold flex items-center justify-center">{unread > 99 ? '99+' : unread}</span>}
+            </Link>
+          </div>
+
+          <div className="flex items-center gap-3 rounded-[20px] bg-white/[0.07] p-3">
+            <span className="h-12 w-16 shrink-0 overflow-hidden rounded-xl bg-white/10">
+              <img src="/services/gk/exterior_body_wash.jpg" alt="" className="h-full w-full object-cover" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-display text-[15px] font-extrabold text-white truncate">{vehicleName}</span>
+              <span className="block text-[12px] text-white/50 truncate">{active?.registration_no || 'Tap to pick your car'}{active ? ` · ${SEGMENT_LABEL[segment]}` : ''}</span>
+            </span>
+            <VehicleChip dark />
+          </div>
+
+          <button onClick={() => navigate('/customer/services')} className="w-full h-14 rounded-[20px] bg-gradient-to-r from-[#E53935] to-[#B71C1C] text-white font-display text-[17px] font-extrabold flex items-center justify-center gap-2 shadow-lg shadow-red-900/40 active:scale-[0.98] transition-transform">
+            Book a slot <ChevronRight size={18} />
+          </button>
+
+          <div className="grid grid-cols-3 gap-2.5">
+            <Link to="/customer/loyalty" className="rounded-2xl bg-white/[0.07] p-3">
+              <p className="font-display text-[17px] font-extrabold text-white">{Math.floor(Number(loyalty.points || 0)).toLocaleString('en-IN')}</p>
+              <p className="text-[11px] text-white/50">GK points</p>
+            </Link>
+            <Link to="/customer/buy-packages" className="rounded-2xl bg-white/[0.07] p-3 min-w-0">
+              <p className="font-display text-[17px] font-extrabold text-white truncate">{d.active_package ? 'Active' : '—'}</p>
+              <p className="text-[11px] text-white/50">Package</p>
+            </Link>
+            <Link to="/customer/bookings" className="rounded-2xl bg-white/[0.07] p-3 min-w-0">
+              <p className="font-display text-[17px] font-extrabold text-white truncate">{upcoming[0] ? slotDateLabel(upcoming[0].slot_date) : '—'}</p>
+              <p className="text-[11px] text-white/50">Next visit</p>
+            </Link>
+          </div>
+        </div>
+
+        <div className="rounded-t-[28px] bg-[#f3f4f6] px-4 pt-5 pb-4 space-y-5 min-h-[60vh]">
+          <PushCard compact />
+          {liveCards}
+
+          <div className="-mx-4 px-4 flex gap-2 overflow-x-auto no-scrollbar">
+            {[...BIG_TILES, ...SMALL_TILES].map((t) => (
+              <Link key={t.title} to={t.to} className="shrink-0 flex items-center gap-2 rounded-full bg-white pl-1 pr-3.5 py-1 shadow-sm">
+                <img src={t.img} alt="" loading="lazy" className="h-8 w-8 rounded-full object-cover" />
+                <span className="text-[12px] font-bold text-slate-800 whitespace-nowrap">{t.title}</span>
+              </Link>
+            ))}
+          </div>
+
+          <SectionTitle action={<Link to="/customer/services" className="text-[13px] font-bold text-[#D32F2F] flex items-center">View all <ChevronRight size={15} /></Link>}>
+            {active ? `Made for your ${SEGMENT_LABEL[segment]}` : 'Popular services'}
+          </SectionTitle>
+          {isLoading && !servicesRes ? (
+            <Skeleton className="h-60 w-full" />
+          ) : (
+            <div className="space-y-3">
+              {popular.slice(0, 5).map((s) => (
+                <button key={s.id} onClick={() => navigate(`/customer/services?service=${s.id}`)} className="app-card block w-full overflow-hidden text-left">
+                  <ServiceImage service={s} className="h-40 w-full" />
+                  <span className="flex items-center justify-between gap-3 p-3.5">
+                    <span className="min-w-0">
+                      <span className="block font-display text-[15px] font-extrabold text-slate-900 truncate">{s.name}</span>
+                      {offerBadge(s) && offerPriceForSegment(s, segment) < priceForSegment(s, segment)
+                        ? <span className="text-[11px] font-extrabold text-[#D32F2F]">{offerBadge(s)}</span>
+                        : <span className="text-[12px] text-slate-500">{s.category_name || s.category || 'Car care'}</span>}
+                    </span>
+                    <span className="shrink-0 rounded-xl bg-[#111] px-3 py-2 text-[13px] font-bold text-white">{priceTag(s)}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 gap-2.5 pb-2">
+            {[{ icon: ShieldCheck, label: 'Warranty on coatings' }, { icon: Clock, label: 'On-time delivery' }, { icon: Sparkles, label: 'Trained detailers' }].map(({ icon: Icon, label }) => (
+              <div key={label} className="app-card p-3 text-center">
+                <Icon size={20} className="mx-auto text-[#D32F2F]" />
+                <p className="mt-1.5 text-[11px] font-semibold text-slate-600 leading-tight">{label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        {sheets}
+      </div>
+    );
+  }
+
+  // ── Style C: Clean Minimal (light header, search, icon grid, list) ──
+  if (homeStyle === 'minimal') {
+    return (
+      <div className="-mx-4 bg-white min-h-screen">
+        <div className="px-4 pt-safe space-y-4">
+          <div className="flex items-center justify-between gap-3 pt-3">
+            <button onClick={() => setAddressOpen(true)} className="flex min-w-0 items-center gap-2.5 text-left">
+              <span className="h-10 w-10 shrink-0 rounded-xl bg-[#111] text-white font-display text-[14px] font-extrabold flex items-center justify-center">GK</span>
+              <span className="min-w-0">
+                <span className="block text-[11px] text-slate-500">{firstName ? `Hi ${firstName} · ` : ''}Your location</span>
+                <span className="flex items-center gap-1 font-display text-[15px] font-extrabold text-slate-900 truncate">
+                  {defaultAddress ? addressTitle(defaultAddress) : 'Set location'} <ChevronDown size={15} />
+                </span>
+              </span>
+            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <VehicleChip />
+              <Link to="/customer/notifications" className="relative h-10 w-10 rounded-full border border-slate-200 flex items-center justify-center text-slate-700" aria-label="Notifications">
+                <Bell size={18} />
+                {unread > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#D32F2F] text-white text-[10px] font-bold flex items-center justify-center">{unread > 99 ? '99+' : unread}</span>}
+              </Link>
+            </div>
+          </div>
+
+          <button onClick={() => navigate('/customer/services')} className="w-full h-12 rounded-2xl bg-slate-100 px-4 flex items-center gap-2 text-left text-[13px] text-slate-400">
+            <Search size={17} /> Search wash, coating, PPF…
+          </button>
+
+          <button onClick={() => navigate(current.to)} className="relative w-full overflow-hidden rounded-[22px] bg-red-50 p-4 pr-[132px] text-left min-h-[132px]">
+            <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-[#D32F2F]">{current.kicker}</p>
+            <p className="font-display text-[20px] leading-tight font-extrabold text-slate-900 whitespace-pre-line mt-1">{current.title}</p>
+            <span className="mt-3 inline-flex h-8 items-center rounded-xl bg-[#D32F2F] px-3 text-[12px] font-bold text-white">{current.cta}</span>
+            <img src={current.img} alt="" className="absolute right-3 top-3 bottom-3 w-[112px] h-[calc(100%-24px)] rounded-2xl object-cover" />
+          </button>
+          <div className="flex justify-center gap-1.5 -mt-1">
+            {slides.map((_, i) => (
+              <button key={i} onClick={() => setSlide(i)} className={`h-1.5 rounded-full transition-all ${i === slide % slides.length ? 'w-5 bg-[#D32F2F]' : 'w-1.5 bg-slate-300'}`} aria-label={`Banner ${i + 1}`} />
+            ))}
+          </div>
+        </div>
+
+        <div className="px-4 pt-4 pb-4 space-y-5">
+          <PushCard compact />
+          {liveCards}
+
+          <div className="grid grid-cols-4 gap-x-2 gap-y-4">
+            {[...BIG_TILES, ...SMALL_TILES].slice(0, 8).map((t) => (
+              <Link key={t.title} to={t.to} className="flex flex-col items-center gap-1.5 text-center">
+                <span className="h-16 w-16 overflow-hidden rounded-[20px] bg-slate-100">
+                  <img src={t.img} alt="" loading="lazy" className={`h-full w-full ${('white' in t && t.white) ? 'object-contain p-1.5' : 'object-cover'}`} />
+                </span>
+                <span className="text-[11px] font-semibold leading-tight text-slate-700">{t.title}</span>
+              </Link>
+            ))}
+          </div>
+
+          <div>
+            <SectionTitle action={<Link to="/customer/services" className="text-[13px] font-bold text-[#D32F2F] flex items-center">See all <ChevronRight size={15} /></Link>}>
+              {active ? `Popular for your ${SEGMENT_LABEL[segment]}` : 'Popular services'}
+            </SectionTitle>
+            {isLoading && !servicesRes ? (
+              <Skeleton className="h-48 w-full" />
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {popular.map((s) => (
+                  <button key={s.id} onClick={() => navigate(`/customer/services?service=${s.id}`)} className="flex w-full items-center gap-3 py-3 text-left">
+                    <ServiceImage service={s} className="h-14 w-14 shrink-0 rounded-2xl" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-display text-[14px] font-extrabold text-slate-900 truncate">{s.name}</span>
+                      <span className="block text-[12px] text-slate-500 truncate">{offerBadge(s) && offerPriceForSegment(s, segment) < priceForSegment(s, segment) ? offerBadge(s) : (s.category_name || s.category || 'Car care')}</span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block font-display text-[14px] font-extrabold text-[#C62828]">{priceTag(s)}</span>
+                      <span className="block text-[11px] font-semibold text-slate-400">Book ›</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <Link to="/customer/loyalty" className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4">
+            <span className="h-11 w-11 rounded-xl bg-red-50 flex items-center justify-center"><Gift size={22} className="text-[#D32F2F]" /></span>
+            <span className="flex-1">
+              <span className="block font-display text-[15px] font-extrabold text-slate-900">{Math.floor(Number(loyalty.points || 0))} GK points</span>
+              <span className="block text-xs text-slate-500">Earn 10% back on every service</span>
+            </span>
+            <ChevronRight className="text-slate-400" />
+          </Link>
+        </div>
+        {sheets}
+      </div>
+    );
+  }
+
+
+
+  return (
+    <div className="-mx-4">
+      {/* ── Hero: location + vehicle chip over a promo banner (Hoora style) ── */}
+      <div className="relative h-[330px] overflow-hidden bg-black">
+        {slides.map((s, i) => (
+          <img
+            key={s.img}
+            src={s.img}
+            alt=""
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${i === slide % slides.length ? 'opacity-100' : 'opacity-0'}`}
+          />
+        ))}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/75 via-black/20 to-black/80" />
+
+        <div className="relative z-10 px-4 pt-safe">
+          <div className="flex items-start justify-between gap-3 pt-3">
+            <button onClick={() => setAddressOpen(true)} className="min-w-0 text-left text-white">
+              <span className="flex items-center gap-1.5 font-display text-[17px] font-extrabold">
+                <MapPin size={18} className="text-[#ff5252]" />
+                {defaultAddress ? addressTitle(defaultAddress) : 'Set location'}
+                <ChevronDown size={16} />
+              </span>
+              <span className="block text-[13px] text-white/80 truncate max-w-[200px]">{addressLine(defaultAddress)}</span>
+              {distanceKm !== null && (
+                <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-semibold text-white/90">
+                  <Navigation size={11} /> ~{distanceKm} km from studio · ~{estimateDriveMinutes(distanceKm)} min
+                </span>
+              )}
+            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <Link to="/customer/notifications" className="relative h-10 w-10 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center text-white" aria-label="Notifications">
+                <Bell size={19} />
+                {unread > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#D32F2F] text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-black/40">
+                    {unread > 99 ? '99+' : unread}
+                  </span>
+                )}
+              </Link>
+              <VehicleChip dark />
+            </div>
+          </div>
+
+          <div className="mt-10 text-white">
+            <p className="text-[12px] font-bold uppercase tracking-[0.18em] text-[#ff8a80]">{current.kicker}</p>
+            <h1 className="font-display text-[30px] leading-[1.08] font-extrabold whitespace-pre-line mt-1.5">{current.title}</h1>
+            <button onClick={() => navigate(current.to)} className="mt-4 app-btn h-10 px-4 bg-white text-slate-900">
+              {current.cta} <ChevronRight size={16} />
+            </button>
+          </div>
+          <div className="absolute bottom-10 right-4 flex gap-1.5">
+            {slides.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setSlide(i)}
+                className={`h-1.5 rounded-full transition-all ${i === slide % slides.length ? 'w-6 bg-white' : 'w-1.5 bg-white/50'}`}
+                aria-label={`Banner ${i + 1}`}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="px-4 mt-4">
+        <PushCard compact />
+      </div>
+
+      {/* ── Content sheet ── */}
+      <div className="relative -mt-6 rounded-t-[28px] bg-[#f3f4f6] px-4 pt-5 space-y-6">
+        {liveCards}
 
         {/* Category tiles */}
         <div>
