@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { OpsPageTitle } from '../../components/ops/ui';
+import { Skeleton } from '../../components/customer/ui';
+import { LedgerList, Tag, MoneyHero } from '../../components/ops/ledger';
 import { Wallet, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Download, Calendar, IndianRupee, Receipt, PieChart, Plus, Sparkles, ShieldCheck, BarChart3, Loader2 } from 'lucide-react';
 import { useBalanceSheet, useExpenses, useExpenseCategories, useCreateExpense, downloadBalanceSheet } from '../../api/hooks/useBalanceSheet';
-import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
-import AdminMetricCard from '../../components/admin/AdminMetricCard';
 import { AnimatedModal, RippleButton } from '../../components/ui/Animations';
 import { Tooltip, ResponsiveContainer, PieChart as RechartsPie, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 
@@ -67,247 +67,174 @@ export default function BalanceSheetPage() {
   const chartData = sheet?.expenses?.by_category?.map((c: any, i: number) => ({ name: c.category, value: parseFloat(c.total), fill: COLORS[i % COLORS.length] })) || [];
   const monthlyTrendData = sheet?.monthly_trend || [];
 
+  const inr = (v: any) => `₹${(Number(v) || 0).toLocaleString('en-IN')}`;
+  const profit = Number(sheet?.net_profit || 0);
+  const margin = parseFloat(sheet?.profit_margin || '0');
+  const incomeRows = [
+    { label: 'Job cards', value: sheet?.income?.job_revenue, color: '#D32F2F' },
+    { label: 'Packages', value: sheet?.income?.package_revenue, color: '#059669' },
+    { label: 'Counter bills', value: sheet?.income?.bill_revenue, color: '#D97706' },
+    { label: 'Product sales', value: sheet?.income?.trade_revenue, color: '#7C3AED' },
+  ];
+  const incomeMax = Math.max(1, ...incomeRows.map((r) => Number(r.value) || 0));
+
   return (
-    <div className="space-y-6 pb-28 lg:pb-12 max-w-[1600px] mx-auto font-sans">
-      {/* Header Bar */}
-      <AdminHeaderBar
-        title="Balance Sheet & Profit/Loss Audit"
-        subtitle="Consolidated studio income streams, operational disbursements, and profit margins"
-        badge="Executive Finance"
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => handleExport('xlsx')}
-              disabled={!!exporting}
-              className="px-3.5 py-2.5 rounded-2xl bg-white border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-all flex items-center gap-1.5 shadow-xs disabled:opacity-60"
-            >
-              {exporting === 'xlsx' ? <Loader2 size={14} className="animate-spin text-slate-500" /> : <Download size={14} className="text-slate-500" />}
-              <span>Excel</span>
-            </button>
-            <button
-              onClick={() => handleExport('pdf')}
-              disabled={!!exporting}
-              className="px-3.5 py-2.5 rounded-2xl bg-white border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-all flex items-center gap-1.5 shadow-xs disabled:opacity-60"
-            >
-              {exporting === 'pdf' ? <Loader2 size={14} className="animate-spin text-slate-500" /> : <Download size={14} className="text-slate-500" />}
-              <span>PDF</span>
-            </button>
-            <button
-              onClick={() => setShowExpenseModal(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-[#D32F2F] hover:bg-[#b71c1c] text-white font-bold text-xs shadow-md shadow-red-200 transition-all active:scale-95"
-            >
-              <Plus size={15} />
-              <span>Record Expense</span>
-            </button>
-          </div>
+    <div className="space-y-4 pb-28 lg:pb-12 max-w-[1200px] mx-auto">
+      <OpsPageTitle
+        kicker="Balance sheet"
+        title="Profit & loss"
+        subtitle={dateRange.from ? `${dateRange.from} → ${dateRange.to || 'today'}` : 'All time'}
+        action={
+          <button
+            onClick={() => setShowExpenseModal(true)}
+            className="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-2xl bg-[#D32F2F] text-white text-[12px] font-bold shadow-md shadow-red-200 active:scale-95 transition-transform"
+          >
+            <Plus size={15} /> Expense
+          </button>
         }
       />
 
-      {/* Date Filter Bar & Presets */}
-      <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-[0_4px_24px_rgba(0,0,0,0.03)] flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {[
-            { key: 'all', label: 'All Records' },
+      {/* Period */}
+      <div className="app-card p-3 space-y-2.5">
+        <div className="-mx-3 px-3 flex gap-2 overflow-x-auto no-scrollbar">
+          {([
+            { key: 'all', label: 'All time' },
             { key: 'today', label: 'Today' },
-            { key: 'week', label: 'This Week' },
-            { key: 'month', label: 'This Month' },
-            { key: '6m', label: 'Last 6 Months' },
-          ].map((preset: any) => (
-            <button
-              key={preset.key}
-              onClick={() => handlePresetChange(preset.key)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                activePreset === preset.key
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-              }`}
-            >
-              {preset.label}
+            { key: 'week', label: '7 days' },
+            { key: 'month', label: 'This month' },
+            { key: '6m', label: '6 months' },
+          ] as const).map((p) => (
+            <button key={p.key} onClick={() => handlePresetChange(p.key)} className={`app-chip ${activePreset === p.key && (p.key !== 'all' || !dateRange.from) ? 'app-chip-on' : 'app-chip-off'}`}>
+              {p.label}
             </button>
           ))}
         </div>
-
-        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/90 rounded-2xl px-3 py-1.5 text-xs">
-          <Calendar size={13} className="text-slate-400" />
-          <input 
-            type="date" 
-            value={dateRange.from} 
-            onChange={e => { setDateRange(p => ({ ...p, from: e.target.value })); setActivePreset('all'); }} 
-            className="bg-transparent border-none outline-none text-xs text-slate-800 font-medium p-0" 
-          />
-          <span className="text-slate-400 text-xs font-bold">to</span>
-          <input 
-            type="date" 
-            value={dateRange.to} 
-            onChange={e => { setDateRange(p => ({ ...p, to: e.target.value })); setActivePreset('all'); }} 
-            className="bg-transparent border-none outline-none text-xs text-slate-800 font-medium p-0" 
-          />
+        <div className="flex items-center gap-2">
+          <input type="date" value={dateRange.from} onChange={e => { setDateRange(p => ({ ...p, from: e.target.value })); setActivePreset('all'); }} className="min-w-0 flex-1 h-10 rounded-xl border border-slate-200 bg-slate-50 px-2.5 text-[13px] font-semibold text-slate-800" />
+          <span className="text-[12px] font-bold text-slate-400">to</span>
+          <input type="date" value={dateRange.to} onChange={e => { setDateRange(p => ({ ...p, to: e.target.value })); setActivePreset('all'); }} className="min-w-0 flex-1 h-10 rounded-xl border border-slate-200 bg-slate-50 px-2.5 text-[13px] font-semibold text-slate-800" />
         </div>
       </div>
 
-      {/* KPI Cards Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <AdminMetricCard
-          label="Gross Studio Revenue"
-          value={`₹${(sheet?.income?.total || 0).toLocaleString('en-IN')}`}
-          trend={{ text: 'All operational streams', positive: true }}
-          icon={<IndianRupee size={20} />}
-          accentColor="emerald"
+      {isLoading ? (
+        <Skeleton className="h-[120px] rounded-3xl" />
+      ) : (
+        <MoneyHero
+          kicker={profit >= 0 ? 'In profit' : 'In loss'}
+          items={[
+            { label: 'Income', value: inr(sheet?.income?.total), tone: 'in' },
+            { label: 'Expenses', value: inr(sheet?.expenses?.total), tone: 'out' },
+            { label: `Net · ${margin.toFixed(1)}%`, value: inr(profit), tone: profit >= 0 ? 'in' : 'out' },
+          ]}
         />
-        <AdminMetricCard
-          label="Total Operating Expenses"
-          value={`₹${(sheet?.expenses?.total || 0).toLocaleString('en-IN')}`}
-          trend={{ text: 'Overheads & procurement', positive: false }}
-          icon={<TrendingDown size={20} />}
-          accentColor="rose"
-        />
-        <AdminMetricCard
-          label="Net Operating Profit"
-          value={`₹${(sheet?.net_profit || 0).toLocaleString('en-IN')}`}
-          trend={{ text: sheet?.net_profit >= 0 ? 'Surplus net positive' : 'Deficit', positive: sheet?.net_profit >= 0 }}
-          icon={<Wallet size={20} />}
-          accentColor="indigo"
-        />
-        <AdminMetricCard
-          label="Studio Operating Margin"
-          value={`${parseFloat(sheet?.profit_margin || '0').toFixed(1)}%`}
-          trend={{ text: 'Net retention ratio', positive: parseFloat(sheet?.profit_margin || '0') > 0 }}
-          icon={<PieChart size={20} />}
-          accentColor="purple"
-        />
+      )}
+
+      <div className="grid grid-cols-2 gap-2.5">
+        <button onClick={() => handleExport('xlsx')} disabled={!!exporting} className="app-card h-12 inline-flex items-center justify-center gap-2 text-[13px] font-bold text-slate-700 disabled:opacity-60">
+          {exporting === 'xlsx' ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} className="text-[#D32F2F]" />} Excel
+        </button>
+        <button onClick={() => handleExport('pdf')} disabled={!!exporting} className="app-card h-12 inline-flex items-center justify-center gap-2 text-[13px] font-bold text-slate-700 disabled:opacity-60">
+          {exporting === 'pdf' ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} className="text-[#D32F2F]" />} PDF
+        </button>
       </div>
 
-      {/* 6-Month Comparative Monthly Trend Chart (Update 10) */}
-      <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-[0_4px_24px_rgba(0,0,0,0.03)] space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-            <BarChart3 size={18} className="text-[#D32F2F]" />
-            <span>6-Month Financial Trend Comparison (Income vs Outflow vs Net Margin)</span>
-          </h3>
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Multi-Stream P&L</span>
-        </div>
-
-        {monthlyTrendData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={monthlyTrendData} margin={{ top: 15, right: 15, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-              <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#64748b', fontWeight: 600 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${Number(v) >= 1000 ? `${(Number(v) / 1000).toFixed(0)}k` : Number(v)}`} />
-              <Tooltip 
-                formatter={(val: any, name: any) => [`₹${Number(val).toLocaleString('en-IN')}`, name === 'income' ? 'Revenue' : name === 'expense' ? 'Expenses' : 'Net Margin']}
-                contentStyle={{ borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}
-              />
-              <Legend 
-                formatter={(value) => value === 'income' ? 'Gross Revenue' : value === 'expense' ? 'Operational Expenses' : 'Net Operating Profit'}
-                wrapperStyle={{ paddingTop: 10, fontSize: 12, fontWeight: 700 }}
-              />
-              <Bar dataKey="income" fill="#059669" radius={[8, 8, 0, 0]} maxBarSize={38} />
-              <Bar dataKey="expense" fill="#E11D48" radius={[8, 8, 0, 0]} maxBarSize={38} />
-              <Bar dataKey="profit" fill="#4F46E5" radius={[8, 8, 0, 0]} maxBarSize={38} />
-            </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <p className="text-xs font-medium text-slate-400 text-center py-12">No multi-month historical data recorded yet.</p>
-        )}
-      </div>
-
-      {/* Income & Expense Breakdown Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-[0_4px_24px_rgba(0,0,0,0.03)] space-y-4">
-          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-            <ArrowUpRight size={18} className="text-emerald-600" />
-            <span>Revenue Breakdown Channels</span>
-          </h3>
-          <div className="space-y-3">
-            {[
-              { label: 'Job Card Detailing Revenue', value: sheet?.income?.job_revenue, color: '#D32F2F' },
-              { label: 'Package & Membership Sales', value: sheet?.income?.package_revenue, color: '#059669' },
-              { label: 'Express Counter & Manual Bills', value: sheet?.income?.bill_revenue, color: '#D97706' },
-              { label: 'Trading Sales (B2B/B2C)', value: sheet?.income?.trade_revenue, color: '#7C3AED' },
-              { label: 'Less: Sales Returns', value: -(sheet?.income?.sales_returns || 0), color: '#94a3b8' },
-            ].map((item, i) => (
-              <div key={i} className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50/70 border border-slate-100 hover:bg-slate-50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                  <span className="text-xs sm:text-sm font-semibold text-slate-700">{item.label}</span>
-                </div>
-                <span className={`text-sm font-black ${item.value < 0 ? 'text-rose-600' : 'text-slate-900'}`}>₹{(item.value || 0).toLocaleString('en-IN')}</span>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Income breakdown */}
+        <div className="app-card p-4 space-y-3">
+          <p className="font-display text-[16px] font-extrabold text-slate-900 flex items-center gap-2"><ArrowUpRight size={17} className="text-emerald-600" /> Where money came from</p>
+          {incomeRows.map((r) => (
+            <div key={r.label}>
+              <div className="flex items-center justify-between text-[13px]">
+                <span className="font-semibold text-slate-600 flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: r.color }} />{r.label}</span>
+                <span className="font-extrabold text-slate-900">{inr(r.value)}</span>
               </div>
-            ))}
-          </div>
+              <div className="mt-1.5 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${((Number(r.value) || 0) / incomeMax) * 100}%`, backgroundColor: r.color }} />
+              </div>
+            </div>
+          ))}
+          {Number(sheet?.income?.sales_returns || 0) > 0 && (
+            <div className="flex items-center justify-between text-[13px] pt-2 border-t border-slate-100">
+              <span className="font-semibold text-slate-500">Less: returns</span>
+              <span className="font-extrabold text-[#D32F2F]">−{inr(sheet?.income?.sales_returns)}</span>
+            </div>
+          )}
         </div>
 
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-[0_4px_24px_rgba(0,0,0,0.03)] space-y-4">
-          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-            <ArrowDownRight size={18} className="text-rose-600" />
-            <span>Expense Distribution Portfolio</span>
-          </h3>
+        {/* Expense split */}
+        <div className="app-card p-4">
+          <p className="font-display text-[16px] font-extrabold text-slate-900 flex items-center gap-2"><ArrowDownRight size={17} className="text-[#D32F2F]" /> Where money went</p>
           {chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
-              <RechartsPie>
-                <Pie data={chartData} cx="50%" cy="50%" outerRadius={80} innerRadius={40} paddingAngle={3} dataKey="value" label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                  {chartData.map((entry: any, index: number) => <Cell key={index} fill={entry.fill} />)}
-                </Pie>
-                <Tooltip formatter={(v: any) => `₹${Number(v).toLocaleString('en-IN')}`} />
-              </RechartsPie>
-            </ResponsiveContainer>
+            <div className="flex items-center gap-4 mt-2">
+              <div className="w-[140px] h-[140px] shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RechartsPie>
+                    <Pie data={chartData} cx="50%" cy="50%" outerRadius={66} innerRadius={42} paddingAngle={2} dataKey="value">
+                      {chartData.map((entry: any, index: number) => <Cell key={index} fill={entry.fill} />)}
+                    </Pie>
+                    <Tooltip formatter={(v: any) => inr(v)} />
+                  </RechartsPie>
+                </ResponsiveContainer>
+              </div>
+              <div className="min-w-0 flex-1 space-y-1.5">
+                {chartData.slice(0, 6).map((c: any) => (
+                  <div key={c.name} className="flex items-center justify-between gap-2 text-[12px]">
+                    <span className="flex items-center gap-1.5 min-w-0"><span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: c.fill }} /><span className="truncate font-semibold text-slate-600">{c.name}</span></span>
+                    <span className="font-bold text-slate-900 shrink-0">{inr(c.value)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : (
-            <p className="text-xs font-medium text-slate-400 text-center py-12">No expense entries found for the selected interval.</p>
+            <p className="text-[13px] text-slate-400 text-center py-10">No expenses in this period</p>
           )}
         </div>
       </div>
 
-
-      {/* Recent Expenses Table */}
-      <div className="rounded-3xl border border-slate-200/80 bg-white shadow-[0_4px_24px_rgba(0,0,0,0.03)] overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-            <Receipt size={18} className="text-[#D32F2F]" />
-            <span>Recent Operational Disbursements</span>
-          </h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-sm">
-            <thead>
-              <tr className="bg-slate-50/70 border-b border-slate-200/80 text-slate-400 font-bold uppercase tracking-wider text-[11px]">
-                <th className="py-4 px-6">Disbursement Date</th>
-                <th className="py-4 px-6">Cost Center / Category</th>
-                <th className="py-4 px-6">Disbursement Description</th>
-                <th className="py-4 px-6 text-right">Net Amount</th>
-                <th className="py-4 px-6 text-right">GST Component</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {(expensesData?.data || []).slice(0, 10).map((exp: any) => (
-                <tr key={exp.id} className="hover:bg-red-50/30 transition-colors">
-                  <td className="py-4 px-6 text-slate-600 text-xs font-medium">
-                    {new Date(exp.expense_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </td>
-                  <td className="py-4 px-6">
-                    <span className="px-2.5 py-1 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700">
-                      {exp.category_name}
-                    </span>
-                  </td>
-                  <td className="py-4 px-6 text-slate-800 text-xs font-medium">{exp.description || '—'}</td>
-                  <td className="py-4 px-6 text-right font-black text-slate-900 text-sm">
-                    ₹{parseFloat(exp.amount).toLocaleString('en-IN')}
-                  </td>
-                  <td className="py-4 px-6 text-right text-slate-500 text-xs font-medium">
-                    ₹{parseFloat(exp.gst_amount || 0).toLocaleString('en-IN')}
-                  </td>
-                </tr>
-              ))}
-              {(!expensesData?.data?.length) && (
-                <tr>
-                  <td colSpan={5} className="text-center text-slate-400 py-10 text-xs font-medium">
-                    No operating expenses logged yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+      {/* Monthly trend */}
+      <div className="app-card p-4">
+        <p className="font-display text-[16px] font-extrabold text-slate-900 flex items-center gap-2"><BarChart3 size={17} className="text-[#D32F2F]" /> Last 6 months</p>
+        {monthlyTrendData.length > 0 ? (
+          <div className="h-[240px] mt-2 -ml-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthlyTrendData} margin={{ top: 10, right: 6, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} axisLine={false} tickLine={false} />
+                <YAxis width={44} tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${Number(v) >= 1000 ? `${(Number(v) / 1000).toFixed(0)}k` : Number(v)}`} />
+                <Tooltip
+                  formatter={(val: any, name: any) => [inr(val), name === 'income' ? 'Income' : name === 'expense' ? 'Expenses' : 'Profit']}
+                  contentStyle={{ borderRadius: '14px', border: '1px solid #e2e8f0', fontSize: 12 }}
+                />
+                <Legend formatter={(v) => (v === 'income' ? 'Income' : v === 'expense' ? 'Expenses' : 'Profit')} wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+                <Bar dataKey="income" fill="#059669" radius={[6, 6, 0, 0]} maxBarSize={26} />
+                <Bar dataKey="expense" fill="#D32F2F" radius={[6, 6, 0, 0]} maxBarSize={26} />
+                <Bar dataKey="profit" fill="#1c1b1b" radius={[6, 6, 0, 0]} maxBarSize={26} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <p className="text-[13px] text-slate-400 text-center py-10">Not enough history yet</p>
+        )}
       </div>
+
+      <LedgerList
+        title="Recent expenses"
+        rows={(expensesData?.data || []).slice(0, 10)}
+        empty="No expenses logged yet"
+        cols={[
+          { label: 'Date', cell: (e: any) => new Date(e.expense_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) },
+          { label: 'Category', cell: (e: any) => <Tag>{e.category_name}</Tag> },
+          { label: 'Description', cell: (e: any) => <span className="text-slate-600">{e.description || '—'}</span> },
+          { label: 'Amount', align: 'right', cell: (e: any) => <span className="font-extrabold text-slate-900">{inr(e.amount)}</span> },
+          { label: 'GST', align: 'right', cell: (e: any) => inr(e.gst_amount) },
+        ]}
+        card={(e: any) => ({
+          title: e.description || e.category_name,
+          subtitle: `${new Date(e.expense_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} · ${e.category_name}${Number(e.gst_amount) ? ` · GST ${inr(e.gst_amount)}` : ''}`,
+          amount: inr(e.amount),
+          tone: 'out',
+        })}
+      />
 
       {/* Add Expense Modal */}
       <AnimatedModal isOpen={showExpenseModal} onClose={() => setShowExpenseModal(false)}>

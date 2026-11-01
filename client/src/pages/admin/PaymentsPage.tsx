@@ -1,21 +1,20 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { CreditCard, IndianRupee, Clock, CheckCircle, XCircle, RefreshCw, Plus, Search, Filter, Download, MessageCircle, QrCode, TrendingUp, Sparkles, ShieldCheck, User } from 'lucide-react';
+import { Clock, RefreshCw, Plus, Download, MessageCircle } from 'lucide-react';
 import { usePayments, usePaymentStats, useCreatePayment, useCreateRefund, useAdvancePayments, useSendPaymentReminder, useCreateRazorpayOrder, useVerifyRazorpayPayment, useWalletBalance } from '../../api/hooks/usePayments';
-import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
-import AdminMetricCard from '../../components/admin/AdminMetricCard';
-import { AnimatedModal, RippleButton } from '../../components/ui/Animations';
+import { OpsPageTitle, StatTile, SegmentedTabs, SearchBar } from '../../components/ops/ui';
+import { LedgerList, Tag, MoneyHero } from '../../components/ops/ledger';
+import { AnimatedModal } from '../../components/ui/Animations';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../api/axiosInstance';
 
-const STATUS_BADGES: Record<string, string> = {
-  completed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  captured: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  pending: 'bg-amber-50 text-amber-700 border-amber-200',
-  failed: 'bg-rose-50 text-rose-700 border-rose-200',
-  refunded: 'bg-purple-50 text-purple-700 border-purple-200',
-  partial_refund: 'bg-red-50 text-[#b71c1c] border-red-200',
+const STATUS_TONES: Record<string, string> = {
+  completed: 'green',
+  captured: 'green',
+  pending: 'amber',
+  failed: 'red',
+  refunded: 'purple',
+  partial_refund: 'red',
 };
 
 export default function PaymentsPage() {
@@ -207,351 +206,140 @@ export default function PaymentsPage() {
     !search || ap.customer_name?.toLowerCase().includes(search.toLowerCase()) || ap.customer_mobile?.includes(search)
   );
 
+  const inr = (v: any) => `₹${(parseFloat(v) || 0).toLocaleString('en-IN')}`;
+  const day = (d: any) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
+  const canRefund = (p: any) => ['captured', 'completed', 'partial_refund'].includes(p.payment_status);
+  const statusTag = (s: string) => <Tag tone={STATUS_TONES[s] || 'slate'}>{(s || '').replace(/_/g, ' ')}</Tag>;
+
   return (
-    <div className="space-y-6 pb-28 lg:pb-12 max-w-[1600px] mx-auto font-sans">
-      {/* Header Bar */}
-      <AdminHeaderBar
-        title="Payments & Cashflow Ledger"
-        subtitle="Track collections, online gateways, advance customer deposits, and payment reconciliation"
-        actions={
+    <div className="space-y-4 pb-28 lg:pb-12 max-w-[1200px] mx-auto">
+      <OpsPageTitle
+        kicker="Payments"
+        title="Collections"
+        subtitle="Payments received, refunds and advance balances"
+        action={
           <button
             onClick={() => setShowPayModal(true)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-[#D32F2F] hover:bg-[#b71c1c] text-white font-bold text-xs shadow-md shadow-red-200 transition-all active:scale-95"
+            className="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-2xl bg-[#D32F2F] text-white text-[12px] font-bold shadow-md shadow-red-200 active:scale-95 transition-transform"
           >
-            <Plus size={16} />
-            <span>Record Payment</span>
+            <Plus size={15} /> Record
           </button>
         }
       />
 
-      {/* KPI Cards Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <AdminMetricCard
-          label="Today's Collection"
-          value={`₹${(stats?.today_collected || 0).toLocaleString('en-IN')}`}
-          trend={{ text: 'Daily cashflow', positive: true }}
-          icon={<IndianRupee size={20} />}
-          accentColor="emerald"
-        />
-        <AdminMetricCard
-          label="Monthly Revenue"
-          value={`₹${(stats?.month_collected || 0).toLocaleString('en-IN')}`}
-          trend={{ text: 'Calendar month gross', positive: true }}
-          icon={<CreditCard size={20} />}
-          accentColor="indigo"
-        />
-        <AdminMetricCard
-          label="Pending Receivables"
-          value={`₹${(stats?.pending_amount || 0).toLocaleString('en-IN')}`}
-          trend={{ text: 'Awaiting clearance', positive: false }}
-          icon={<Clock size={20} />}
-          accentColor="amber"
-        />
-        <AdminMetricCard
-          label="Advance Deposit Due"
-          value={`₹${(stats?.total_balance_due || 0).toLocaleString('en-IN')}`}
-          trend={{ text: 'Outstanding job balances', positive: false }}
-          icon={<RefreshCw size={20} />}
-          accentColor="purple"
-        />
+      <MoneyHero
+        kicker="Collected"
+        items={[
+          { label: 'Today', value: inr(stats?.today_collected), tone: 'in' },
+          { label: 'This month', value: inr(stats?.month_collected), tone: 'in' },
+        ]}
+      />
+      <div className="grid grid-cols-2 gap-2.5">
+        <StatTile label="Pending" value={inr(stats?.pending_amount)} icon={Clock} tone="amber" hint="Awaiting clearance" onClick={() => { setActiveTab('all'); setStatusFilter('pending'); }} />
+        <StatTile label="Balance due" value={inr(stats?.total_balance_due)} icon={RefreshCw} tone="purple" hint="After advances" onClick={() => setActiveTab('advance')} />
       </div>
 
-      {/* Tabs & Search Bar */}
-      <div className="rounded-3xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-[0_4px_24px_rgba(0,0,0,0.03)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="flex gap-1.5 bg-slate-100 p-1.5 rounded-2xl w-full sm:w-auto">
-          <button 
-            onClick={() => setActiveTab('all')}
-            className={`flex-1 sm:flex-none px-5 py-2 text-xs font-bold rounded-xl transition-all ${activeTab === 'all' ? 'bg-white text-[#b71c1c] shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+      <SegmentedTabs
+        value={activeTab}
+        onChange={(v) => setActiveTab(v)}
+        options={[
+          { value: 'all', label: 'All payments' },
+          { value: 'advance', label: 'Advances' },
+        ]}
+      />
+
+      <div className="flex gap-2">
+        <div className="flex-1 min-w-0"><SearchBar value={search} onChange={setSearch} placeholder="Search name or phone" /></div>
+        {activeTab === 'all' && (
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="h-11 shrink-0 rounded-2xl border border-slate-200 bg-white px-3 text-[13px] font-bold text-slate-700"
           >
-            All Transactions
-          </button>
-          <button 
-            onClick={() => setActiveTab('advance')}
-            className={`flex-1 sm:flex-none px-5 py-2 text-xs font-bold rounded-xl transition-all ${activeTab === 'advance' ? 'bg-white text-[#b71c1c] shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
-          >
-            Advance Deposits
-          </button>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-72">
-            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search customer, phone, ref..."
-              className="w-full pl-10 pr-3.5 py-2 text-xs bg-slate-50 border border-slate-200/90 rounded-2xl focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-[#D32F2F] outline-none font-medium"
-            />
-          </div>
-          {activeTab === 'all' && (
-            <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
-              className="text-xs bg-slate-50 border border-slate-200/90 rounded-2xl px-3.5 py-2 outline-none font-bold text-slate-700 cursor-pointer"
-            >
-              <option value="">All Statuses</option>
-              <option value="completed">Completed</option>
-              <option value="pending">Pending</option>
-              <option value="refunded">Refunded</option>
-            </select>
-          )}
-        </div>
-      </div>
-
-      {/* Mobile Card List View (< md) */}
-      <div className="block md:hidden space-y-3">
-        {activeTab === 'all' ? (
-          loadingPayments ? (
-            <div className="rounded-3xl border border-slate-200/80 bg-white p-10 text-center">
-              <RefreshCw size={24} className="animate-spin text-[#D32F2F] mx-auto mb-2" />
-              <p className="text-xs text-slate-400 font-medium">Loading payments...</p>
-            </div>
-          ) : filteredPayments.length === 0 ? (
-            <div className="rounded-3xl border border-slate-200/80 bg-white p-10 text-center">
-              <CreditCard size={32} className="text-slate-300 mx-auto mb-2" />
-              <p className="text-sm font-bold text-slate-800">No payments recorded</p>
-            </div>
-          ) : (
-            filteredPayments.map((p: any) => (
-              <div
-                key={p.id}
-                className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-[0_4px_20px_rgba(0,0,0,0.02)] space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-bold text-slate-900">{p.customer_name || 'Walk-in'}</div>
-                    <div className="text-xs text-slate-400">{p.customer_mobile || 'No phone'}</div>
-                  </div>
-                  <span className={`text-[11px] px-2.5 py-1 rounded-full border font-bold capitalize ${STATUS_BADGES[p.payment_status] || 'bg-slate-100 text-slate-700'}`}>
-                    {p.payment_status}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
-                  <div className="flex items-center gap-1.5">
-                    <span className="capitalize text-slate-500 font-medium">{p.payment_type}</span>
-                    <span>•</span>
-                    <span className="px-2 py-0.5 bg-slate-100 rounded-md font-mono text-[10px] font-bold uppercase">{p.payment_method}</span>
-                  </div>
-                  <div className="text-base font-black text-slate-900">
-                    ₹{parseFloat(p.amount).toLocaleString('en-IN')}
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                  <span className="text-[11px] text-slate-400 font-medium">
-                    {p.paid_at ? new Date(p.paid_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    {(p.payment_status === 'captured' || p.payment_status === 'completed' || p.payment_status === 'partial_refund') && (
-                      <button
-                        onClick={() => handleOpenRefundModal(p)}
-                        className="px-2.5 py-1.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold active:scale-95 transition-all"
-                      >
-                        Refund
-                      </button>
-                    )}
-                    <button
-                      onClick={() => handleDownloadInvoice(p.id)}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#D32F2F] text-white text-xs font-bold hover:bg-[#b71c1c] active:scale-95 transition-all shadow-sm"
-                    >
-                      <Download size={13} />
-                      <span>Receipt</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))
-          )
-        ) : (
-          loadingAdvances ? (
-            <div className="rounded-3xl border border-slate-200/80 bg-white p-10 text-center">
-              <RefreshCw size={24} className="animate-spin text-[#D32F2F] mx-auto mb-2" />
-              <p className="text-xs text-slate-400 font-medium">Loading advances...</p>
-            </div>
-          ) : filteredAdvances.length === 0 ? (
-            <div className="rounded-3xl border border-slate-200/80 bg-white p-10 text-center">
-              <CreditCard size={32} className="text-slate-300 mx-auto mb-2" />
-              <p className="text-sm font-bold text-slate-800">No active advances found</p>
-            </div>
-          ) : (
-            filteredAdvances.map((ap: any) => (
-              <div
-                key={ap.id}
-                className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-[0_4px_20px_rgba(0,0,0,0.02)] space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-bold text-slate-900">{ap.customer_name || 'N/A'}</div>
-                    <div className="text-xs text-slate-400">{ap.customer_mobile}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">Total Bill</div>
-                    <div className="text-xs font-bold text-slate-800">₹{parseFloat(ap.total_amount).toLocaleString('en-IN')}</div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 p-3 rounded-2xl bg-slate-50 border border-slate-100 text-xs">
-                  <div>
-                    <span className="text-slate-400 text-[10px] uppercase font-bold block">Advance Paid</span>
-                    <span className="font-bold text-emerald-600">₹{parseFloat(ap.advance_amount).toLocaleString('en-IN')}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 text-[10px] uppercase font-bold block">Balance Due</span>
-                    <span className="font-bold text-rose-500">₹{parseFloat(ap.balance_due).toLocaleString('en-IN')}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                  <span className="text-[11px] text-slate-400 font-medium">
-                    Due: {ap.due_date ? new Date(ap.due_date).toLocaleDateString('en-IN') : '—'}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    {ap.advance_payment_id && (
-                      <button
-                        onClick={() => handleDownloadInvoice(ap.advance_payment_id)}
-                        className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 active:scale-95 transition-all"
-                        title="Download Receipt"
-                      >
-                        <Download size={14} />
-                      </button>
-                    )}
-                    {parseFloat(ap.balance_due) > 0 && (
-                      <button
-                        onClick={() => handleSendReminder(ap.id)}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 active:scale-95 transition-all shadow-sm"
-                      >
-                        <MessageCircle size={13} />
-                        <span>Remind</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))
-          )
+            <option value="">All</option>
+            <option value="completed">Completed</option>
+            <option value="pending">Pending</option>
+            <option value="refunded">Refunded</option>
+          </select>
         )}
       </div>
 
-      {/* Desktop View: Data Table (>= md) */}
-      <div className="hidden md:block rounded-3xl border border-slate-200/80 bg-white shadow-[0_4px_24px_rgba(0,0,0,0.03)] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-sm">
-            <thead>
-              <tr className="bg-slate-50/70 border-b border-slate-200/80 text-slate-400 font-bold uppercase tracking-wider text-[11px]">
-                <th className="py-4 px-6">Customer Profile</th>
-                {activeTab === 'all' ? (
-                  <>
-                    <th className="py-4 px-6">Payment Category & Channel</th>
-                    <th className="py-4 px-6 text-right">Received Amount</th>
-                    <th className="py-4 px-6 text-center">Status</th>
-                    <th className="py-4 px-6">Transaction Date</th>
-                  </>
-                ) : (
-                  <>
-                    <th className="py-4 px-6 text-right">Invoice Total</th>
-                    <th className="py-4 px-6 text-right">Advance Paid</th>
-                    <th className="py-4 px-6 text-right">Balance Due</th>
-                    <th className="py-4 px-6">Settlement Due Date</th>
-                  </>
-                )}
-                <th className="py-4 px-6 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {activeTab === 'all' ? (
-                loadingPayments ? (
-                  [...Array(5)].map((_, i) => <tr key={i}><td colSpan={6} className="py-4 px-6"><div className="h-4 bg-slate-100 rounded-xl animate-pulse" /></td></tr>)
-                ) : filteredPayments.map((p: any) => (
-                  <tr key={p.id} className="hover:bg-red-50/30 transition-colors">
-                    <td className="py-4 px-6">
-                      <div className="font-bold text-slate-900">{p.customer_name || 'Walk-in Client'}</div>
-                      <div className="text-[11px] text-slate-400 font-medium">{p.customer_mobile || '—'}</div>
-                    </td>
-                    <td className="py-4 px-6">
-                      <div className="capitalize text-slate-600 font-semibold text-xs mb-1">{p.payment_type}</div>
-                      <span className="text-[10px] px-2.5 py-0.5 bg-slate-100 rounded-md font-mono font-bold uppercase text-slate-700">
-                        {p.payment_method}
-                      </span>
-                    </td>
-                    <td className="py-4 px-6 text-right font-black text-slate-900 text-sm">
-                      ₹{parseFloat(p.amount).toLocaleString('en-IN')}
-                    </td>
-                    <td className="py-4 px-6 text-center">
-                      <span className={`text-[11px] px-2.5 py-0.5 rounded-full border font-bold capitalize ${STATUS_BADGES[p.payment_status] || 'bg-slate-100'}`}>
-                        {p.payment_status}
-                      </span>
-                    </td>
-                    <td className="py-4 px-6 text-slate-600 text-xs font-medium">
-                      {p.paid_at ? new Date(p.paid_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <div className="flex justify-end gap-1.5 items-center">
-                        {(p.payment_status === 'captured' || p.payment_status === 'completed' || p.payment_status === 'partial_refund') && (
-                          <button
-                            onClick={() => handleOpenRefundModal(p)}
-                            className="px-2.5 py-1.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold transition-all"
-                            title="Initiate Refund"
-                          >
-                            Refund
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleDownloadInvoice(p.id)}
-                          className="p-2 rounded-xl border border-red-200 text-[#D32F2F] hover:bg-red-50 transition-all shadow-2xs"
-                          title="Download Receipt"
-                        >
-                          <Download size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                loadingAdvances ? (
-                  [...Array(5)].map((_, i) => <tr key={i}><td colSpan={6} className="py-4 px-6"><div className="h-4 bg-slate-100 rounded-xl animate-pulse" /></td></tr>)
-                ) : filteredAdvances.map((ap: any) => (
-                  <tr key={ap.id} className="hover:bg-red-50/30 transition-colors">
-                    <td className="py-4 px-6">
-                      <div className="font-bold text-slate-900">{ap.customer_name || 'Client'}</div>
-                      <div className="text-[11px] text-slate-400 font-medium">{ap.customer_mobile}</div>
-                    </td>
-                    <td className="py-4 px-6 text-right text-slate-700 font-medium">₹{parseFloat(ap.total_amount).toLocaleString('en-IN')}</td>
-                    <td className="py-4 px-6 text-right text-emerald-600 font-bold">₹{parseFloat(ap.advance_amount).toLocaleString('en-IN')}</td>
-                    <td className="py-4 px-6 text-right text-rose-600 font-black">₹{parseFloat(ap.balance_due).toLocaleString('en-IN')}</td>
-                    <td className="py-4 px-6 text-slate-600 text-xs font-medium">{ap.due_date ? new Date(ap.due_date).toLocaleDateString('en-IN') : '—'}</td>
-                    <td className="py-4 px-6 text-right">
-                      <div className="flex justify-end gap-1.5 items-center">
-                        {ap.advance_payment_id && (
-                          <button 
-                            onClick={() => handleDownloadInvoice(ap.advance_payment_id)}
-                            className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 transition-all"
-                            title="Download Receipt"
-                          >
-                            <Download size={14} />
-                          </button>
-                        )}
-                        {parseFloat(ap.balance_due) > 0 && (
-                          <button
-                            onClick={() => handleSendReminder(ap.id)}
-                            className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 active:scale-95 transition-all shadow-sm flex items-center gap-1"
-                          >
-                            <MessageCircle size={13} />
-                            <span>Remind</span>
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-          {((activeTab === 'all' && !filteredPayments.length && !loadingPayments) || (activeTab === 'advance' && !filteredAdvances.length && !loadingAdvances)) && (
-            <p className="text-center text-slate-400 py-12 text-xs font-bold">No payment records found.</p>
-          )}
-        </div>
-      </div>
+      {activeTab === 'all' ? (
+        <LedgerList
+          loading={loadingPayments}
+          rows={filteredPayments}
+          empty={search || statusFilter ? 'No payments match your search' : 'No payments recorded yet'}
+          cols={[
+            { label: 'Customer', cell: (p: any) => <div><p className="font-bold text-slate-900">{p.customer_name || 'Walk-in'}</p><p className="text-[12px] text-slate-400">{p.customer_mobile || '—'}</p></div> },
+            { label: 'For', cell: (p: any) => <span className="capitalize">{p.payment_type}</span> },
+            { label: 'Method', cell: (p: any) => <Tag>{(p.payment_method || '').toUpperCase()}</Tag> },
+            { label: 'Amount', align: 'right', cell: (p: any) => <span className="font-extrabold text-slate-900">{inr(p.amount)}</span> },
+            { label: 'Status', cell: (p: any) => statusTag(p.payment_status) },
+            { label: 'Date', cell: (p: any) => day(p.paid_at) },
+            {
+              label: 'Actions', align: 'right', cell: (p: any) => (
+                <div className="flex justify-end gap-1.5">
+                  {canRefund(p) && <button onClick={() => handleOpenRefundModal(p)} className="h-8 px-2.5 rounded-xl border border-slate-200 text-[12px] font-bold text-slate-600 hover:bg-slate-50">Refund</button>}
+                  <button onClick={() => handleDownloadInvoice(p.id)} className="h-8 w-8 rounded-xl bg-red-50 text-[#D32F2F] inline-flex items-center justify-center" title="Receipt"><Download size={14} /></button>
+                </div>
+              ),
+            },
+          ]}
+          card={(p: any) => ({
+            title: p.customer_name || 'Walk-in',
+            subtitle: `${day(p.paid_at)} · ${(p.payment_method || '').toUpperCase()} · ${p.payment_type || ''}`,
+            amount: inr(p.amount),
+            tone: p.payment_status === 'refunded' ? 'out' : 'neutral',
+            badge: statusTag(p.payment_status),
+            footer: (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12px] text-slate-400">{p.customer_mobile || 'No phone'}</span>
+                <div className="flex gap-1.5">
+                  {canRefund(p) && <button onClick={() => handleOpenRefundModal(p)} className="h-8 px-3 rounded-xl border border-slate-200 text-[12px] font-bold text-slate-600">Refund</button>}
+                  <button onClick={() => handleDownloadInvoice(p.id)} className="h-8 px-3 rounded-xl bg-red-50 text-[#D32F2F] text-[12px] font-bold inline-flex items-center gap-1"><Download size={13} /> Receipt</button>
+                </div>
+              </div>
+            ),
+          })}
+        />
+      ) : (
+        <LedgerList
+          loading={loadingAdvances}
+          rows={filteredAdvances}
+          empty={search ? 'No advances match your search' : 'No open advances'}
+          cols={[
+            { label: 'Customer', cell: (a: any) => <div><p className="font-bold text-slate-900">{a.customer_name || 'Customer'}</p><p className="text-[12px] text-slate-400">{a.customer_mobile}</p></div> },
+            { label: 'Bill', align: 'right', cell: (a: any) => inr(a.total_amount) },
+            { label: 'Advance', align: 'right', cell: (a: any) => <span className="font-bold text-emerald-600">{inr(a.advance_amount)}</span> },
+            { label: 'Balance', align: 'right', cell: (a: any) => <span className="font-extrabold text-[#D32F2F]">{inr(a.balance_due)}</span> },
+            { label: 'Due', cell: (a: any) => day(a.due_date) },
+            {
+              label: 'Actions', align: 'right', cell: (a: any) => (
+                <div className="flex justify-end gap-1.5">
+                  {a.advance_payment_id && <button onClick={() => handleDownloadInvoice(a.advance_payment_id)} className="h-8 w-8 rounded-xl border border-slate-200 text-slate-600 inline-flex items-center justify-center" title="Receipt"><Download size={14} /></button>}
+                  {parseFloat(a.balance_due) > 0 && <button onClick={() => handleSendReminder(a.id)} className="h-8 px-3 rounded-xl bg-emerald-600 text-white text-[12px] font-bold inline-flex items-center gap-1"><MessageCircle size={13} /> Remind</button>}
+                </div>
+              ),
+            },
+          ]}
+          card={(a: any) => ({
+            title: a.customer_name || 'Customer',
+            subtitle: `Bill ${inr(a.total_amount)} · paid ${inr(a.advance_amount)} · due ${day(a.due_date)}`,
+            amount: inr(a.balance_due),
+            tone: parseFloat(a.balance_due) > 0 ? 'out' : 'in',
+            badge: <span className="text-[11px] font-semibold text-slate-400">balance</span>,
+            footer: (a.advance_payment_id || parseFloat(a.balance_due) > 0) ? (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12px] text-slate-400">{a.customer_mobile}</span>
+                <div className="flex gap-1.5">
+                  {a.advance_payment_id && <button onClick={() => handleDownloadInvoice(a.advance_payment_id)} className="h-8 px-3 rounded-xl border border-slate-200 text-[12px] font-bold text-slate-600 inline-flex items-center gap-1"><Download size={13} /> Receipt</button>}
+                  {parseFloat(a.balance_due) > 0 && <button onClick={() => handleSendReminder(a.id)} className="h-8 px-3 rounded-xl bg-emerald-600 text-white text-[12px] font-bold inline-flex items-center gap-1"><MessageCircle size={13} /> Remind</button>}
+                </div>
+              </div>
+            ) : undefined,
+          })}
+        />
+      )}
 
       {/* Record Payment Modal */}
       <AnimatedModal isOpen={showPayModal} onClose={() => setShowPayModal(false)}>

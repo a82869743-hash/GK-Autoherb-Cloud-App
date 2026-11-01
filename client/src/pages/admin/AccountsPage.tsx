@@ -1,15 +1,9 @@
 import { useState } from 'react';
 import api from '../../api/axiosInstance';
-import { IndianRupee, TrendingUp, TrendingDown, Clock, Download, Package, Calendar, Briefcase, RefreshCw, CheckCircle2, ChevronRight, BarChart3, Receipt, FileText, Plus, Trash2 } from 'lucide-react';
+import { TrendingUp, Clock, Download, Package, Briefcase, ChevronRight, BarChart3, Receipt, FileText, Plus, Trash2 } from 'lucide-react';
 import { useAccountSummary, useTransactions, useExportReport, useAccountKPIs, usePurchaseBills, useCreatePurchaseBill, useGstReport, useReturns, useCreateReturn, downloadGstReport } from '../../api/hooks/useAccounts';
 import { useVendors } from '../../api/hooks/useVendors';
 import { useUIStore } from '../../store/uiStore';
-import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
-import AdminMetricCard from '../../components/admin/AdminMetricCard';
-import PremiumPageHeader from '../../components/shared/PremiumPageHeader';
-import PremiumStatCard from '../../components/shared/PremiumStatCard';
-import SkeletonLoader from '../../components/ui/SkeletonLoader';
-import Tabs from '../../components/ui/Tabs';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import Input from '../../components/ui/Input';
@@ -19,7 +13,20 @@ import { useJobCarts } from '../../api/hooks/useJobCarts';
 import { useBuySellList, useCompleteBuySell, useCreateBuySell } from '../../api/hooks/useBuySell';
 import { useInventory } from '../../api/hooks/useInventory';
 import StatusBadge from '../../components/shared/StatusBadge';
+import { OpsPageTitle, StatTile, ChipRow, Skeleton } from '../../components/ops/ui';
+import { LedgerList, Tag, PeriodPicker, MoneyHero } from '../../components/ops/ledger';
 import { formatINR, formatDate } from '../../utils/formatters';
+
+function stockTag(r: any) {
+  const qty = parseFloat(r.quantity);
+  if (qty === 0) return <Tag tone="red">Out of stock</Tag>;
+  if (qty <= parseFloat(r.low_stock_threshold)) return <Tag tone="amber">Low</Tag>;
+  return <Tag tone="green">OK</Tag>;
+}
+
+function gstInvoice(r: any) {
+  return r.record_type === 'sales' ? (r.job_invoice || `Job #${r.invoice_id}`) : (r.purchase_invoice || `Purchase #${r.purchase_id}`);
+}
 
 export default function AccountsPage() {
   const toast = useUIStore(s => s.toast);
@@ -273,828 +280,323 @@ export default function AccountsPage() {
     }
   };
 
+  const fmtDay = (d: string) => new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const TABS = [
+    { key: 'summary', label: 'Overview' },
+    { key: 'transactions', label: 'Ledger' },
+    { key: 'purchase_bills', label: 'Purchases' },
+    { key: 'gst', label: 'GST' },
+    { key: 'returns', label: 'Returns' },
+    { key: 'buy_sell', label: 'Buy & sell' },
+    { key: 'job_carts', label: 'Job carts' },
+    { key: 'inventory', label: 'Inventory' },
+  ];
+
   return (
-    <div className="space-y-6 pb-28 lg:pb-12 max-w-[1600px] mx-auto font-sans">
-      {/* Page Header */}
-      <AdminHeaderBar
-        title="Accounts & General Ledger"
-        subtitle="Consolidated financial overview of revenue streams, vendor ledgers, inventory assets, and payroll cycles"
-        actions={
+    <div className="space-y-4 pb-28 lg:pb-12 max-w-[1200px] mx-auto">
+      <OpsPageTitle
+        kicker="Accounts"
+        title="Money & ledger"
+        subtitle={`${fmtDay(dateFilter.from_date)} – ${fmtDay(dateFilter.to_date)}`}
+        action={
           <button
             onClick={() => setShowExport(true)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-[#D32F2F] hover:bg-[#b71c1c] text-white font-bold text-xs shadow-md shadow-red-200 transition-all active:scale-95"
+            className="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-2xl bg-[#1c1b1b] text-white text-[12px] font-bold active:scale-95 transition-transform"
           >
-            <Download size={15} />
-            <span>Export Report</span>
+            <Download size={14} /> Export
           </button>
         }
       />
 
-      {/* Date Filter & Tab Bar */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-[0_4px_24px_rgba(0,0,0,0.03)] max-w-full overflow-hidden">
-        <div className="w-full max-w-full overflow-x-auto min-w-0 scrollbar-none">
-          <Tabs 
-            tabs={[
-              { key: 'summary', label: 'Summary Overview' },
-              { key: 'transactions', label: 'General Ledger' },
-              { key: 'purchase_bills', label: 'Purchase Bills' },
-              { key: 'gst', label: 'GST Compliance' },
-              { key: 'returns', label: 'Returns Ledger' },
-              { key: 'buy_sell', label: 'Buy & Sell Trade' },
-              { key: 'job_carts', label: 'Service Job Carts' },
-              { key: 'inventory', label: 'Inventory Capital' },
-            ]} 
-            activeTab={activeTab} 
-            onTabChange={setActiveTab} 
+      <PeriodPicker value={dateFilter} onChange={setDateFilter} />
+
+      <ChipRow items={TABS} value={activeTab} onChange={setActiveTab} />
+
+      {/* ── Overview ── */}
+      {activeTab === 'summary' && (
+        <div className="space-y-3 animate-fade-in">
+          {isSummaryLoading ? (
+            <Skeleton className="h-[120px] rounded-3xl" />
+          ) : (
+            <>
+              <MoneyHero
+                kicker="This period"
+                items={[
+                  { label: 'Revenue', value: formatINR(summary?.month_revenue || 0), tone: 'in' },
+                  { label: 'Purchases', value: formatINR(summary?.total_purchases_month || 0), tone: 'out' },
+                  { label: 'Today', value: formatINR(summary?.today_revenue || 0) },
+                ]}
+              />
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                <StatTile label="Pending salaries" value={formatINR(summary?.pending_staff_payments || 0)} icon={Clock} tone="amber" hint="Payroll due" />
+                <StatTile label="B2B sales" value={formatINR(summary?.total_b2b_sales_month || 0)} icon={TrendingUp} tone="purple" hint="Wholesale" />
+                <StatTile label="B2C sales" value={formatINR(summary?.total_b2c_sales_month || 0)} icon={TrendingUp} tone="blue" hint="Counter sales" />
+                <StatTile label="Open job carts" value={summary?.open_job_carts || 0} icon={Briefcase} tone="red" hint="On the floor now" onClick={() => setActiveTab('job_carts')} />
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                {[
+                  { key: 'transactions', label: 'Ledger', icon: Receipt },
+                  { key: 'purchase_bills', label: 'Purchases', icon: FileText },
+                  { key: 'gst', label: 'GST', icon: BarChart3 },
+                  { key: 'inventory', label: 'Inventory', icon: Package },
+                ].map((l) => (
+                  <button key={l.key} onClick={() => setActiveTab(l.key)} className="app-card p-3 flex items-center gap-2.5 text-left active:scale-[0.99] transition-transform">
+                    <span className="h-9 w-9 rounded-xl bg-red-50 text-[#D32F2F] flex items-center justify-center shrink-0"><l.icon size={17} /></span>
+                    <span className="text-[13px] font-bold text-slate-800 flex-1">{l.label}</span>
+                    <ChevronRight size={15} className="text-slate-300" />
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Ledger ── */}
+      {activeTab === 'transactions' && (
+        <div className="space-y-3 animate-fade-in">
+          <MoneyHero
+            kicker="Cash flow"
+            items={[
+              { label: 'Money in', value: formatINR(kpiData?.ledger?.total_in || 0), tone: 'in' },
+              { label: 'Money out', value: formatINR(kpiData?.ledger?.total_out || 0), tone: 'out' },
+              { label: 'Net', value: formatINR(kpiData?.ledger?.net_flow || 0), tone: (kpiData?.ledger?.net_flow || 0) >= 0 ? 'in' : 'out' },
+            ]}
+          />
+          <LedgerList
+            title="All entries"
+            loading={isTxnsLoading || isKpiLoading}
+            rows={txns?.data || []}
+            empty="No ledger entries in this period"
+            cols={[
+              { label: 'Date', cell: (r: any) => fmtDay(r.transaction_date) },
+              { label: 'Type', cell: (r: any) => <span className="font-semibold text-slate-900 capitalize">{r.type.replace(/_/g, ' ')}</span> },
+              { label: 'Flow', cell: (r: any) => <Tag tone={r.direction === 'in' ? 'green' : 'red'}>{r.direction === 'in' ? 'In ↑' : 'Out ↓'}</Tag> },
+              { label: 'Amount', align: 'right', cell: (r: any) => <span className={`font-extrabold ${r.direction === 'in' ? 'text-emerald-600' : 'text-[#D32F2F]'}`}>{formatINR(r.amount)}</span> },
+              { label: 'Note', cell: (r: any) => <span className="text-slate-500">{r.note || '—'}</span> },
+              { label: 'By', cell: (r: any) => r.created_by_name || 'System' },
+            ]}
+            card={(r: any) => ({
+              title: <span className="capitalize">{r.type.replace(/_/g, ' ')}</span>,
+              subtitle: `${fmtDay(r.transaction_date)}${r.note ? ` · ${r.note}` : ''}`,
+              amount: `${r.direction === 'in' ? '+' : '−'}${formatINR(r.amount)}`,
+              tone: r.direction === 'in' ? 'in' : 'out',
+            })}
           />
         </div>
-        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 border border-slate-200/80 p-2 bg-slate-50 rounded-2xl shrink-0 w-full lg:w-auto">
-          <span className="text-[11px] font-bold text-slate-500 uppercase px-2 shrink-0">Period</span>
-          <div className="flex items-center gap-2 flex-1 min-w-[220px]">
-            <input
-              type="date"
-              className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-red-500/20"
-              value={dateFilter.from_date}
-              onChange={e => setDateFilter({...dateFilter, from_date: e.target.value})}
-            />
-            <span className="text-slate-400 text-xs font-bold shrink-0">to</span>
-            <input
-              type="date"
-              className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-red-500/20"
-              value={dateFilter.to_date}
-              onChange={e => setDateFilter({...dateFilter, to_date: e.target.value})}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Tab Content: Summary */}
-      {activeTab === 'summary' && (
-        <div className="space-y-6 animate-fade-in">
-          {isSummaryLoading ? (
-            <div className="p-12 text-center">
-              <RefreshCw className="animate-spin w-8 h-8 text-[#D32F2F] mx-auto mb-2" />
-              <p className="text-sm text-slate-400 font-medium">Computing summaries...</p>
-            </div>
-          ) : (
-            <>
-              {/* Row 1 Stats */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <AdminMetricCard
-                  label="Today's Revenue"
-                  value={`${formatINR(summary?.today_revenue || 0)}`}
-                  trend={{ text: 'Daily collections', positive: true }}
-                  icon={<IndianRupee size={20} />}
-                  accentColor="emerald"
-                />
-                <AdminMetricCard
-                  label="Period Revenue"
-                  value={`${formatINR(summary?.month_revenue || 0)}`}
-                  trend={{ text: 'Filtered interval turnover', positive: true }}
-                  icon={<TrendingUp size={20} />}
-                  accentColor="indigo"
-                />
-                <AdminMetricCard
-                  label="Period Procurements"
-                  value={`${formatINR(summary?.total_purchases_month || 0)}`}
-                  trend={{ text: 'Inventory & supplies spend', positive: false }}
-                  icon={<TrendingDown size={20} />}
-                  accentColor="rose"
-                />
-                <AdminMetricCard
-                  label="Pending Salaries"
-                  value={`${formatINR(summary?.pending_staff_payments || 0)}`}
-                  trend={{ text: 'Payroll obligations', positive: false }}
-                  icon={<Clock size={20} />}
-                  accentColor="amber"
-                />
-              </div>
-
-              {/* Row 2 Stats */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <AdminMetricCard
-                  label="B2B Bulk Sales"
-                  value={`${formatINR(summary?.total_b2b_sales_month || 0)}`}
-                  trend={{ text: 'Wholesale client ledger', positive: true }}
-                  icon={<TrendingUp size={20} />}
-                  accentColor="purple"
-                />
-                <AdminMetricCard
-                  label="B2C Retail Sales"
-                  value={`${formatINR(summary?.total_b2c_sales_month || 0)}`}
-                  trend={{ text: 'Counter customer sales', positive: true }}
-                  icon={<TrendingUp size={20} />}
-                  accentColor="sky"
-                />
-                <AdminMetricCard
-                  label="Active Detailing Jobs"
-                  value={summary?.open_job_carts || 0}
-                  trend={{ text: 'WIP cards on floor', positive: true }}
-                  icon={<Briefcase size={20} />}
-                  accentColor="indigo"
-                />
-              </div>
-            </>
-          )}
-        </div>
       )}
 
-      {/* Tab Content: Transactions Ledger */}
-      {activeTab === 'transactions' && (
-        <div className="space-y-6 animate-fade-in">
-          {isTxnsLoading || isKpiLoading ? (
-            <div className="p-12 text-center">
-              <RefreshCw className="animate-spin w-8 h-8 text-emerald-600 mx-auto mb-2" />
-              <p className="text-sm text-gray-500 font-medium">Reconciling Ledger...</p>
-            </div>
-          ) : (
-            <>
-              {/* Ledger KPIs */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <PremiumStatCard
-                  title="Total Cash Inflow"
-                  value={kpiData?.ledger?.total_in || 0}
-                  prefix="₹"
-                  icon={TrendingUp}
-                  color="#10B981"
-                  gradient="from-emerald-500/10 to-teal-400/5"
-                  delay={0.1}
-                />
-                <PremiumStatCard
-                  title="Total Cash Outflow"
-                  value={kpiData?.ledger?.total_out || 0}
-                  prefix="₹"
-                  icon={TrendingDown}
-                  color="#EF4444"
-                  gradient="from-red-500/10 to-rose-400/5"
-                  delay={0.2}
-                />
-                <PremiumStatCard
-                  title="Net Financial Flow"
-                  value={kpiData?.ledger?.net_flow || 0}
-                  prefix="₹"
-                  icon={IndianRupee}
-                  color={(kpiData?.ledger?.net_flow || 0) >= 0 ? '#10B981' : '#EF4444'}
-                  gradient={(kpiData?.ledger?.net_flow || 0) >= 0 ? 'from-emerald-500/10 to-teal-400/5' : 'from-red-500/10 to-rose-400/5'}
-                  delay={0.3}
-                />
-              </div>
-
-              {/* Ledger Table */}
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">All Ledger Records</span>
-                  <Receipt size={16} className="text-gray-400" />
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-100 text-left text-sm">
-                    <thead className="bg-gray-50">
-                      <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                        <th className="p-4">Transaction Date</th>
-                        <th className="p-4">Source Category</th>
-                        <th className="p-4">Cashflow Direction</th>
-                        <th className="p-4">Total Amount</th>
-                        <th className="p-4">Audit Note</th>
-                        <th className="p-4">Processed By</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {(txns?.data || []).map((row: any) => {
-                        const isIn = row.direction === 'in';
-                        return (
-                          <tr key={row.id} className="hover:bg-gray-50/50 transition-colors">
-                            <td className="p-4 font-medium text-gray-600">
-                              {new Date(row.transaction_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                            </td>
-                            <td className="p-4 font-bold text-gray-900 uppercase text-xs">
-                              {row.type.replace(/_/g, ' ')}
-                            </td>
-                            <td className="p-4">
-                              <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${
-                                isIn ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'
-                              }`}>
-                                {isIn ? 'INFLOW ↑' : 'OUTFLOW ↓'}
-                              </span>
-                            </td>
-                            <td className={`p-4 font-black ${isIn ? 'text-green-700' : 'text-red-700'}`}>
-                              {formatINR(row.amount)}
-                            </td>
-                            <td className="p-4 text-gray-500 text-xs font-medium">
-                              {row.note || '—'}
-                            </td>
-                            <td className="p-4 text-gray-600 font-semibold text-xs">
-                              {row.created_by_name || 'System Auto'}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Tab Content: Buy & Sell */}
+      {/* ── Buy & sell ── */}
       {activeTab === 'buy_sell' && (
-        <div className="space-y-6 animate-fade-in">
-          {isBuySellLoading || isKpiLoading ? (
-            <div className="p-12 text-center">
-              <RefreshCw className="animate-spin w-8 h-8 text-emerald-600 mx-auto mb-2" />
-              <p className="text-sm text-gray-500 font-medium">Loading trade ledger...</p>
-            </div>
-          ) : (
-            <>
-              {/* Buy Sell KPIs */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <PremiumStatCard
-                  title="Procured Materials Value"
-                  value={kpiData?.buy_sell?.total_purchases || 0}
-                  prefix="₹"
-                  icon={TrendingDown}
-                  color="#EF4444"
-                  gradient="from-red-500/10 to-rose-400/5"
-                  delay={0.1}
-                />
-                <PremiumStatCard
-                  title="Trade Revenue (Sales)"
-                  value={kpiData?.buy_sell?.total_sales || 0}
-                  prefix="₹"
-                  icon={TrendingUp}
-                  color="#10B981"
-                  gradient="from-emerald-500/10 to-teal-400/5"
-                  delay={0.2}
-                />
-                <PremiumStatCard
-                  title="Pending Receivables"
-                  value={kpiData?.buy_sell?.pending_value || 0}
-                  prefix="₹"
-                  icon={Clock}
-                  color="#F59E0B"
-                  gradient="from-amber-500/10 to-yellow-400/5"
-                  delay={0.3}
-                />
-              </div>
-
-              {/* Buy Sell Table */}
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">B2B / B2C Trade Ledger</span>
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" onClick={() => setSaleModalOpen(true)} icon={<Plus size={14} />}>
-                      Record Product Sale
-                    </Button>
-                    <FileText size={16} className="text-gray-400" />
-                  </div>
+        <div className="space-y-3 animate-fade-in">
+          <div className="grid grid-cols-3 gap-2.5">
+            <StatTile label="Bought" value={formatINR(kpiData?.buy_sell?.total_purchases || 0)} tone="red" />
+            <StatTile label="Sold" value={formatINR(kpiData?.buy_sell?.total_sales || 0)} tone="green" />
+            <StatTile label="To receive" value={formatINR(kpiData?.buy_sell?.pending_value || 0)} tone="amber" />
+          </div>
+          <LedgerList
+            title="Trades"
+            action={<Button size="sm" onClick={() => setSaleModalOpen(true)} icon={<Plus size={14} />}>Record sale</Button>}
+            loading={isBuySellLoading || isKpiLoading}
+            rows={buySell?.data || []}
+            empty="No trades in this period"
+            cols={[
+              { label: 'Date', cell: (r: any) => fmtDay(r.transaction_date) },
+              { label: 'Type', cell: (r: any) => <Tag tone={r.type === 'buy' ? 'red' : r.type === 'sell_b2b' ? 'purple' : 'green'}>{r.type === 'buy' ? 'Buy' : r.type === 'sell_b2b' ? 'Sell B2B' : 'Sell B2C'}</Tag> },
+              { label: 'Party', cell: (r: any) => <span className="font-semibold text-slate-900">{r.party_name}</span> },
+              { label: 'Product', cell: (r: any) => r.product_name },
+              { label: 'Qty', cell: (r: any) => r.quantity },
+              { label: 'Total', align: 'right', cell: (r: any) => <span className="font-extrabold text-slate-900">{formatINR(r.total_amount)}</span> },
+              { label: 'Status', cell: (r: any) => <StatusBadge status={r.status} /> },
+              {
+                label: 'Action', align: 'right', cell: (r: any) => r.status === 'pending'
+                  ? <Button size="sm" onClick={() => handleCompleteBs(r.id)} loading={completeBuySellMutation.isPending}>Complete</Button>
+                  : <span className="text-[11px] font-bold text-slate-400">Settled</span>,
+              },
+            ]}
+            card={(r: any) => ({
+              title: r.party_name,
+              subtitle: `${r.product_name} · ${r.quantity} · ${fmtDay(r.transaction_date)}`,
+              amount: formatINR(r.total_amount),
+              tone: r.type === 'buy' ? 'out' : 'in',
+              badge: <Tag tone={r.type === 'buy' ? 'red' : r.type === 'sell_b2b' ? 'purple' : 'green'}>{r.type === 'buy' ? 'Buy' : r.type === 'sell_b2b' ? 'Sell B2B' : 'Sell B2C'}</Tag>,
+              footer: r.status === 'pending' ? (
+                <div className="flex items-center justify-between">
+                  <StatusBadge status={r.status} />
+                  <Button size="sm" onClick={() => handleCompleteBs(r.id)} loading={completeBuySellMutation.isPending}>Mark complete</Button>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-100 text-left text-sm">
-                    <thead className="bg-gray-50">
-                      <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                        <th className="p-4">Date</th>
-                        <th className="p-4">Transaction Type</th>
-                        <th className="p-4">Counterparty Name</th>
-                        <th className="p-4">Product details</th>
-                        <th className="p-4">Volume</th>
-                        <th className="p-4">Gross total</th>
-                        <th className="p-4">Current Status</th>
-                        <th className="p-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {(buySell?.data || []).map((row: any) => {
-                        let badgeColor = '';
-                        let typeLabel = '';
-                        if (row.type === 'buy') {
-                          badgeColor = 'text-red-700 bg-red-50 border-red-200';
-                          typeLabel = 'BUY';
-                        } else if (row.type === 'sell_b2b') {
-                          badgeColor = 'text-[#b71c1c] bg-red-50 border-red-200';
-                          typeLabel = 'SELL (B2B)';
-                        } else {
-                          badgeColor = 'text-emerald-700 bg-emerald-50 border-emerald-200';
-                          typeLabel = 'SELL (B2C)';
-                        }
-
-                        return (
-                          <tr key={row.id} className="hover:bg-gray-50/50 transition-colors">
-                            <td className="p-4 font-medium text-gray-600">
-                              {new Date(row.transaction_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                            </td>
-                            <td className="p-4">
-                              <span className={`inline-flex px-2.5 py-0.5 rounded text-[10px] font-bold border ${badgeColor}`}>
-                                {typeLabel}
-                              </span>
-                            </td>
-                            <td className="p-4 font-semibold text-gray-900">
-                              {row.party_name}
-                            </td>
-                            <td className="p-4 text-gray-700 font-medium">
-                              {row.product_name}
-                            </td>
-                            <td className="p-4 font-bold text-gray-900">
-                              {row.quantity}
-                            </td>
-                            <td className="p-4 font-black text-gray-900">
-                              {formatINR(row.total_amount)}
-                            </td>
-                            <td className="p-4">
-                              <StatusBadge status={row.status} />
-                            </td>
-                            <td className="p-4 text-right">
-                              {row.status === 'pending' ? (
-                                <Button
-                                  variant="primary"
-                                  size="sm"
-                                  onClick={() => handleCompleteBs(row.id)}
-                                  loading={completeBuySellMutation.isPending}
-                                >
-                                  Complete
-                                </Button>
-                              ) : (
-                                <span className="text-gray-400 text-xs font-bold uppercase">Settled</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </>
-          )}
+              ) : undefined,
+            })}
+          />
         </div>
       )}
 
-      {/* Tab Content: Job Carts */}
+      {/* ── Job carts ── */}
       {activeTab === 'job_carts' && (
-        <div className="space-y-6 animate-fade-in">
-          {isJobCartsLoading || isKpiLoading ? (
-            <div className="p-12 text-center">
-              <RefreshCw className="animate-spin w-8 h-8 text-emerald-600 mx-auto mb-2" />
-              <p className="text-sm text-gray-500 font-medium">Analyzing job carts...</p>
-            </div>
-          ) : (
-            <>
-              {/* Job Carts KPIs */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <PremiumStatCard
-                  title="Total Workshop Pipeline"
-                  value={kpiData?.job_carts?.total_value || 0}
-                  prefix="₹"
-                  icon={IndianRupee}
-                  color="#D32F2F"
-                  gradient="from-red-500/10 to-red-400/5"
-                  delay={0.1}
-                />
-                <PremiumStatCard
-                  title="Settled Revenue"
-                  value={kpiData?.job_carts?.completed_value || 0}
-                  prefix="₹"
-                  icon={CheckCircle2}
-                  color="#10B981"
-                  gradient="from-emerald-500/10 to-teal-400/5"
-                  delay={0.2}
-                />
-                <PremiumStatCard
-                  title="Active Workshop Carts"
-                  value={kpiData?.job_carts?.open_count || 0}
-                  icon={Briefcase}
-                  color="#F59E0B"
-                  gradient="from-amber-500/10 to-yellow-400/5"
-                  delay={0.3}
-                />
-              </div>
-
-              {/* Job Carts Table */}
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Service Workshop Operations</span>
-                  <Briefcase size={16} className="text-gray-400" />
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-100 text-left text-sm">
-                    <thead className="bg-gray-50">
-                      <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                        <th className="p-4">Job ID</th>
-                        <th className="p-4">Vehicle Details</th>
-                        <th className="p-4">Customer</th>
-                        <th className="p-4">Visit Date</th>
-                        <th className="p-4">Gross Revenue</th>
-                        <th className="p-4">Status</th>
-                        <th className="p-4 text-right">Invoice</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {(jobCarts?.data || []).map((row: any) => {
-                        return (
-                          <tr key={row.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => navigate(`/admin/job-carts/${row.id}`)}>
-                            <td className="p-4 font-mono text-xs text-gray-400">
-                              #JC-{String(row.id).padStart(4, '0')}
-                            </td>
-                            <td className="p-4">
-                              <div className="flex flex-col">
-                                <span className="font-bold text-gray-900">{row.registration_no}</span>
-                                <span className="text-xs text-gray-500">{row.brand} {row.model}</span>
-                              </div>
-                            </td>
-                            <td className="p-4 font-semibold text-gray-900">
-                              {row.customer_name}
-                            </td>
-                            <td className="p-4 text-gray-500 font-medium">
-                              {formatDate(row.visit_date)}
-                            </td>
-                            <td className="p-4 font-black text-gray-900">
-                              {formatINR(row.total_amount)}
-                            </td>
-                            <td className="p-4">
-                              <StatusBadge status={row.status} />
-                            </td>
-                            <td className="p-4 text-right">
-                              <span className="text-xs font-bold text-[#D32F2F] hover:underline flex items-center justify-end gap-0.5">
-                                View Details <ChevronRight size={12} />
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </>
-          )}
+        <div className="space-y-3 animate-fade-in">
+          <div className="grid grid-cols-3 gap-2.5">
+            <StatTile label="Pipeline" value={formatINR(kpiData?.job_carts?.total_value || 0)} tone="red" />
+            <StatTile label="Settled" value={formatINR(kpiData?.job_carts?.completed_value || 0)} tone="green" />
+            <StatTile label="Open" value={kpiData?.job_carts?.open_count || 0} tone="amber" />
+          </div>
+          <LedgerList
+            title="Job carts"
+            loading={isJobCartsLoading || isKpiLoading}
+            rows={jobCarts?.data || []}
+            empty="No job carts in this period"
+            onRowClick={(r: any) => navigate(`/admin/job-carts/${r.id}`)}
+            cols={[
+              { label: 'Job', cell: (r: any) => <span className="font-mono text-[12px] text-slate-400">#JC-{String(r.id).padStart(4, '0')}</span> },
+              { label: 'Vehicle', cell: (r: any) => <div><p className="font-bold text-slate-900">{r.registration_no}</p><p className="text-[12px] text-slate-500">{r.brand} {r.model}</p></div> },
+              { label: 'Customer', cell: (r: any) => <span className="font-semibold text-slate-900">{r.customer_name}</span> },
+              { label: 'Visit', cell: (r: any) => formatDate(r.visit_date) },
+              { label: 'Amount', align: 'right', cell: (r: any) => <span className="font-extrabold text-slate-900">{formatINR(r.total_amount)}</span> },
+              { label: 'Status', cell: (r: any) => <StatusBadge status={r.status} /> },
+            ]}
+            card={(r: any) => ({
+              title: `${r.registration_no} · ${r.customer_name}`,
+              subtitle: `${r.brand} ${r.model} · ${formatDate(r.visit_date)}`,
+              amount: formatINR(r.total_amount),
+              badge: <StatusBadge status={r.status} />,
+            })}
+          />
         </div>
       )}
 
-      {/* Tab Content: Inventory */}
+      {/* ── Inventory ── */}
       {activeTab === 'inventory' && (
-        <div className="space-y-6 animate-fade-in">
-          {isInventoryLoading || isKpiLoading ? (
-            <div className="p-12 text-center">
-              <RefreshCw className="animate-spin w-8 h-8 text-emerald-600 mx-auto mb-2" />
-              <p className="text-sm text-gray-500 font-medium">Valuing assets...</p>
-            </div>
-          ) : (
-            <>
-              {/* Inventory KPIs */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <PremiumStatCard
-                  title="Unique Catalog Items"
-                  value={kpiData?.inventory?.total_items || 0}
-                  icon={Package}
-                  color="#D32F2F"
-                  gradient="from-red-500/10 to-red-400/5"
-                  delay={0.1}
-                />
-                <PremiumStatCard
-                  title="In-Stock Units"
-                  value={kpiData?.inventory?.total_units || 0}
-                  icon={TrendingUp}
-                  color="#10B981"
-                  gradient="from-emerald-500/10 to-teal-400/5"
-                  delay={0.2}
-                />
-                <PremiumStatCard
-                  title="Low Stock Warning Thresholds"
-                  value={kpiData?.inventory?.low_stock_count || 0}
-                  icon={TrendingDown}
-                  color={kpiData?.inventory?.low_stock_count > 0 ? '#EF4444' : '#10B981'}
-                  gradient={kpiData?.inventory?.low_stock_count > 0 ? 'from-red-500/10 to-rose-400/5' : 'from-emerald-500/10 to-teal-400/5'}
-                  delay={0.3}
-                />
-              </div>
-
-              {/* Inventory Table */}
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Material Asset Registry</span>
-                  <Package size={16} className="text-gray-400" />
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-100 text-left text-sm">
-                    <thead className="bg-gray-50">
-                      <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                        <th className="p-4">Asset ID</th>
-                        <th className="p-4">Material / Product Name</th>
-                        <th className="p-4">Active Stock Count</th>
-                        <th className="p-4">Base Unit Price</th>
-                        <th className="p-4">Retail Value</th>
-                        <th className="p-4">Status Alert</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {(inventory?.data || []).map((row: any) => {
-                        const isLow = parseFloat(row.quantity) <= parseFloat(row.low_stock_threshold);
-                        const isOut = parseFloat(row.quantity) === 0;
-
-                        return (
-                          <tr key={row.id} className="hover:bg-gray-50/50 transition-colors">
-                            <td className="p-4 font-mono text-xs text-gray-400">
-                              #INV-{String(row.id).padStart(4, '0')}
-                            </td>
-                            <td className="p-4 font-semibold text-gray-900">
-                              {row.product_name}
-                            </td>
-                            <td className={`p-4 font-black ${isLow ? 'text-red-700' : 'text-emerald-700'}`}>
-                              {parseFloat(row.quantity)} <span className="text-[10px] font-bold uppercase text-gray-400">{row.unit}</span>
-                            </td>
-                            <td className="p-4 font-medium text-gray-900">
-                              {row.unit_price ? formatINR(row.unit_price) : '—'}
-                            </td>
-                            <td className="p-4 font-medium text-gray-900">
-                              {row.retail_price ? formatINR(row.retail_price) : '—'}
-                            </td>
-                            <td className="p-4">
-                              {isOut ? (
-                                <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-red-100 text-red-800 border border-red-200">
-                                  Out of Stock
-                                </span>
-                              ) : isLow ? (
-                                <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-100 text-amber-800 border border-amber-200">
-                                  Low Stock
-                                </span>
-                              ) : (
-                                <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                  OK
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </>
-          )}
+        <div className="space-y-3 animate-fade-in">
+          <div className="grid grid-cols-3 gap-2.5">
+            <StatTile label="Items" value={kpiData?.inventory?.total_items || 0} tone="slate" />
+            <StatTile label="Units" value={kpiData?.inventory?.total_units || 0} tone="green" />
+            <StatTile label="Low stock" value={kpiData?.inventory?.low_stock_count || 0} tone={kpiData?.inventory?.low_stock_count > 0 ? 'red' : 'green'} />
+          </div>
+          <LedgerList
+            title="Stock"
+            loading={isInventoryLoading || isKpiLoading}
+            rows={inventory?.data || []}
+            empty="No inventory items"
+            cols={[
+              { label: 'Item', cell: (r: any) => <span className="font-semibold text-slate-900">{r.product_name}</span> },
+              { label: 'In stock', cell: (r: any) => <span className="font-extrabold">{parseFloat(r.quantity)} <span className="text-[10px] uppercase text-slate-400">{r.unit}</span></span> },
+              { label: 'Unit price', cell: (r: any) => (r.unit_price ? formatINR(r.unit_price) : '—') },
+              { label: 'Retail', cell: (r: any) => (r.retail_price ? formatINR(r.retail_price) : '—') },
+              { label: 'Status', cell: (r: any) => stockTag(r) },
+            ]}
+            card={(r: any) => ({
+              title: r.product_name,
+              subtitle: `${r.unit_price ? formatINR(r.unit_price) : '—'} / ${r.unit || 'unit'}${r.retail_price ? ` · retail ${formatINR(r.retail_price)}` : ''}`,
+              amount: <>{parseFloat(r.quantity)} <span className="text-[11px] text-slate-400">{r.unit}</span></>,
+              badge: stockTag(r),
+            })}
+          />
         </div>
       )}
 
-      {/* Tab Content: Purchase Bills */}
+      {/* ── Purchases ── */}
       {activeTab === 'purchase_bills' && (
-        <div className="space-y-6 animate-fade-in">
-          <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-            <div>
-              <h3 className="text-sm font-bold text-gray-900">Procurements & Invoices</h3>
-              <p className="text-xs text-gray-500">Record and track inventory purchases from certified suppliers.</p>
-            </div>
-            <button
-              onClick={() => setPurchaseModalOpen(true)}
-              className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-emerald-800 text-white text-xs font-bold rounded-xl hover:from-emerald-700 hover:to-emerald-900 transition flex items-center gap-1 shadow-sm shadow-emerald-500/25"
-            >
-              <Plus size={14} /> Record Purchase Bill
-            </button>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-100 text-left text-sm">
-                <thead className="bg-gray-50">
-                  <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                    <th className="p-4">Purchase Date</th>
-                    <th className="p-4">Invoice / ID</th>
-                    <th className="p-4">Vendor Name</th>
-                    <th className="p-4">Total Price (incl. tax)</th>
-                    <th className="p-4">Tax Amount</th>
-                    <th className="p-4">Notes</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {(purchaseBills?.data || []).map((row: any) => (
-                    <tr key={row.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="p-4 text-gray-600 font-medium">
-                        {new Date(row.purchase_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </td>
-                      <td className="p-4 font-mono text-xs text-gray-950 font-bold">
-                        {row.invoice_number || `#PUR-${String(row.id).padStart(4, '0')}`}
-                      </td>
-                      <td className="p-4 font-semibold text-gray-900">{row.vendor_name || '—'}</td>
-                      <td className="p-4 font-black text-gray-900">{formatINR(row.total_amount)}</td>
-                      <td className="p-4 text-gray-600 font-medium">{formatINR(row.tax_amount)}</td>
-                      <td className="p-4 text-gray-500 text-xs">{row.notes || '—'}</td>
-                    </tr>
-                  ))}
-                  {(!purchaseBills?.data || purchaseBills.data.length === 0) && (
-                    <tr>
-                      <td colSpan={6} className="p-8 text-center text-xs text-gray-400 font-bold uppercase">
-                        No purchase bills recorded yet
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+        <div className="space-y-3 animate-fade-in">
+          <LedgerList
+            title="Purchase bills"
+            action={<Button size="sm" onClick={() => setPurchaseModalOpen(true)} icon={<Plus size={14} />}>Add bill</Button>}
+            rows={purchaseBills?.data || []}
+            empty="No purchase bills in this period"
+            cols={[
+              { label: 'Date', cell: (r: any) => fmtDay(r.purchase_date) },
+              { label: 'Invoice', cell: (r: any) => <span className="font-mono text-[12px] font-bold text-slate-900">{r.invoice_number || `#PUR-${String(r.id).padStart(4, '0')}`}</span> },
+              { label: 'Vendor', cell: (r: any) => <span className="font-semibold text-slate-900">{r.vendor_name || '—'}</span> },
+              { label: 'Total', align: 'right', cell: (r: any) => <span className="font-extrabold text-slate-900">{formatINR(r.total_amount)}</span> },
+              { label: 'Tax', align: 'right', cell: (r: any) => formatINR(r.tax_amount) },
+              { label: 'Notes', cell: (r: any) => <span className="text-slate-500">{r.notes || '—'}</span> },
+            ]}
+            card={(r: any) => ({
+              title: r.vendor_name || 'Vendor',
+              subtitle: `${r.invoice_number || `#PUR-${String(r.id).padStart(4, '0')}`} · ${fmtDay(r.purchase_date)}`,
+              amount: formatINR(r.total_amount),
+              tone: 'out',
+              badge: <span className="text-[11px] text-slate-400">tax {formatINR(r.tax_amount)}</span>,
+            })}
+          />
         </div>
       )}
 
-      {/* Tab Content: GST Compliance */}
+      {/* ── GST ── */}
       {activeTab === 'gst' && (
-        <div className="space-y-6 animate-fade-in">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-            <div>
-              <h3 className="text-sm font-bold text-gray-900">GST Compliance Ledger</h3>
-              <p className="text-xs text-gray-500">View GSTR-1 & GSTR-2 aggregates and export monthly summaries.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <select
-                className="px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
-                value={gstMonth}
-                onChange={e => setGstMonth(Number(e.target.value))}
-              >
-                {Array.from({ length: 12 }, (_, i) => (
-                  <option key={i+1} value={i+1}>
-                    {new Date(2000, i).toLocaleString('default', { month: 'long' })}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
-                value={gstYear}
-                onChange={e => setGstYear(Number(e.target.value))}
-              >
-                {[2025, 2026, 2027, 2028].map(y => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-              <button
-                onClick={() => handleDownloadGst('csv')}
-                disabled={!!downloadingGst}
-                className="px-3 py-1.5 border border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-xs font-bold rounded-xl transition flex items-center gap-1 shadow-sm disabled:opacity-60 active:scale-95"
-              >
-                <Download size={13} /> {downloadingGst === 'csv' ? 'Exporting...' : 'Export CSV'}
+        <div className="space-y-3 animate-fade-in">
+          <div className="app-card p-3 flex flex-wrap items-center gap-2">
+            <select className="h-10 flex-1 min-w-[120px] rounded-xl border border-slate-200 bg-slate-50 px-2.5 text-[13px] font-semibold" value={gstMonth} onChange={e => setGstMonth(Number(e.target.value))}>
+              {Array.from({ length: 12 }, (_, i) => (
+                <option key={i + 1} value={i + 1}>{new Date(2000, i).toLocaleString('default', { month: 'long' })}</option>
+              ))}
+            </select>
+            <select className="h-10 w-[96px] rounded-xl border border-slate-200 bg-slate-50 px-2.5 text-[13px] font-semibold" value={gstYear} onChange={e => setGstYear(Number(e.target.value))}>
+              {[2025, 2026, 2027, 2028].map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <button onClick={() => handleDownloadGst('csv')} disabled={!!downloadingGst} className="flex-1 sm:flex-none h-10 px-3 rounded-xl border border-slate-200 bg-white text-[12px] font-bold text-slate-700 inline-flex items-center justify-center gap-1.5 disabled:opacity-60">
+                <Download size={13} /> {downloadingGst === 'csv' ? 'Exporting…' : 'CSV'}
               </button>
-              <button
-                onClick={() => handleDownloadGst('xlsx')}
-                disabled={!!downloadingGst}
-                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl transition flex items-center gap-1 shadow-sm disabled:opacity-60 active:scale-95"
-              >
-                <Download size={13} /> {downloadingGst === 'xlsx' ? 'Exporting...' : 'Export Excel'}
+              <button onClick={() => handleDownloadGst('xlsx')} disabled={!!downloadingGst} className="flex-1 sm:flex-none h-10 px-3 rounded-xl bg-[#1c1b1b] text-white text-[12px] font-bold inline-flex items-center justify-center gap-1.5 disabled:opacity-60">
+                <Download size={13} /> {downloadingGst === 'xlsx' ? 'Exporting…' : 'Excel'}
               </button>
             </div>
           </div>
-
-          {/* GST KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <PremiumStatCard
-              title="Sales GST (GSTR-1 Outward)"
-              value={gstReport?.summary?.sales?.gst || 0}
-              prefix="₹"
-              icon={TrendingUp}
-              color="#10B981"
-              gradient="from-emerald-500/10 to-teal-400/5"
-              delay={0.1}
-            />
-            <PremiumStatCard
-              title="Purchase GST (GSTR-2 Inward ITC)"
-              value={gstReport?.summary?.purchases?.gst || 0}
-              prefix="₹"
-              icon={TrendingDown}
-              color="#EF4444"
-              gradient="from-red-500/10 to-rose-400/5"
-              delay={0.2}
-            />
-            <PremiumStatCard
-              title="Net GST Payable"
-              value={gstReport?.summary?.net_gst_payable || 0}
-              prefix="₹"
-              icon={IndianRupee}
-              color={(gstReport?.summary?.net_gst_payable || 0) >= 0 ? '#F59E0B' : '#10B981'}
-              gradient={(gstReport?.summary?.net_gst_payable || 0) >= 0 ? 'from-amber-500/10 to-yellow-400/5' : 'from-emerald-500/10 to-teal-400/5'}
-              delay={0.3}
-            />
-          </div>
-
-          {/* GST Record Table */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-            <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">GST Audit Journal Entries</span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-100 text-left text-sm">
-                <thead className="bg-gray-50">
-                  <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                    <th className="p-4">Type</th>
-                    <th className="p-4">Invoice No</th>
-                    <th className="p-4">GSTIN</th>
-                    <th className="p-4">Taxable Value</th>
-                    <th className="p-4">CGST</th>
-                    <th className="p-4">SGST</th>
-                    <th className="p-4">Total GST</th>
-                    <th className="p-4">Created Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {(gstReport?.records || []).map((row: any) => {
-                    const isSales = row.record_type === 'sales';
-                    return (
-                      <tr key={row.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="p-4">
-                          <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${
-                            isSales ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'
-                          }`}>
-                            {isSales ? 'SALES' : 'PURCHASE'}
-                          </span>
-                        </td>
-                        <td className="p-4 font-mono text-xs font-bold text-gray-950">
-                          {isSales ? (row.job_invoice || `Job #${row.invoice_id}`) : (row.purchase_invoice || `Purchase #${row.purchase_id}`)}
-                        </td>
-                        <td className="p-4 font-semibold text-gray-700">{row.gstin || '—'}</td>
-                        <td className="p-4 font-medium text-gray-900">{formatINR(row.taxable_amount)}</td>
-                        <td className="p-4 text-gray-600">{formatINR(row.cgst)}</td>
-                        <td className="p-4 text-gray-600">{formatINR(row.sgst)}</td>
-                        <td className="p-4 font-bold text-gray-900">{formatINR(row.total_gst)}</td>
-                        <td className="p-4 text-gray-500 text-xs">
-                          {new Date(row.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {(!gstReport?.records || gstReport.records.length === 0) && (
-                    <tr>
-                      <td colSpan={8} className="p-8 text-center text-xs text-gray-400 font-bold uppercase">
-                        No GST records found for this period
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <MoneyHero
+            kicker="GST for the month"
+            items={[
+              { label: 'On sales', value: formatINR(gstReport?.summary?.sales?.gst || 0) },
+              { label: 'On purchases', value: formatINR(gstReport?.summary?.purchases?.gst || 0), tone: 'in' },
+              { label: 'Net payable', value: formatINR(gstReport?.summary?.net_gst_payable || 0), tone: (gstReport?.summary?.net_gst_payable || 0) > 0 ? 'out' : 'in' },
+            ]}
+          />
+          <LedgerList
+            title="GST entries"
+            rows={gstReport?.records || []}
+            empty="No GST entries for this month"
+            cols={[
+              { label: 'Type', cell: (r: any) => <Tag tone={r.record_type === 'sales' ? 'green' : 'red'}>{r.record_type === 'sales' ? 'Sales' : 'Purchase'}</Tag> },
+              { label: 'Invoice', cell: (r: any) => <span className="font-mono text-[12px] font-bold text-slate-900">{gstInvoice(r)}</span> },
+              { label: 'GSTIN', cell: (r: any) => r.gstin || '—' },
+              { label: 'Taxable', align: 'right', cell: (r: any) => formatINR(r.taxable_amount) },
+              { label: 'CGST', align: 'right', cell: (r: any) => formatINR(r.cgst) },
+              { label: 'SGST', align: 'right', cell: (r: any) => formatINR(r.sgst) },
+              { label: 'Total GST', align: 'right', cell: (r: any) => <span className="font-extrabold text-slate-900">{formatINR(r.total_gst)}</span> },
+              { label: 'Date', cell: (r: any) => new Date(r.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) },
+            ]}
+            card={(r: any) => ({
+              title: gstInvoice(r),
+              subtitle: `Taxable ${formatINR(r.taxable_amount)} · CGST ${formatINR(r.cgst)} · SGST ${formatINR(r.sgst)}`,
+              amount: formatINR(r.total_gst),
+              badge: <Tag tone={r.record_type === 'sales' ? 'green' : 'red'}>{r.record_type === 'sales' ? 'Sales' : 'Purchase'}</Tag>,
+            })}
+          />
         </div>
       )}
 
-      {/* Tab Content: Returns Ledger */}
+      {/* ── Returns ── */}
       {activeTab === 'returns' && (
-        <div className="space-y-6 animate-fade-in">
-          <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-            <div>
-              <h3 className="text-sm font-bold text-gray-900">Returns & Billing Reversals</h3>
-              <p className="text-xs text-gray-500">Record sales returns (refunds/credit notes) and purchase returns (debit notes).</p>
-            </div>
-            <button
-              onClick={() => setReturnModalOpen(true)}
-              className="px-3.5 py-2 bg-gradient-to-r from-red-600 to-red-800 text-white text-xs font-bold rounded-xl hover:from-red-700 hover:to-red-900 transition flex items-center gap-1 shadow-sm shadow-red-500/25"
-            >
-              <Plus size={14} /> Log Return Note
-            </button>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-100 text-left text-sm">
-                <thead className="bg-gray-50">
-                  <tr className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                    <th className="p-4">Return Date</th>
-                    <th className="p-4">Return ID</th>
-                    <th className="p-4">Original Bill ID</th>
-                    <th className="p-4">Return Type</th>
-                    <th className="p-4">Refunded Amount</th>
-                    <th className="p-4">Reason / Notes</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {(returnsList || []).map((row: any) => {
-                    const isSalesReturn = row.return_type === 'sales_return';
-                    return (
-                      <tr key={row.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="p-4 text-gray-600 font-medium">
-                          {new Date(row.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                        </td>
-                        <td className="p-4 font-mono text-xs text-gray-950 font-bold">
-                          #RET-{String(row.id).padStart(4, '0')}
-                        </td>
-                        <td className="p-4 font-mono text-xs font-semibold text-gray-700">
-                          {isSalesReturn ? `Bill #${row.original_bill_id}` : `Purchase #${row.original_bill_id}`}
-                        </td>
-                        <td className="p-4">
-                          <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${
-                            isSalesReturn ? 'text-red-700 bg-red-50 border-red-200' : 'text-[#b71c1c] bg-red-50 border-red-200'
-                          }`}>
-                            {isSalesReturn ? 'SALES RETURN' : 'PURCHASE RETURN'}
-                          </span>
-                        </td>
-                        <td className="p-4 font-black text-gray-900">{formatINR(row.amount)}</td>
-                        <td className="p-4 text-gray-500 text-xs font-medium">{row.reason || '—'}</td>
-                      </tr>
-                    );
-                  })}
-                  {(!returnsList || returnsList.length === 0) && (
-                    <tr>
-                      <td colSpan={6} className="p-8 text-center text-xs text-gray-400 font-bold uppercase">
-                        No return notes logged yet
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+        <div className="space-y-3 animate-fade-in">
+          <LedgerList
+            title="Returns & refunds"
+            action={<Button size="sm" onClick={() => setReturnModalOpen(true)} icon={<Plus size={14} />}>Log return</Button>}
+            rows={returnsList || []}
+            empty="No returns logged yet"
+            cols={[
+              { label: 'Date', cell: (r: any) => fmtDay(r.created_at) },
+              { label: 'Return', cell: (r: any) => <span className="font-mono text-[12px] font-bold text-slate-900">#RET-{String(r.id).padStart(4, '0')}</span> },
+              { label: 'Original', cell: (r: any) => (r.return_type === 'sales_return' ? `Bill #${r.original_bill_id}` : `Purchase #${r.original_bill_id}`) },
+              { label: 'Type', cell: (r: any) => <Tag tone={r.return_type === 'sales_return' ? 'red' : 'amber'}>{r.return_type === 'sales_return' ? 'Sales return' : 'Purchase return'}</Tag> },
+              { label: 'Amount', align: 'right', cell: (r: any) => <span className="font-extrabold text-slate-900">{formatINR(r.amount)}</span> },
+              { label: 'Reason', cell: (r: any) => <span className="text-slate-500">{r.reason || '—'}</span> },
+            ]}
+            card={(r: any) => ({
+              title: r.return_type === 'sales_return' ? `Bill #${r.original_bill_id}` : `Purchase #${r.original_bill_id}`,
+              subtitle: `${fmtDay(r.created_at)}${r.reason ? ` · ${r.reason}` : ''}`,
+              amount: formatINR(r.amount),
+              tone: r.return_type === 'sales_return' ? 'out' : 'in',
+              badge: <Tag tone={r.return_type === 'sales_return' ? 'red' : 'amber'}>{r.return_type === 'sales_return' ? 'Sales return' : 'Purchase return'}</Tag>,
+            })}
+          />
         </div>
       )}
 

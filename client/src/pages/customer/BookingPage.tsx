@@ -69,6 +69,8 @@ function sortServicesByPriority(services: any[]): any[] {
   return [...services].sort((a, b) => getServicePriority(a.name) - getServicePriority(b.name));
 }
 
+const FIELD = 'w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-[13px] font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/40 disabled:bg-slate-50 disabled:text-slate-500';
+
 export default function BookingPage() {
   const toast = useUIStore((s) => s.toast);
   const navigate = useNavigate();
@@ -1421,529 +1423,342 @@ export default function BookingPage() {
 
       {/* ═══ Step 3: Confirm ═══ */}
       {step === 3 && (
-        <div className="bg-white rounded-lg p-6 shadow-sm">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] mb-4">Booking Summary</p>
-
-          <div className="space-y-3 text-sm mb-6">
-            <div className="flex items-center gap-3 py-2 border-b border-gray-50">
-              <Sparkles size={16} className="text-[#D32F2F] shrink-0" />
-              <span className="text-[#5f5e5e]">Service(s)</span>
-              <span className="ml-auto font-bold text-[#1c1b1b] text-right ml-4">
+        <div className="space-y-4">
+          {/* ── Booking summary ── */}
+          <div className="app-card overflow-hidden">
+            <div className="bg-gradient-to-br from-[#1c1b1b] via-[#2a1414] to-[#7f0000] px-4 py-4 text-white">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#ff8a80]">Your booking</p>
+              <p className="font-display text-[17px] font-extrabold leading-snug mt-1">
                 {isPackageBooking ? selectedPackageServiceNames.join(', ') : selectedServicesObjs.length > 0 ? selectedServicesObjs.map(s => s.name).join(', ') : (selectedPackageObj?.package_name || selectedPackageObj?.name)}
-              </span>
+              </p>
+              <p className="text-[12px] text-white/70 mt-1 flex items-center gap-1.5">
+                <Car size={13} className="shrink-0" />
+                <span className="truncate">{brand} {model} {regNo && `· ${regNo}`}</span>
+              </p>
             </div>
-            <div className="flex items-center gap-3 py-2 border-b border-gray-50">
-              <Car size={16} className="text-[#D32F2F] shrink-0" />
-              <span className="text-[#5f5e5e]">Vehicle</span>
-              <span className="ml-auto font-bold text-[#1c1b1b]">{brand} {model} {regNo && `(${regNo})`}</span>
-            </div>
-            <div className="flex items-center gap-3 py-2 border-b border-gray-50">
-              <Calendar size={16} className="text-[#D32F2F] shrink-0" />
-              <span className="text-[#5f5e5e]">Date</span>
-              <span className="ml-auto font-bold text-[#1c1b1b]">{new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
-            </div>
-            <div className="flex items-center gap-3 py-2 border-b border-gray-50">
-              <Clock size={16} className="text-[#D32F2F] shrink-0" />
-              <span className="text-[#5f5e5e]">Time</span>
-              <span className="ml-auto font-bold text-[#1c1b1b]">{formatTime(selectedSlot?.start_time)} – {formatTime(selectedSlot?.end_time)}</span>
-            </div>
-            {totalBookingDuration > 0 && (
-              <div className="flex items-center gap-3 py-2 border-b border-gray-50">
-                <Clock size={16} className="text-[#D32F2F] shrink-0" />
-                <span className="text-[#5f5e5e]">Est. Duration</span>
-                <span className="ml-auto font-bold text-[#1c1b1b]">~{totalBookingDuration} mins</span>
+            <div className="grid grid-cols-3 divide-x divide-slate-100">
+              <div className="px-3 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1"><Calendar size={11} /> Date</p>
+                <p className="text-[13px] font-extrabold text-slate-900 mt-0.5">{new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
               </div>
-            )}
-            {/* Payment Option Selection */}
-            {!isPackageBooking && !useFreeWash && requiredAdvancePossible > 0 && (
-              <div className="mt-4 space-y-3 pb-4 border-b border-gray-100">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#5f5e5e] text-left">Select Payment Option</p>
-                <div className="flex flex-col gap-3 text-left">
+              <div className="px-3 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1"><Clock size={11} /> Time</p>
+                <p className="text-[13px] font-extrabold text-slate-900 mt-0.5">{formatTime(selectedSlot?.start_time)}</p>
+              </div>
+              <div className="px-3 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1"><Sparkles size={11} /> Duration</p>
+                <p className="text-[13px] font-extrabold text-slate-900 mt-0.5">{totalBookingDuration > 0 ? `~${totalBookingDuration} min` : '—'}</p>
+              </div>
+            </div>
+          </div>
 
-                  {/* Part Advance — Priority */}
+          {/* ── Studio visit or doorstep ── */}
+          <div className="app-card p-4 space-y-3">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">How will your car reach us?</p>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { key: 'none', title: 'I\'ll visit', sub: 'Drive to studio' },
+                { key: 'pickup', title: 'Pickup', sub: 'We collect it' },
+                { key: 'drop', title: 'Drop', sub: 'We return it' },
+                { key: 'both', title: 'Pickup + Drop', sub: 'Round trip' },
+              ] as const).map((o) => {
+                const on = pickupOption === o.key;
+                return (
                   <button
+                    key={o.key}
                     type="button"
-                    onClick={() => setPayAdvance('part')}
-                    className={`p-4 rounded-xl border-2 text-left transition-all relative overflow-hidden ${
-                      payAdvance === 'part' ? 'border-[#D32F2F] bg-red-50/30 shadow-md' : 'border-gray-200 bg-white hover:border-gray-300'
-                    }`}
+                    onClick={() => {
+                      setPickupOption(o.key as any);
+                      if (o.key !== 'none' && customerCoords && !pickupAddress) handleFetchLiveLocation(true);
+                    }}
+                    className={`rounded-2xl border-2 px-3 py-2.5 text-left transition-all ${on ? 'border-[#D32F2F] bg-red-50/60' : 'border-slate-200 bg-white active:bg-slate-50'}`}
                   >
-                    {payAdvance === 'part' && <div className="absolute top-0 left-0 w-1 h-full bg-[#D32F2F] rounded-r" />}
-                    <div className="flex flex-wrap justify-between items-center w-full gap-2">
-                      <span className="font-extrabold text-sm text-[#1c1b1b]">₹200 Part Advance</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="bg-emerald-100 text-emerald-700 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">⚡ 1st Priority</span>
-                        <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-full">Part Pay</span>
-                      </div>
-                    </div>
-                    <p className="text-xs text-[#5f5e5e] mt-1.5 leading-relaxed font-medium">Pay ₹200 online now to secure your slot with <strong className="text-emerald-700">first priority</strong>. Pay remaining balance at the studio.</p>
+                    <p className={`text-[13px] font-extrabold ${on ? 'text-[#D32F2F]' : 'text-slate-900'}`}>{o.title}</p>
+                    <p className="text-[11px] text-slate-500">{o.sub}</p>
                   </button>
-
-                  {/* Full Advance — Priority + Discount */}
-                  <button
-                    type="button"
-                    onClick={() => setPayAdvance('full')}
-                    className={`p-4 rounded-xl border-2 text-left transition-all relative overflow-hidden ${
-                      payAdvance === 'full' ? 'border-[#D32F2F] bg-red-50/30 shadow-md' : 'border-gray-200 bg-white hover:border-gray-300'
-                    }`}
-                  >
-                    {payAdvance === 'full' && <div className="absolute top-0 left-0 w-1 h-full bg-[#D32F2F] rounded-r" />}
-                    <div className="flex flex-wrap justify-between items-center w-full gap-2">
-                      <span className="font-extrabold text-sm text-[#1c1b1b]">Full Advance</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="bg-emerald-100 text-emerald-700 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">⚡ 1st Priority</span>
-                        <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2.5 py-0.5 rounded-full">Save 10%</span>
-                      </div>
-                    </div>
-                    <p className="text-xs text-[#5f5e5e] mt-1.5 leading-relaxed font-medium">Pay full amount online now — get <strong className="text-green-700">10% discount</strong> and <strong className="text-emerald-700">first priority</strong> service.</p>
-                  </button>
-
-                  {/* Pay at Studio — No Priority */}
-                  <button
-                    type="button"
-                    onClick={() => setPayAdvance('none')}
-                    className={`p-4 rounded-xl border-2 text-left transition-all relative overflow-hidden ${
-                      payAdvance === 'none' ? 'border-[#D32F2F] bg-red-50/30 shadow-md' : 'border-gray-200 bg-white hover:border-gray-300'
-                    }`}
-                  >
-                    {payAdvance === 'none' && <div className="absolute top-0 left-0 w-1 h-full bg-[#D32F2F] rounded-r" />}
-                    <div className="flex flex-wrap justify-between items-center w-full gap-2">
-                      <span className="font-extrabold text-sm text-[#1c1b1b]">Pay at Studio</span>
-                      <span className="bg-gray-100 text-gray-500 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">No Priority</span>
-                    </div>
-                    <p className="text-xs text-[#5f5e5e] mt-1.5 leading-relaxed font-medium">Book your slot without paying advance. Pay full price at studio after service.</p>
-                    <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
-                      <p className="text-[10px] text-amber-700 font-bold leading-snug">⚠️ Advance-paying customers will be given first priority. Your service may be delayed if the studio is busy.</p>
-                    </div>
-                  </button>
-
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-2 border-t border-gray-100 pt-4">
-              {!isPackageBooking && (
-                <>
-                  <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-gray-700">
-                    <span className="text-[#5f5e5e] font-normal">Original Total Price</span>
-                    <span className="ml-auto">₹{estimatedTotal}</span>
-                  </div>
-                  {firstWashDiscountAmount > 0 && (
-                    <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-red-600 bg-red-50/70 px-2.5 rounded-lg">
-                      <span className="text-red-700 font-bold flex items-center gap-1.5">
-                        <Sparkles size={14} className="text-amber-500" />
-                        First Wash Special (50% OFF)
-                      </span>
-                      <span className="ml-auto text-red-700 font-extrabold">-₹{firstWashDiscountAmount}</span>
-                    </div>
-                  )}
-                  {discountAmount > 0 && (
-                    <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-green-600">
-                      <span className="text-green-600 font-normal">Advance Discount (10% Off)</span>
-                      <span className="ml-auto">-₹{discountAmount}</span>
-                    </div>
-                  )}
-                  {couponDiscountAmount > 0 && (
-                    <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-emerald-600 bg-emerald-50/70 px-2.5 rounded-lg">
-                      <span className="text-emerald-700 font-bold flex items-center gap-1.5">
-                        <Gift size={14} className="text-emerald-600" />
-                        Coupon Applied ({appliedCoupon?.code})
-                      </span>
-                      <span className="ml-auto text-emerald-700 font-extrabold">-₹{couponDiscountAmount}</span>
-                    </div>
-                  )}
-                  {voucherDiscount > 0 && (
-                    <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-emerald-600 bg-emerald-50/70 px-2.5 rounded-lg">
-                      <span className="text-emerald-700 font-bold flex items-center gap-1.5">
-                        <Gift size={14} className="text-emerald-600" />
-                        Reward voucher ({appliedVoucher?.voucher_code})
-                      </span>
-                      <span className="ml-auto text-emerald-700 font-extrabold">-₹{voucherDiscount}</span>
-                    </div>
-                  )}
-                  {(myVouchers as any[]).some((v) => v.status === 'active') && (
-                    <div className="pt-2">
-                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Reward voucher</label>
-                      <select
-                        value={voucherCode}
-                        onChange={(e) => setVoucherCode(e.target.value)}
-                        className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold"
-                      >
-                        <option value="">Don't use a voucher</option>
-                        {(myVouchers as any[]).filter((v) => v.status === 'active').map((v) => (
-                          <option key={v.id} value={v.voucher_code}>{v.reward_title} · {v.voucher_code}</option>
-                        ))}
-                      </select>
-                      {appliedVoucher && voucherDiscount === 0 && (
-                        <p className="text-[11px] text-amber-700 mt-1">
-                          {appliedVoucher.reward_type === 'free_wash' ? 'Add a wash service to use this voucher.' : 'Add the rewarded service to use this voucher.'}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  <div className="pt-2 pb-1">
-                    <CouponInput
-                      orderAmount={totalAfterFirstWashDiscount}
-                      serviceIds={selectedServices}
-                      appliedCoupon={appliedCoupon}
-                      onApply={(res) => setAppliedCoupon(res)}
-                      onRemove={() => setAppliedCoupon(null)}
-                    />
-                  </div>
-                </>
-              )}
-              {pickupOption !== 'none' && (
-                <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-gray-700">
-                  <span className="text-[#5f5e5e] font-normal">Pickup & Drop ({pickupOption})</span>
-                  <span className="ml-auto text-gray-800">
-                    {pickupCharge > 0 ? `₹${pickupCharge}` : 'Free (Waived)'}
-                  </span>
-                </div>
-              )}
-              <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-gray-700">
-                <span className="text-[#5f5e5e] font-normal">Total Price</span>
-                <span className="ml-auto">₹{finalTotal}</span>
-              </div>
-              {requiredAdvance > 0 && (
-                <>
-                  <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-base text-[#D32F2F]">
-                    <span className="text-[#5f5e5e] font-normal text-sm">Advance Required</span>
-                    <span className="ml-auto">₹{requiredAdvance}</span>
-                  </div>
-                  <div className="flex items-center gap-3 py-2 border-b border-gray-50 font-bold text-sm text-gray-700">
-                    <span className="text-[#5f5e5e] font-normal">Balance Due at Studio</span>
-                    <span className="ml-auto">₹{finalTotal - requiredAdvance}</span>
-                  </div>
-                </>
-              )}
+                );
+              })}
             </div>
-            {isPackageBooking && (
-              <div className="py-2 bg-purple-50 rounded-lg px-3 mt-2 space-y-1">
-                <div className="flex items-center gap-3">
-                  <Sparkles size={16} className="text-purple-600 shrink-0" />
-                  <span className="text-purple-700 font-bold text-xs">Package Credit</span>
-                  <span className="ml-auto text-xs font-bold text-purple-800">{activePackages[0]?.package_name}</span>
-                </div>
-                <p className="text-[10px] text-purple-600 ml-[28px]">Credit will be deducted only after admin approves this booking. If rejected or cancelled, your balance is restored.</p>
-              </div>
-            )}
+            <p className="text-[12px] text-slate-500">
+              {pickupOption === 'none' ? 'No valet charge — drive to our studio on Gotri - Vasna - Bhayli Road.' :
+               activePackageHasFreePickup ? '🎉 Free pickup & drop with your active package.' :
+               pickupOption === 'pickup' ? `Pickup charge ₹${settings.pickup_charge || 150}` :
+               pickupOption === 'drop' ? `Drop charge ₹${settings.drop_charge || 150}` :
+               `Pickup + drop charge ₹${settings.pickup_drop_charge || 250}`}
+            </p>
 
-            {/* ─── Studio & Customer Live Location Hub ─── */}
-            <div className="mt-4 rounded-2xl border border-red-100 bg-gradient-to-br from-red-50/40 via-white to-amber-50/30 p-4 sm:p-5 shadow-sm space-y-4">
-              {/* Owner Studio Live Location */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="relative flex h-2.5 w-2.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                    </span>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full">
-                      Owner Studio Live
-                    </span>
-                    <span className="text-[10px] font-bold text-gray-500">Gotri - Vasna - Bhayli</span>
-                  </div>
-                  <h4 className="text-sm sm:text-base font-black text-gray-900 flex items-center gap-1.5">
-                    <MapPin size={16} className="text-[#D32F2F] shrink-0" />
-                    {studio.name}
-                  </h4>
-                  <p className="text-xs text-gray-600 leading-snug">
-                    {studio.address}
+            {/* Studio */}
+            <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
+              <span className="h-10 w-10 rounded-xl bg-white flex items-center justify-center text-[#D32F2F] shrink-0 shadow-sm"><MapPin size={18} /></span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-extrabold text-slate-900 truncate">{studio.name}</p>
+                <p className="text-[11px] text-slate-500 leading-snug line-clamp-2">{studio.address}</p>
+              </div>
+              <a
+                href={getMapPinUrl(studio.lat, studio.lng, studio.name)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 inline-flex items-center gap-1 rounded-xl bg-white border border-slate-200 px-2.5 py-1.5 text-[11px] font-bold text-slate-700"
+              >
+                <Map size={12} className="text-[#D32F2F]" /> Map
+              </a>
+            </div>
+
+            {/* Customer location */}
+            {customerCoords ? (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[12px] font-bold text-emerald-800 flex items-center gap-1.5">
+                    <CheckCircle2 size={15} /> Your location found
+                    {customerCoords.accuracy ? <span className="font-medium text-emerald-700">· ±{customerCoords.accuracy.toFixed(0)} m</span> : null}
                   </p>
-                  <p className="text-[11px] text-gray-400 font-mono">
-                    Studio GPS: {studio.lat.toFixed(4)}° N, {studio.lng.toFixed(4)}° E
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleFetchLiveLocation(pickupOption !== 'none')}
+                    disabled={deviceLocationLoading}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600"
+                  >
+                    <RefreshCw size={11} className={deviceLocationLoading ? 'animate-spin' : ''} /> Refresh
+                  </button>
                 </div>
-
-                <a
-                  href={getMapPinUrl(studio.lat, studio.lng, studio.name)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 hover:text-[#D32F2F] hover:border-red-200 shadow-2xs transition-all text-xs font-bold shrink-0 self-start sm:self-center"
-                  title="View Studio on Google Maps"
-                >
-                  <Map size={14} className="text-[#D32F2F]" />
-                  <span>View Studio Pin</span>
-                  <ExternalLink size={11} className="text-gray-400" />
-                </a>
-              </div>
-
-              {/* Customer Live Device Location */}
-              {customerCoords ? (
-                <div className="p-3.5 bg-white rounded-xl border border-emerald-200 shadow-xs space-y-2.5 animate-fade-in">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-                        <CheckCircle2 size={16} />
-                      </div>
-                      <div>
-                        <p className="text-xs font-black text-gray-900 flex items-center gap-1.5">
-                          <span>Customer Live GPS Active</span>
-                          <span className="text-[9px] font-bold text-white bg-emerald-600 px-1.5 py-0.5 rounded uppercase">100% Accurate</span>
-                        </p>
-                        <p className="text-[10px] text-emerald-700 font-medium">
-                          {customerCoords.accuracy ? `Device GPS Hardware Accuracy: ±${customerCoords.accuracy.toFixed(0)}m` : 'Accurate device coordinates detected'}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleFetchLiveLocation(pickupOption !== 'none')}
-                      disabled={deviceLocationLoading}
-                      className="px-2.5 py-1 text-[11px] font-bold text-gray-600 hover:text-[#D32F2F] bg-gray-50 hover:bg-red-50 rounded-lg border border-gray-200/80 transition-colors flex items-center gap-1"
-                      title="Re-scan device location"
-                    >
-                      <RefreshCw size={11} className={deviceLocationLoading ? 'animate-spin' : ''} />
-                      <span>Re-scan</span>
-                    </button>
-                  </div>
-
-                  {/* Distance & Drive Time to Gotri-Vasna-Bhayli Studio */}
-                  {distanceToStudio !== null && (
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
-                      <div className="p-2.5 bg-slate-50 rounded-lg text-center border border-slate-100">
-                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Road Distance</p>
-                        <p className="text-base font-black text-gray-900 mt-0.5">
-                          ~{distanceToStudio} km
-                        </p>
-                        <p className="text-[9px] text-gray-400">To Bhayli-Gotri Studio</p>
-                      </div>
-                      <div className="p-2.5 bg-slate-50 rounded-lg text-center border border-slate-100">
-                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Est. Drive Time</p>
-                        <p className="text-base font-black text-gray-900 mt-0.5">
-                          ~{estimateDriveMinutes(distanceToStudio)} mins
-                        </p>
-                        <p className="text-[9px] text-gray-400">City traffic estimate</p>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between pt-1 text-xs">
-                    <span className="text-[11px] font-mono text-gray-500">
-                      GPS: {customerCoords.lat.toFixed(5)}° N, {customerCoords.lng.toFixed(5)}° E
-                    </span>
+                {distanceToStudio !== null && (
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[13px] font-extrabold text-slate-900">
+                      ~{distanceToStudio} km <span className="font-semibold text-slate-500">· about {estimateDriveMinutes(distanceToStudio)} min drive</span>
+                    </p>
                     <a
                       href={getRouteUrlToStudio(customerCoords.lat, customerCoords.lng, studio.lat, studio.lng)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 font-bold text-xs text-[#D32F2F] hover:underline"
+                      className="inline-flex items-center gap-1 text-[12px] font-bold text-[#D32F2F] shrink-0"
                     >
-                      <Navigation size={13} />
-                      <span>Drive Route in Maps</span>
-                      <ExternalLink size={10} />
+                      <Navigation size={12} /> Route <ExternalLink size={10} />
                     </a>
                   </div>
-                </div>
-              ) : (
-                <div className="p-3.5 bg-white rounded-xl border border-gray-200/90 shadow-2xs space-y-2">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="space-y-0.5">
-                      <p className="text-xs font-black text-gray-900 flex items-center gap-1.5">
-                        <LocateFixed size={15} className="text-[#D32F2F]" />
-                        Customer Live Location (Device GPS)
-                      </p>
-                      <p className="text-[11px] text-gray-500 leading-snug">
-                        Fetch 100% accurate coordinates directly from your device GPS chip for pickup & distance calculation.
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      onClick={() => handleFetchLiveLocation(pickupOption !== 'none')}
-                      loading={deviceLocationLoading}
-                      className="bg-[#D32F2F] hover:bg-[#b52626] text-white text-xs font-bold py-2 px-3.5 rounded-xl shrink-0 shadow-sm"
-                      icon={<Compass size={14} />}
-                    >
-                      Fetch Live Location
-                    </Button>
-                  </div>
-
-                  {locationError && (
-                    <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-xs text-red-700 animate-fade-in">
-                      <AlertCircle size={14} className="shrink-0 mt-0.5 text-red-500" />
-                      <div>
-                        <p className="font-bold">Location Access Notice</p>
-                        <p className="text-[11px] mt-0.5">{locationError}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Pickup & Drop Option Selection */}
-              <div className="pt-2 border-t border-gray-100">
-                <label className="block text-xs font-bold text-[#5f5e5e] mb-1.5 uppercase tracking-wide">
-                  Pickup & Drop Option
-                </label>
-                <select
-                  value={pickupOption}
-                  onChange={(e) => {
-                    const opt = e.target.value as any;
-                    setPickupOption(opt);
-                    if (opt !== 'none' && customerCoords && !pickupAddress) {
-                      handleFetchLiveLocation(true);
-                    }
-                  }}
-                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-bold text-[#1c1b1b] focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 transition-all cursor-pointer"
-                >
-                  <option value="none">None (Visit Studio at Gotri - Vasna - Bhayli Road)</option>
-                  <option value="pickup">Doorstep Pickup Only (to Studio)</option>
-                  <option value="drop">Doorstep Drop Only (from Studio)</option>
-                  <option value="both">Doorstep Pickup + Drop (Round Trip)</option>
-                </select>
-                <p className="text-[11px] text-[#5f5e5e] mt-1">
-                  {pickupOption === 'none' ? 'Self-drive to our Gotri - Vasna - Bhayli studio. No valet charges apply.' :
-                   activePackageHasFreePickup ? '🎉 Free Pickup & Drop under your active package!' :
-                   pickupOption === 'pickup' ? `Pickup charge: ₹${settings.pickup_charge || 150}` :
-                   pickupOption === 'drop' ? `Drop charge: ₹${settings.drop_charge || 150}` :
-                   `Pickup + Drop charge: ₹${settings.pickup_drop_charge || 250}`}
-                </p>
+                )}
               </div>
+            ) : (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => handleFetchLiveLocation(pickupOption !== 'none')}
+                  disabled={deviceLocationLoading}
+                  className="w-full flex items-center gap-3 rounded-2xl border border-dashed border-slate-300 p-3 text-left active:bg-slate-50"
+                >
+                  <span className="h-10 w-10 rounded-xl bg-red-50 text-[#D32F2F] flex items-center justify-center shrink-0">
+                    {deviceLocationLoading ? <RefreshCw size={17} className="animate-spin" /> : <LocateFixed size={18} />}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-extrabold text-slate-900">Use my current location</span>
+                    <span className="block text-[11px] text-slate-500">See distance to the studio{pickupOption !== 'none' ? ' and fill your pickup address' : ''}</span>
+                  </span>
+                </button>
+                {locationError && (
+                  <div className="flex items-start gap-2 rounded-xl bg-red-50 border border-red-200 p-2.5 text-[12px] text-red-700">
+                    <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                    <span>{locationError}</span>
+                  </div>
+                )}
+              </div>
+            )}
 
-              {/* Doorstep Address Form */}
+            {/* Doorstep address */}
+            {pickupOption !== 'none' && (
+              <div className="space-y-2.5 pt-3 border-t border-slate-100 animate-fade-in-up">
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">Doorstep address</p>
+                {savedAddresses.length > 0 && (
+                  <select
+                    value={selectedAddressId}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedAddressId(val === 'new' ? 'new' : parseInt(val));
+                      if (val !== 'new') {
+                        const addr = savedAddresses.find(a => a.id === parseInt(val));
+                        if (addr) {
+                          setPickupAddress(addr.address);
+                          setLandmark(addr.landmark || '');
+                          setCity(addr.city || 'Vadodara');
+                          setStateName(addr.state || 'Gujarat');
+                          setPincode(addr.pincode || '');
+                        }
+                      } else {
+                        setPickupAddress('');
+                        setLandmark('');
+                        setCity('Vadodara');
+                        setStateName('Gujarat');
+                        setPincode('');
+                      }
+                    }}
+                    className={FIELD}
+                  >
+                    {savedAddresses.map((addr) => (
+                      <option key={addr.id} value={addr.id}>
+                        📍 {addr.address}, {addr.city} {addr.is_default ? '(Default)' : ''}
+                      </option>
+                    ))}
+                    <option value="new">+ New address / use my location</option>
+                  </select>
+                )}
+                <textarea
+                  rows={2}
+                  value={pickupAddress}
+                  onChange={(e) => setPickupAddress(e.target.value)}
+                  placeholder="House / flat no, apartment, street *"
+                  className={`${FIELD} h-auto py-2.5`}
+                  required
+                  disabled={selectedAddressId !== 'new'}
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="text" value={landmark} onChange={(e) => setLandmark(e.target.value)} placeholder="Landmark" className={FIELD} disabled={selectedAddressId !== 'new'} />
+                  <input type="text" value={city} onChange={(e) => setCity(e.target.value)} placeholder="City *" className={FIELD} required disabled={selectedAddressId !== 'new'} />
+                  <input type="text" value={stateName} onChange={(e) => setStateName(e.target.value)} placeholder="State *" className={FIELD} required disabled={selectedAddressId !== 'new'} />
+                  <input type="text" inputMode="numeric" value={pincode} onChange={(e) => setPincode(e.target.value)} placeholder="Pincode *" className={FIELD} required disabled={selectedAddressId !== 'new'} />
+                </div>
+                {(pickupOption === 'pickup' || pickupOption === 'both') && (
+                  <label className="block">
+                    <span className="block text-[11px] font-semibold text-slate-500 mb-1">Preferred pickup time (optional)</span>
+                    <input type="datetime-local" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)} className={FIELD} />
+                  </label>
+                )}
+                {selectedAddressId === 'new' && (
+                  <button
+                    type="button"
+                    onClick={() => handleFetchLiveLocation(true)}
+                    disabled={deviceLocationLoading}
+                    className="inline-flex items-center gap-1 text-[12px] font-bold text-[#D32F2F]"
+                  >
+                    <LocateFixed size={12} /> {customerCoords ? 'Re-fill from my location' : 'Fill from my location'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── How to pay ── */}
+          {!isPackageBooking && !useFreeWash && requiredAdvancePossible > 0 && (
+            <div className="app-card p-4 space-y-2.5">
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">How would you like to pay?</p>
+              {([
+                { key: 'full', title: 'Pay full now', badge: 'Save 10%', badgeCls: 'bg-emerald-100 text-emerald-700', text: '10% off and first priority at the studio.' },
+                { key: 'part', title: 'Pay ₹200 now', badge: 'Priority', badgeCls: 'bg-amber-100 text-amber-700', text: 'Secures your slot with first priority. Pay the rest at the studio.' },
+                { key: 'none', title: 'Pay at studio', badge: null, badgeCls: '', text: 'No advance. Advance-paying customers are served first if the studio is busy.' },
+              ] as const).map((o) => {
+                const on = payAdvance === o.key;
+                return (
+                  <button
+                    key={o.key}
+                    type="button"
+                    onClick={() => setPayAdvance(o.key)}
+                    className={`w-full flex items-start gap-3 rounded-2xl border-2 p-3.5 text-left transition-all ${on ? 'border-[#D32F2F] bg-red-50/50' : 'border-slate-200 bg-white active:bg-slate-50'}`}
+                  >
+                    <span className={`mt-0.5 h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${on ? 'border-[#D32F2F]' : 'border-slate-300'}`}>
+                      {on && <span className="h-2.5 w-2.5 rounded-full bg-[#D32F2F]" />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[14px] font-extrabold text-slate-900">{o.title}</span>
+                        {o.badge && <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${o.badgeCls}`}>{o.badge}</span>}
+                      </span>
+                      <span className="block text-[12px] text-slate-500 mt-0.5 leading-snug">{o.text}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {isPackageBooking && (
+            <div className="app-card p-4 flex items-start gap-3 border border-purple-100">
+              <span className="h-10 w-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0"><Sparkles size={18} /></span>
+              <div className="min-w-0">
+                <p className="text-[13px] font-extrabold text-slate-900">Uses your package · {activePackages[0]?.package_name}</p>
+                <p className="text-[12px] text-slate-500 leading-snug mt-0.5">A wash is deducted only after the studio approves this booking. If it's rejected or cancelled, it goes back to your package.</p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Bill ── */}
+          <div className="app-card p-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 mb-2">Bill details</p>
+            <div className="space-y-2 text-[13px]">
+              {!isPackageBooking && (
+                <>
+                  <div className="flex justify-between text-slate-600"><span>Service total</span><span className="font-semibold text-slate-900">₹{estimatedTotal}</span></div>
+                  {firstWashDiscountAmount > 0 && (
+                    <div className="flex justify-between text-emerald-700"><span className="flex items-center gap-1"><Sparkles size={13} /> First wash special (50% off)</span><span className="font-bold">-₹{firstWashDiscountAmount}</span></div>
+                  )}
+                  {discountAmount > 0 && (
+                    <div className="flex justify-between text-emerald-700"><span>Pay-in-full discount (10%)</span><span className="font-bold">-₹{discountAmount}</span></div>
+                  )}
+                  {couponDiscountAmount > 0 && (
+                    <div className="flex justify-between text-emerald-700"><span className="flex items-center gap-1"><Gift size={13} /> Coupon {appliedCoupon?.code}</span><span className="font-bold">-₹{couponDiscountAmount}</span></div>
+                  )}
+                  {voucherDiscount > 0 && (
+                    <div className="flex justify-between text-emerald-700"><span className="flex items-center gap-1"><Gift size={13} /> Voucher {appliedVoucher?.voucher_code}</span><span className="font-bold">-₹{voucherDiscount}</span></div>
+                  )}
+                </>
+              )}
               {pickupOption !== 'none' && (
-                <div className="space-y-3 pt-3 border-t border-gray-200/60 animate-fade-in-up">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-black text-gray-900 uppercase tracking-wide">
-                      Doorstep Valet Address
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => handleFetchLiveLocation(true)}
-                      disabled={deviceLocationLoading}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-[#D32F2F] hover:underline"
-                    >
-                      <LocateFixed size={12} />
-                      <span>{customerCoords ? 'Re-fill from Live GPS' : 'Auto-fill from Device GPS'}</span>
-                    </button>
-                  </div>
-
-                  {savedAddresses.length > 0 && (
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">Select Saved Address</label>
-                      <select
-                        value={selectedAddressId}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setSelectedAddressId(val === 'new' ? 'new' : parseInt(val));
-                          if (val !== 'new') {
-                            const addr = savedAddresses.find(a => a.id === parseInt(val));
-                            if (addr) {
-                              setPickupAddress(addr.address);
-                              setLandmark(addr.landmark || '');
-                              setCity(addr.city || 'Vadodara');
-                              setStateName(addr.state || 'Gujarat');
-                              setPincode(addr.pincode || '');
-                            }
-                          } else {
-                            setPickupAddress('');
-                            setLandmark('');
-                            setCity('Vadodara');
-                            setStateName('Gujarat');
-                            setPincode('');
-                          }
-                        }}
-                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-800"
-                      >
-                        {savedAddresses.map((addr) => (
-                          <option key={addr.id} value={addr.id}>
-                            📍 {addr.address}, {addr.city} {addr.is_default ? '(Default)' : ''}
-                          </option>
-                        ))}
-                        <option value="new">+ Add New Address / Use Live GPS</option>
-                      </select>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Address *</label>
-                    <textarea
-                      rows={2}
-                      value={pickupAddress}
-                      onChange={(e) => setPickupAddress(e.target.value)}
-                      placeholder="House / flat no, apartment name, street..."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white"
-                      required
-                      disabled={selectedAddressId !== 'new'}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">Landmark</label>
-                      <input
-                        type="text"
-                        value={landmark}
-                        onChange={(e) => setLandmark(e.target.value)}
-                        placeholder="Near Gotri / Bhayli circle..."
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white"
-                        disabled={selectedAddressId !== 'new'}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">City *</label>
-                      <input
-                        type="text"
-                        value={city}
-                        onChange={(e) => setCity(e.target.value)}
-                        placeholder="Vadodara"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white"
-                        required
-                        disabled={selectedAddressId !== 'new'}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">State *</label>
-                      <input
-                        type="text"
-                        value={stateName}
-                        onChange={(e) => setStateName(e.target.value)}
-                        placeholder="Gujarat"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white"
-                        required
-                        disabled={selectedAddressId !== 'new'}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">Pincode *</label>
-                      <input
-                        type="text"
-                        value={pincode}
-                        onChange={(e) => setPincode(e.target.value)}
-                        placeholder="390021"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white"
-                        required
-                        disabled={selectedAddressId !== 'new'}
-                      />
-                    </div>
-                  </div>
-
-                  {(pickupOption === 'pickup' || pickupOption === 'both') && (
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">Preferred Pickup Time (Optional)</label>
-                      <input
-                        type="datetime-local"
-                        value={pickupTime}
-                        onChange={(e) => setPickupTime(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D32F2F]/20 focus:border-[#D32F2F]/30 bg-white"
-                      />
-                    </div>
-                  )}
+                <div className="flex justify-between text-slate-600"><span>Pickup & drop</span><span className="font-semibold text-slate-900">{pickupCharge > 0 ? `₹${pickupCharge}` : 'Free'}</span></div>
+              )}
+              <div className="flex justify-between items-baseline pt-2 mt-1 border-t border-dashed border-slate-200">
+                <span className="font-bold text-slate-900">Total</span>
+                <span className="font-display text-[20px] font-extrabold text-slate-900">₹{finalTotal}</span>
+              </div>
+              {requiredAdvance > 0 && (
+                <div className="rounded-xl bg-slate-50 p-3 space-y-1.5">
+                  <div className="flex justify-between"><span className="font-bold text-[#D32F2F]">Pay now</span><span className="font-extrabold text-[#D32F2F]">₹{requiredAdvance}</span></div>
+                  <div className="flex justify-between text-slate-600"><span>Pay at studio</span><span className="font-semibold text-slate-900">₹{finalTotal - requiredAdvance}</span></div>
                 </div>
               )}
             </div>
+
+            {!isPackageBooking && (
+              <div className="mt-4 pt-3 border-t border-slate-100 space-y-3">
+                {(myVouchers as any[]).some((v) => v.status === 'active') && (
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Reward voucher</label>
+                    <select value={voucherCode} onChange={(e) => setVoucherCode(e.target.value)} className={FIELD}>
+                      <option value="">Don't use a voucher</option>
+                      {(myVouchers as any[]).filter((v) => v.status === 'active').map((v) => (
+                        <option key={v.id} value={v.voucher_code}>{v.reward_title} · {v.voucher_code}</option>
+                      ))}
+                    </select>
+                    {appliedVoucher && voucherDiscount === 0 && (
+                      <p className="text-[11px] text-amber-700 mt-1">
+                        {appliedVoucher.reward_type === 'free_wash' ? 'Add a wash service to use this voucher.' : 'Add the rewarded service to use this voucher.'}
+                      </p>
+                    )}
+                  </div>
+                )}
+                <CouponInput
+                  orderAmount={totalAfterFirstWashDiscount}
+                  serviceIds={selectedServices}
+                  appliedCoupon={appliedCoupon}
+                  onApply={(res) => setAppliedCoupon(res)}
+                  onRemove={() => setAppliedCoupon(null)}
+                />
+              </div>
+            )}
           </div>
 
-          <Button 
-            className="w-full" 
-            onClick={handleBook} 
-            loading={createMut.isPending || submittingOnline}
-            disabled={pickupOption !== 'none' && !pickupAddress.trim()}
-          >
-            {requiredAdvance > 0 ? `Pay Advance (₹${requiredAdvance})` : 'Confirm Booking'}
-          </Button>
+          {/* ── Confirm ── */}
+          <div className="app-card p-3">
+            <Button
+              className="w-full !h-12 !rounded-2xl !text-[15px]"
+              onClick={handleBook}
+              loading={createMut.isPending || submittingOnline}
+              disabled={pickupOption !== 'none' && !pickupAddress.trim()}
+            >
+              {requiredAdvance > 0 ? `Pay ₹${requiredAdvance} & book` : 'Confirm booking'}
+            </Button>
+            <p className="text-[11px] text-slate-400 text-center mt-2 flex items-center justify-center gap-1">
+              <CheckCircle2 size={11} /> {requiredAdvance > 0 ? 'Pay by UPI QR or online · slot held while you pay' : 'You can cancel or reschedule from My Bookings'}
+            </p>
+            {pickupOption !== 'none' && !pickupAddress.trim() && (
+              <p className="text-[11px] text-amber-700 text-center mt-1">Add your doorstep address to continue.</p>
+            )}
+          </div>
         </div>
       )}
 
