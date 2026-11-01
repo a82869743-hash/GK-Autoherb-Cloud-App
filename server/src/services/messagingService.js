@@ -8,6 +8,9 @@ const PROMOTIONAL_EVENTS = [
   'FESTIVAL_OFFER', 'PACKAGE_NEXT_WASH', 'PACKAGE_EXPIRED',
 ];
 
+// Sent slowly by the studio-phone gateway (held at night); everything else is a 'high' update
+const BULK_TRIGGERS = /REMINDER|OFFER|FESTIVAL|WISH|WELCOME|COUPON|NEXT_WASH|EXPIR|RENEW|FEEDBACK/i;
+
 function appBaseUrl() {
   return (process.env.APP_BASE_URL || 'https://gkautobook.cloud').replace(/\/$/, '');
 }
@@ -104,7 +107,8 @@ class MessagingService {
     if (defaultParams.body) {
       require('./appNotify').notifyUser({ userId: meta.customer_id || null, mobile: to, event: templateName === 'manual_message' ? 'MESSAGE' : templateName || meta.message_type, body: defaultParams.body }).catch(() => {});
     }
-    const result = await whatsapp.sendText(to, messageBody);
+    const priority = /promo|bulk|reminder|offer|campaign/i.test(String(templateName || meta.message_type || '')) ? 'bulk' : 'high';
+    const result = await whatsapp.sendText(to, messageBody, { priority });
     try {
       const [ins] = await pool.query(
         `INSERT INTO whatsapp_messages (customer_id, phone, template_name, message_type, message_body, status, provider_message_id, error_message, sent_at)
@@ -140,10 +144,7 @@ class MessagingService {
    * Deliver one rendered template to one phone over WhatsApp (+ SMS fallback) and log it.
    */
   async deliver({ customerId = null, mobile, template, variables, references = {} }) {
-    // Reminders get a friendly Groq rewrite (falls back to the template text)
-    const messageBody = template.provider_template_name
-      ? renderTemplate(template.message_body, variables)
-      : await require('./groqWriter').polish(template.event_trigger, renderTemplate(template.message_body, variables));
+    const messageBody = renderTemplate(template.message_body, variables);
 
     // Same message in the app inbox + phone notification (free, works even before WhatsApp is connected)
     require('./appNotify').notifyUser({
@@ -151,12 +152,13 @@ class MessagingService {
       refType: references.type || null, refId: references.id || null,
     }).catch(() => {});
 
+    const priority = BULK_TRIGGERS.test(String(template.event_trigger || '')) ? 'bulk' : 'high';
     let waResult;
     if (template.provider_template_name) {
       const ordered = parseVariableOrder(template).map((k) => variables[k]);
-      waResult = await whatsapp.sendTemplate(mobile, template.provider_template_name, template.provider_language, ordered, messageBody);
+      waResult = await whatsapp.sendTemplate(mobile, template.provider_template_name, template.provider_language, ordered, messageBody, { priority });
     } else {
-      waResult = await whatsapp.sendText(mobile, messageBody);
+      waResult = await whatsapp.sendText(mobile, messageBody, { priority });
     }
 
     const waStatus = waResult.status === 'sent' ? 'sent' : waResult.status === 'failed' ? 'failed' : 'queued';

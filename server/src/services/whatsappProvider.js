@@ -36,12 +36,18 @@ function gatewayConfigured() {
   return Boolean(process.env.WA_GATEWAY_URL && process.env.WA_GATEWAY_KEY);
 }
 
-async function viaGateway(to, body) {
+/**
+ * `priority`: 'high' (booking / job / payment updates, replies) jumps the queue;
+ * 'bulk' (reminders, offers, campaigns) is sent slowly and held at night by the gateway.
+ * Every message is reworded first so no two customers get the exact same text.
+ */
+async function viaGateway(to, body, priority = 'high') {
   try {
+    const text = await require('./groqWriter').vary(body, priority);
     const res = await fetch(`${process.env.WA_GATEWAY_URL.replace(/\/$/, '')}/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-gateway-key': process.env.WA_GATEWAY_KEY },
-      body: JSON.stringify({ to, text: body }),
+      body: JSON.stringify({ to, text, priority }),
       signal: AbortSignal.timeout(10000),
     });
     const data = await res.json().catch(() => ({}));
@@ -71,9 +77,9 @@ async function post(payload) {
  * Free-form text. Meta only delivers this inside the 24h customer-service window
  * (i.e. as a reply); business-initiated messages need an approved template.
  */
-async function sendText(phone, body) {
+async function sendText(phone, body, opts = {}) {
   const to = normalizePhone(phone);
-  if (!isConfigured() && gatewayConfigured()) return viaGateway(to, body);
+  if (!isConfigured() && gatewayConfigured()) return viaGateway(to, body, opts.priority);
   if (!isConfigured()) {
     return { success: true, status: 'queued', mode: 'queued', wa_link: clickToChatLink(to, body) };
   }
@@ -89,9 +95,9 @@ async function sendText(phone, body) {
  * Approved template message. `orderedParams` must follow the {{1}}, {{2}}… order of the
  * template registered with Meta (we use the `variables` order stored on the template row).
  */
-async function sendTemplate(phone, providerTemplateName, language, orderedParams, fallbackBody) {
+async function sendTemplate(phone, providerTemplateName, language, orderedParams, fallbackBody, opts = {}) {
   const to = normalizePhone(phone);
-  if (!isConfigured() && gatewayConfigured()) return viaGateway(to, fallbackBody);
+  if (!isConfigured() && gatewayConfigured()) return viaGateway(to, fallbackBody, opts.priority);
   if (!isConfigured()) {
     return { success: true, status: 'queued', mode: 'queued', wa_link: clickToChatLink(to, fallbackBody) };
   }
