@@ -55,8 +55,8 @@ export default function WhatsAppInboxPanel() {
 
   return (
     <div className="space-y-4">
-      {/* Connection status */}
-      <div className={`rounded-2xl border p-4 flex flex-col sm:flex-row sm:items-center gap-3 ${provider?.connected ? 'border-emerald-200 bg-emerald-50/50' : 'border-amber-200 bg-amber-50/60'}`}>
+      {/* Connection status (Meta Cloud API; the studio-phone link has its own card) */}
+      {provider?.mode !== 'gateway' && <div className={`rounded-2xl border p-4 flex flex-col sm:flex-row sm:items-center gap-3 ${provider?.connected ? 'border-emerald-200 bg-emerald-50/50' : 'border-amber-200 bg-amber-50/60'}`}>
         <PlugZap className={provider?.connected ? 'text-emerald-600' : 'text-amber-600'} size={22} />
         <div className="flex-1 text-sm">
           <p className="font-bold text-slate-900">{provider?.connected ? 'WhatsApp Cloud API connected' : 'WhatsApp API not connected yet — messages are queued'}</p>
@@ -74,7 +74,7 @@ export default function WhatsAppInboxPanel() {
             <Copy size={13} /> {provider.webhook_url}
           </button>
         )}
-      </div>
+      </div>}
 
       <div className="grid lg:grid-cols-3 gap-4">
         {/* Inbox */}

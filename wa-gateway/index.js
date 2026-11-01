@@ -234,6 +234,10 @@ http.createServer(async (req, res) => {
       sent: { hour: s.hourTotal, today: s.dayTotal, bulk_today: s.dayBulk }, rules: RULES,
     });
   }
+  if (req.method === 'GET' && url.pathname === '/qr.json') {
+    const qr = !connected && lastQr ? await QRCode.toDataURL(lastQr, { width: 320, margin: 1 }) : null;
+    return send(res, 200, { connected, me, qr, waiting: !connected && !lastQr });
+  }
   if (req.method === 'GET' && url.pathname === '/qr') {
     if (connected) return send(res, 200, `<h2 style="font-family:sans-serif">Linked ✅ ${me || ''}</h2>`, 'text/html');
     if (!lastQr) return send(res, 200, '<p style="font-family:sans-serif">Waiting for QR… refresh in a few seconds.</p><script>setTimeout(()=>location.reload(),3000)</script>', 'text/html');
@@ -254,7 +258,9 @@ http.createServer(async (req, res) => {
     return send(res, 202, { success: true, status: 'sent', queued: queues[p].length, priority: p });
   }
   if (req.method === 'POST' && url.pathname === '/logout') {
+    // Unlink the phone; the socket closes as "logged out", clears the session and shows a fresh QR
     await sock?.logout().catch(() => {});
+    connected = false; me = null; lastQr = null;
     return send(res, 200, { ok: true });
   }
   send(res, 404, { error: 'not found' });

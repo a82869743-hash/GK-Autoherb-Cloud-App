@@ -227,6 +227,43 @@ exports.providerStatus = async (req, res) => {
   });
 };
 
+// ─── STUDIO-PHONE GATEWAY: admin connect screen (QR, status, disconnect) ──
+async function gatewayCall(path, method = 'GET') {
+  const res = await fetch(`${process.env.WA_GATEWAY_URL.replace(/\/$/, '')}${path}`, {
+    method,
+    headers: { 'x-gateway-key': process.env.WA_GATEWAY_KEY },
+    signal: AbortSignal.timeout(8000),
+  });
+  return res.json();
+}
+
+exports.gatewayStatus = async (req, res) => {
+  if (!whatsapp.gatewayConfigured()) return res.json({ success: true, data: { configured: false } });
+  try {
+    const [qr, status] = await Promise.all([gatewayCall('/qr.json'), gatewayCall('/status')]);
+    res.json({
+      success: true,
+      data: {
+        configured: true, running: true, connected: qr.connected,
+        phone: qr.me ? String(qr.me).split(/[:@]/)[0] : null, qr: qr.qr, waiting: qr.waiting,
+        queue: status.queue, sent: status.sent, quiet_now: status.quiet_now,
+      },
+    });
+  } catch (err) {
+    res.json({ success: true, data: { configured: true, running: false, connected: false, error: 'WhatsApp service is not running' } });
+  }
+};
+
+exports.gatewayDisconnect = async (req, res) => {
+  if (!whatsapp.gatewayConfigured()) return res.status(400).json({ success: false, message: 'Gateway not configured' });
+  try {
+    await gatewayCall('/logout', 'POST');
+    res.json({ success: true, message: 'WhatsApp disconnected. A new QR will appear in a few seconds.' });
+  } catch (err) {
+    res.status(502).json({ success: false, message: 'WhatsApp service is not running' });
+  }
+};
+
 // ─── STUDIO-PHONE GATEWAY: customer replies forwarded by wa-gateway ──
 exports.gatewayIncoming = async (req, res) => {
   const key = process.env.WA_GATEWAY_KEY;

@@ -43,6 +43,22 @@ export const useWhatsAppProviderStatus = () =>
     queryFn: async () => (await api.get('/whatsapp/provider-status')).data.data,
   });
 
+// Studio-phone WhatsApp link (QR) — polls while waiting for a scan
+export const useWhatsAppGateway = () =>
+  useQuery({
+    queryKey: ['wa-gateway'],
+    queryFn: async () => (await api.get('/whatsapp/gateway')).data.data,
+    refetchInterval: (q) => (q.state.data?.connected ? 30_000 : 4_000),
+  });
+
+export const useDisconnectWhatsApp = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await api.post('/whatsapp/gateway/disconnect')).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wa-gateway'] }),
+  });
+};
+
 // ─── Greetings ───────────────────────────────────────────
 export const useGreetingCampaigns = () =>
   useQuery({ queryKey: ['greeting-campaigns'], queryFn: async () => (await api.get('/greetings/campaigns')).data.data as any[] });

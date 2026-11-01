@@ -12,6 +12,7 @@ import AdminHeaderBar from '../../components/admin/AdminHeaderBar';
 import AdminMetricCard from '../../components/admin/AdminMetricCard';
 import { PageTransition, AnimatedModal } from '../../components/ui/Animations';
 import WhatsAppInboxPanel from '../../components/admin/WhatsAppInboxPanel';
+import WhatsAppConnectCard from '../../components/admin/WhatsAppConnectCard';
 import { Inbox } from 'lucide-react';
 
 export default function WhatsAppPage() {
@@ -184,6 +185,8 @@ export default function WhatsAppPage() {
           <span>Automated Event Templates ({templates.length})</span>
         </button>
       </div>
+
+      <WhatsAppConnectCard />
 
       {activeTab === 'inbox' ? (
         <WhatsAppInboxPanel />
