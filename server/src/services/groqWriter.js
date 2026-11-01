@@ -29,7 +29,8 @@ function mustKeep(text) {
 const ALLOWED_LINK = /^https?:\/\/[^/\s]+\/(job|invoice|invoices)\/[\w-]+/i;
 
 function onlyAllowedLinks(text) {
-  const out = text.replace(/https?:\/\/[^\s)]+/g, (url) => (ALLOWED_LINK.test(url) ? url : ''));
+  // Drop the disallowed link together with a short label in front of it ("Book again: …")
+  const out = text.replace(/(?:[A-Za-z][\w ]{0,24}:\s*)?(https?:\/\/[^\s)]+)/g, (whole, url) => (ALLOWED_LINK.test(url) ? whole : ''));
   return out
     .split('\n')
     .filter((line) => !/^[^\n]{0,40}[:\-–→👉]\s*$/u.test(line.trim()) || !line.trim())
@@ -53,21 +54,44 @@ function sanitize(text) {
   return tidy(onlyAllowedLinks(text));
 }
 
+/** Template text without its own sign-off (a random one is added back). */
+function withoutSignoff(text) {
+  return tidy(text.replace(/\s*[-–—~]\s*(?:team\s*)?GK\s*Auto\s*Herb[^\n]*$/i, '').replace(SIGNOFF_RE, ''));
+}
+
 /** OTPs and codes are never touched. */
 function isSensitive(text) {
   return /\b(otp|one[- ]time|verification code|login code)\b/i.test(text);
 }
 
-/** Cheap variation without Groq: greeting, closing and a light emoji change. */
+// One of these is picked at random for every message, so the layout changes too
+const LAYOUTS = [
+  'Layout: a short greeting line with the name; then 1-2 short lines with the key detail (date/time, car or amount) in *single asterisks*; any link alone on its own line; one blank line; sign-off line.',
+  'Layout: one short friendly paragraph of 2-3 sentences (key detail in *single asterisks*); any link on the next line; sign-off on the last line.',
+  'Layout: greeting with the name in *bold*; then each key fact on its own line starting with a fitting emoji (like 📅 🚗 🧾 💰); any link alone on its own line; sign-off line.',
+  'Layout: open straight with the key detail in *bold* (no separate greeting line), then one warm line using the name; any link alone on its own line; sign-off line.',
+];
+const SIGNOFFS = ['– GK AutoHerb', '— Team GK AutoHerb', '– GK AutoHerb Studio', 'Regards, GK AutoHerb', '~ GK AutoHerb, Vadodara'];
+const SIGNOFF_RE = /^\s*(?:[-–—~]|regards,?)\s*(?:team\s*)?gk\s*auto\s*herb.*$/gim;
+
+/** Variation without Groq: random greeting, sign-off, emoji and layout. */
 function localVariant(text) {
-  let out = text;
-  out = out.replace(/^(hi|hello|hey|dear)\b/i, () => pick(['Hi', 'Hello', 'Hey', 'Namaste']));
-  out = out.replace(/[-–]\s*GK\s*Auto\s*Herb\.?\s*$/i, () => pick(['– GK AutoHerb', '— Team GK AutoHerb', '– GK AutoHerb Studio', '~ GK AutoHerb']));
-  if (!/[\u{1F300}-\u{1FAFF}]/u.test(out) && Math.random() < 0.6) {
-    out = out.replace(/([.!])?\s*$/, (m, p) => `${p || '.'} ${pick(['🚗', '✨', '🙂', '🧽', '👍'])}`);
+  // Keep each link with its label ("Track: https://…") on its own line
+  const LINK = /(?:[A-Za-z][\w ]{0,24}:\s*)?https?:\/\/\S+/g;
+  const links = withoutSignoff(text).match(LINK) || [];
+  let words = withoutSignoff(text).replace(LINK, '').trim();
+  words = words.replace(/^(hi|hello|hey|dear)\b/i, () => pick(['Hi', 'Hello', 'Hey', 'Namaste']));
+  const sentences = words.split(/(?<=[.!?])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+  const emoji = pick([' 🚗', ' ✨', ' 🙂', ' 🧽', ' 👍', '']);
+  let body;
+  switch (Math.floor(Math.random() * 3)) {
+    case 0: body = sentences.join(' '); break; // one paragraph
+    case 1: body = sentences.join('\n'); break; // a line per sentence
+    default: body = [sentences[0], sentences.slice(1).join(' ')].filter(Boolean).join('\n\n'); // greeting + paragraph
   }
-  if (out === text) out = `${text}${pick(['', ' ', '​'])}`;
-  return out;
+  const parts = [body + emoji];
+  if (links.length) parts.push(links.join('\n'));
+  return tidy(`${parts.join('\n')}\n\n${pick(SIGNOFFS)}`);
 }
 
 async function groqRewrite(original, kind) {
@@ -89,7 +113,7 @@ async function groqRewrite(original, kind) {
           content: `You rewrite WhatsApp messages from GK AutoHerb, a car detailing studio in Vadodara, so each one is worded freshly. ${style}
 ${kind === 'bulk' ? 'This is a reminder or offer: make it warm and personal.' : 'This is a service update: keep it clear and to the point.'}
 Rules: keep every fact, name, date, time, amount, number and link exactly as given; never add links, offers, prices or promises that are not in the message; vary the wording and sentence order; at most 2 emojis.
-Format for WhatsApp: start with a short greeting line using the customer's name if given; then 1-3 short lines (put the key detail like date/time, car or amount in *single asterisks* for bold); put any link alone on its own line; leave one blank line before the sign-off; last line exactly "– GK AutoHerb". No headings, no markdown lists, no ** double asterisks. Reply with the message only.`,
+Format for WhatsApp. ${pick(LAYOUTS)} The last line must be exactly "${pick(SIGNOFFS)}". No headings, no markdown lists, no ** double asterisks. Reply with the message only.`,
         },
         { role: 'user', content: original },
       ],
@@ -106,7 +130,7 @@ Format for WhatsApp: start with a short greeting line using the customer's name 
  */
 async function vary(raw, kind = 'high') {
   if (!raw || isSensitive(raw)) return raw;
-  const text = sanitize(raw);
+  const text = withoutSignoff(sanitize(raw));
   if (groqEnabled()) {
     try {
       const out = sanitize(await groqRewrite(text, kind));
