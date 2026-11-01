@@ -217,14 +217,28 @@ exports.providerStatus = async (req, res) => {
   res.json({
     success: true,
     data: {
-      connected: whatsapp.isConfigured(),
-      mode: whatsapp.isConfigured() ? 'cloud_api' : 'queued',
+      connected: whatsapp.isConfigured() || whatsapp.gatewayConfigured(),
+      mode: whatsapp.isConfigured() ? 'cloud_api' : whatsapp.gatewayConfigured() ? 'gateway' : 'queued',
       webhook_url: `${base}/api/whatsapp/webhook`,
       verify_token_set: Boolean(process.env.WHATSAPP_VERIFY_TOKEN),
       app_secret_set: Boolean(process.env.WHATSAPP_APP_SECRET),
       required_env: ['WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_VERIFY_TOKEN', 'WHATSAPP_APP_SECRET'],
     },
   });
+};
+
+// ─── STUDIO-PHONE GATEWAY: customer replies forwarded by wa-gateway ──
+exports.gatewayIncoming = async (req, res) => {
+  const key = process.env.WA_GATEWAY_KEY;
+  if (!key || req.get('x-gateway-key') !== key) return res.sendStatus(401);
+  res.sendStatus(200);
+  const { from, name, text, id } = req.body || {};
+  if (!from || !text) return;
+  try {
+    await whatsappBot.handleIncoming({ from: String(from), name: name || null, text: String(text).slice(0, 2000), providerMessageId: id || null });
+  } catch (err) {
+    console.error('[WA GATEWAY] incoming error:', err);
+  }
 };
 
 // ─── META WEBHOOK: verification handshake (public) ──────

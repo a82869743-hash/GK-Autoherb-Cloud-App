@@ -48,6 +48,8 @@ app.get('/api/whatsapp/webhook', whatsappCtrl.webhookVerify);
 app.post('/api/whatsapp/webhook', express.raw({ type: '*/*', limit: '2mb' }), whatsappCtrl.webhookReceive);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Replies from the studio-phone gateway (shared-key protected)
+app.post('/api/whatsapp/gateway-incoming', whatsappCtrl.gatewayIncoming);
 
 // ─── Serve uploaded product images ──────────────────
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));

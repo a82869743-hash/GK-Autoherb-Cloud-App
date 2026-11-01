@@ -31,6 +31,27 @@ function clickToChatLink(phone, body) {
   return `https://api.whatsapp.com/send?phone=${normalizePhone(phone)}&text=${encodeURIComponent(body || '')}`;
 }
 
+/** Studio-phone gateway (wa-gateway service) — used when the Meta Cloud API is not set up. */
+function gatewayConfigured() {
+  return Boolean(process.env.WA_GATEWAY_URL && process.env.WA_GATEWAY_KEY);
+}
+
+async function viaGateway(to, body) {
+  try {
+    const res = await fetch(`${process.env.WA_GATEWAY_URL.replace(/\/$/, '')}/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-gateway-key': process.env.WA_GATEWAY_KEY },
+      body: JSON.stringify({ to, text: body }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success) return { success: true, status: 'sent', mode: 'gateway', wa_link: clickToChatLink(to, body) };
+    return { success: false, status: 'failed', mode: 'gateway', error: data.error || `HTTP ${res.status}`, wa_link: clickToChatLink(to, body) };
+  } catch (err) {
+    return { success: false, status: 'failed', mode: 'gateway', error: err.message, wa_link: clickToChatLink(to, body) };
+  }
+}
+
 async function post(payload) {
   const res = await fetch(`${API_URL}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
     method: 'POST',
@@ -52,6 +73,7 @@ async function post(payload) {
  */
 async function sendText(phone, body) {
   const to = normalizePhone(phone);
+  if (!isConfigured() && gatewayConfigured()) return viaGateway(to, body);
   if (!isConfigured()) {
     return { success: true, status: 'queued', mode: 'queued', wa_link: clickToChatLink(to, body) };
   }
@@ -69,6 +91,7 @@ async function sendText(phone, body) {
  */
 async function sendTemplate(phone, providerTemplateName, language, orderedParams, fallbackBody) {
   const to = normalizePhone(phone);
+  if (!isConfigured() && gatewayConfigured()) return viaGateway(to, fallbackBody);
   if (!isConfigured()) {
     return { success: true, status: 'queued', mode: 'queued', wa_link: clickToChatLink(to, fallbackBody) };
   }
@@ -90,6 +113,10 @@ async function sendTemplate(phone, providerTemplateName, language, orderedParams
 /** Interactive quick-reply buttons (max 3) — used by the reminder bot inside the 24h window. */
 async function sendButtons(phone, body, buttons) {
   const to = normalizePhone(phone);
+  // A linked phone can't send real buttons, so the replies are listed as text
+  if (!isConfigured() && gatewayConfigured()) {
+    return viaGateway(to, `${body}\n\n${buttons.slice(0, 3).map((b) => `Reply *${b.title}*`).join('\n')}`);
+  }
   if (!isConfigured()) {
     return { success: true, status: 'queued', mode: 'queued', wa_link: clickToChatLink(to, body) };
   }
@@ -173,6 +200,7 @@ function parseWebhook(payload) {
 
 module.exports = {
   isConfigured,
+  gatewayConfigured,
   normalizePhone,
   clickToChatLink,
   sendText,

@@ -140,7 +140,10 @@ class MessagingService {
    * Deliver one rendered template to one phone over WhatsApp (+ SMS fallback) and log it.
    */
   async deliver({ customerId = null, mobile, template, variables, references = {} }) {
-    const messageBody = renderTemplate(template.message_body, variables);
+    // Reminders get a friendly Groq rewrite (falls back to the template text)
+    const messageBody = template.provider_template_name
+      ? renderTemplate(template.message_body, variables)
+      : await require('./groqWriter').polish(template.event_trigger, renderTemplate(template.message_body, variables));
 
     // Same message in the app inbox + phone notification (free, works even before WhatsApp is connected)
     require('./appNotify').notifyUser({

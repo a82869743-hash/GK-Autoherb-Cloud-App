@@ -1,0 +1,18 @@
+{
+  "name": "gk-wa-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GK AutoHerb WhatsApp gateway: sends app messages from the studio WhatsApp number (linked by QR).",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "6.7.23",
+    "pino": "9.7.0",
+    "qrcode": "1.5.4"
+  }
+}
