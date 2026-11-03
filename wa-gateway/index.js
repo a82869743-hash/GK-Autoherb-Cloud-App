@@ -21,6 +21,7 @@ const path = require('path');
 const fs = require('fs');
 const QRCode = require('qrcode');
 const pino = require('pino');
+const { createSentStore } = require('./sentStore');
 
 // ── Sending rules (hard-coded) ─────────────────────────────────────────
 const RULES = Object.freeze({
@@ -51,6 +52,7 @@ const HOST = process.env.HOST || '127.0.0.1';
 const AUTH_DIR = path.resolve(process.env.AUTH_DIR || path.join(__dirname, 'auth'));
 const DRY_RUN = process.env.DRY_RUN === 'true';
 const APP_INCOMING_URL = process.env.APP_INCOMING_URL || '';
+const sentStore = createSentStore(`${AUTH_DIR}-sent.json`); // beside the session, survives re-linking
 
 const rand = ([a, b]) => Math.round(a + Math.random() * (b - a));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -89,7 +91,7 @@ async function start() {
   const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } = require('@whiskeysockets/baileys');
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
-  sock = makeWASocket({ auth: state, logger: pino({ level: 'warn' }), version, browser: ['GK AutoHerb', 'Chrome', '1.0'], markOnlineOnConnect: false });
+  sock = makeWASocket({ auth: state, logger: pino({ level: 'warn' }), version, browser: ['GK AutoHerb', 'Chrome', '1.0'], markOnlineOnConnect: false, getMessage: async (key) => sentStore.get(key.id) });
   sock.ev.on('creds.update', saveCreds);
 
   sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
@@ -104,6 +106,7 @@ async function start() {
       const code = lastDisconnect?.error?.output?.statusCode;
       if (code === DisconnectReason.loggedOut) {
         console.log('[gateway] phone unlinked — clearing session, new QR will show');
+        me = null; lastQr = null;
         fs.rmSync(AUTH_DIR, { recursive: true, force: true });
       }
       setTimeout(() => start().catch((e) => console.error('[gateway] restart failed', e.message)), 5000);
@@ -169,13 +172,15 @@ function nextJob() {
 async function deliver(job) {
   const to = `${job.to}@s.whatsapp.net`;
   if (DRY_RUN) { console.log(`[dry-run] ${new Date().toISOString()} ${job.priority} → ${job.to}: ${job.text.replace(/\n/g, ' ⏎ ').slice(0, 140)}`); return; }
-  const [exists] = await sock.onWhatsApp(to).catch(() => [null]);
-  if (exists && exists.exists === false) throw new Error('Number is not on WhatsApp');
+  const found = await sock.onWhatsApp(to).catch(() => null); // only numbers on WhatsApp come back
+  if (found && !found.length) throw new Error('Number is not on WhatsApp');
+  const exists = found?.[0];
   await sock.presenceSubscribe(to).catch(() => {});
   await sock.sendPresenceUpdate('composing', to).catch(() => {});
   await sleep(1500 + Math.min(6000, job.text.length * 25) + Math.random() * 1500); // "typing"
   await sock.sendPresenceUpdate('paused', to).catch(() => {});
-  await sock.sendMessage(to, { text: job.text });
+  const sent = await sock.sendMessage(exists?.jid || to, { text: job.text });
+  sentStore.save(sent?.key?.id, sent?.message);
 }
 
 async function pump() {
