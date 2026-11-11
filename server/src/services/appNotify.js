@@ -95,19 +95,53 @@ async function findUser({ userId, mobile }) {
   return u[0] || null;
 }
 
+// Android app (Capacitor) phones: Firebase Cloud Messaging. Rows are stored as endpoint "fcm:<token>".
+// Needs FIREBASE_SERVICE_ACCOUNT = path to the Firebase service-account JSON; without it app pushes are skipped.
+let fcm = null;
+function firebase() {
+  if (fcm !== null) return fcm;
+  try {
+    const file = process.env.FIREBASE_SERVICE_ACCOUNT;
+    if (!file) return (fcm = false);
+    const admin = require('firebase-admin');
+    if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.cert(require(require('path').resolve(file))) });
+    fcm = admin.messaging();
+  } catch (err) {
+    console.warn('[appNotify] Firebase not available:', err.message);
+    fcm = false;
+  }
+  return fcm;
+}
+
+async function sendFcm(token, payload) {
+  const m = firebase();
+  if (!m) throw Object.assign(new Error('fcm off'), { skip: true });
+  await m.send({
+    token,
+    notification: { title: payload.title, body: payload.body },
+    data: { url: String(payload.url || '/') },
+    android: { priority: 'high', notification: { channelId: 'gk_updates', color: '#D32F2F', icon: 'ic_stat_gk' } },
+  });
+}
+
 /** Send a push to every phone this user enabled; drops subscriptions the browser has revoked. */
 async function pushToUser(userId, payload) {
   const wp = push();
-  if (!wp) return 0;
   const [subs] = await pool.query('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?', [userId]);
   let sent = 0;
   for (const s of subs) {
+    const isApp = s.endpoint.startsWith('fcm:');
     try {
-      await wp.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(payload), { TTL: 60 * 60 * 24 });
+      if (isApp) await sendFcm(s.endpoint.slice(4), payload);
+      else if (wp) await wp.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(payload), { TTL: 60 * 60 * 24 });
+      else continue;
       sent++;
       await pool.query('UPDATE push_subscriptions SET last_used_at = NOW(), fail_count = 0 WHERE id = ?', [s.id]).catch(() => {});
     } catch (err) {
-      if (err.statusCode === 404 || err.statusCode === 410) {
+      if (err.skip) continue;
+      const gone = err.statusCode === 404 || err.statusCode === 410
+        || ['messaging/registration-token-not-registered', 'messaging/invalid-registration-token'].includes(err.code || err.errorInfo?.code);
+      if (gone) {
         await pool.query('DELETE FROM push_subscriptions WHERE id = ?', [s.id]).catch(() => {});
       } else {
         await pool.query('UPDATE push_subscriptions SET fail_count = fail_count + 1 WHERE id = ?', [s.id]).catch(() => {});

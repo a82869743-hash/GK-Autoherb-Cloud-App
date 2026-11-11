@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import { refreshPushSubscription } from './utils/push';
+import { initNativeApp } from './utils/native';
 import { useInactivityTimer, useTokenRefresh } from './utils/useInactivityTimer';
 import AdminLayout from './components/layout/AdminLayout';
 import CustomerLayout from './components/layout/CustomerLayout';
@@ -134,6 +135,10 @@ export default function App() {
 
   // Silent token refresh (checks expiry on mount, refreshes every 45 min)
   useTokenRefresh();
+
+  // Android app: status bar, back button, notification taps
+  const navigate = useNavigate();
+  useEffect(() => { initNativeApp(navigate); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Phone already allowed notifications? Link it to whoever is logged in now
   useEffect(() => {

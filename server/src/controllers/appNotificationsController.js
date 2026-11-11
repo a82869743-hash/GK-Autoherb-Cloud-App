@@ -52,8 +52,14 @@ exports.publicKey = (req, res) => {
 
 exports.subscribe = async (req, res) => {
   try {
-    const { endpoint, keys } = req.body || {};
-    if (!endpoint || !/^https:\/\//.test(endpoint) || !keys?.p256dh || !keys?.auth) {
+    let { endpoint, keys } = req.body || {};
+    // Android app sends its Firebase token instead of a browser subscription
+    const fcmToken = String(req.body?.fcm_token || '');
+    if (/^[\w:-]{20,500}$/.test(fcmToken)) {
+      endpoint = `fcm:${fcmToken}`;
+      keys = { p256dh: 'fcm', auth: 'fcm' };
+    }
+    if (!endpoint || !(/^https:\/\//.test(endpoint) || endpoint.startsWith('fcm:')) || !keys?.p256dh || !keys?.auth) {
       return res.status(400).json({ success: false, error: 'Invalid subscription' });
     }
     // One row per phone/browser; re-subscribing (or a new login on the same phone) moves it to this user

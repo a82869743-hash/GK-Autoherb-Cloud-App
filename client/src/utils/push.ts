@@ -1,4 +1,5 @@
 import api from '../api/axiosInstance';
+import { isNativeApp, nativePushToken, nativePushGranted } from './native';
 
 /** Phone notifications (web push). Free — no SMS/WhatsApp provider needed. */
 
@@ -29,7 +30,21 @@ function urlBase64ToUint8Array(base64: string) {
   return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 }
 
+const FCM_KEY = 'gk-fcm-token';
+const savedFcm = () => { try { return localStorage.getItem(FCM_KEY); } catch { return null; } };
+
+/** Android app: register with Firebase and link this phone to the logged-in account. */
+async function enableNativePush(prompt: boolean): Promise<PushState> {
+  const token = await nativePushToken(prompt);
+  if (token === 'denied') return 'denied';
+  if (!token) return 'off';
+  await api.post('/app-notifications/push/subscribe', { fcm_token: token });
+  try { localStorage.setItem(FCM_KEY, token); } catch { /* ignore */ }
+  return 'on';
+}
+
 export async function getPushState(): Promise<PushState> {
+  if (isNativeApp()) return (await nativePushGranted()) && savedFcm() ? 'on' : 'off';
   if (needsIOSInstall() && !pushSupported()) return 'ios-install';
   if (!pushSupported()) return needsIOSInstall() ? 'ios-install' : 'unsupported';
   if (Notification.permission === 'denied') return 'denied';
@@ -40,6 +55,7 @@ export async function getPushState(): Promise<PushState> {
 
 /** Ask permission (must be called from a tap) and save this phone for notifications. */
 export async function enablePush(): Promise<PushState> {
+  if (isNativeApp()) return enableNativePush(true);
   if (!pushSupported()) return needsIOSInstall() ? 'ios-install' : 'unsupported';
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') return permission === 'denied' ? 'denied' : 'off';
@@ -56,6 +72,12 @@ export async function enablePush(): Promise<PushState> {
 }
 
 export async function disablePush(): Promise<PushState> {
+  if (isNativeApp()) {
+    const t = savedFcm();
+    if (t) await api.post('/app-notifications/push/unsubscribe', { endpoint: `fcm:${t}` }).catch(() => {});
+    try { localStorage.removeItem(FCM_KEY); } catch { /* ignore */ }
+    return 'off';
+  }
   const reg = await registerServiceWorker();
   const sub = await reg?.pushManager.getSubscription();
   if (sub) {
@@ -68,6 +90,13 @@ export async function disablePush(): Promise<PushState> {
 /** After login: if this phone already allowed notifications, link it to this account (no prompt). */
 export async function refreshPushSubscription() {
   try {
+    if (isNativeApp()) {
+      // First login in the app: ask once; after that, quietly re-link the phone
+      let asked = false;
+      try { asked = localStorage.getItem('gk-push-asked') === '1'; localStorage.setItem('gk-push-asked', '1'); } catch { /* ignore */ }
+      await enableNativePush(!asked);
+      return;
+    }
     if (!pushSupported() || Notification.permission !== 'granted') return;
     await enablePush();
   } catch {
@@ -78,6 +107,17 @@ export async function refreshPushSubscription() {
 /** On logout: unlink this phone so the next person using it doesn't get the previous user's alerts. */
 export function unlinkPushOnLogout(token: string | null) {
   try {
+    if (token && isNativeApp()) {
+      const t = savedFcm();
+      if (!t) return;
+      const base = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
+      fetch(`${base}/app-notifications/push/unsubscribe`, {
+        method: 'POST', keepalive: true,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ endpoint: `fcm:${t}` }),
+      }).catch(() => {});
+      return;
+    }
     if (!token || !pushSupported()) return;
     navigator.serviceWorker.getRegistration('/').then(async (reg) => {
       const sub = await reg?.pushManager.getSubscription();
