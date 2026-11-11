@@ -88,7 +88,8 @@ function cleanText(text) {
 
 async function start() {
   if (DRY_RUN) { console.log('[gateway] DRY_RUN — nothing is really sent'); return; }
-  const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } = require('@whiskeysockets/baileys');
+  // Baileys 7 (ESM) understands WhatsApp's LID addressing; 6.x left messages on "Waiting for this message"
+  const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } = await import('@whiskeysockets/baileys');
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
   sock = makeWASocket({ auth: state, logger: pino({ level: 'warn' }), version, browser: ['GK AutoHerb', 'Chrome', '1.0'], markOnlineOnConnect: false, getMessage: async (key) => sentStore.get(key.id) });
@@ -117,13 +118,17 @@ async function start() {
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify' || !APP_INCOMING_URL) return;
     for (const m of messages) {
-      if (m.key.fromMe || !m.key.remoteJid?.endsWith('@s.whatsapp.net')) continue;
+      if (m.key.fromMe) continue;
+      // Customers on WhatsApp's newer @lid ids still need their phone number for the bot
+      let jid = m.key.remoteJid || '';
+      if (jid.endsWith('@lid')) jid = m.key.remoteJidAlt || (await sock.signalRepository?.lidMapping?.getPNForLID(jid).catch(() => null)) || '';
+      if (!jid.endsWith('@s.whatsapp.net')) continue;
       const text = m.message?.conversation || m.message?.extendedTextMessage?.text || '';
       if (!text) continue;
       fetch(APP_INCOMING_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-gateway-key': KEY },
-        body: JSON.stringify({ from: m.key.remoteJid.split('@')[0], name: m.pushName || null, text, id: m.key.id }),
+        body: JSON.stringify({ from: jid.split('@')[0].split(':')[0], name: m.pushName || null, text, id: m.key.id }),
       }).catch((e) => console.error('[gateway] forward failed', e.message));
     }
   });
