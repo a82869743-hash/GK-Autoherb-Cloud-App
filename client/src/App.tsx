@@ -8,6 +8,7 @@ import AdminLayout from './components/layout/AdminLayout';
 import CustomerLayout from './components/layout/CustomerLayout';
 import StaffLayout from './components/layout/StaffLayout';
 import LoginPage from './pages/auth/LoginPage';
+import PolicyPage from './pages/PolicyPage';
 import RegisterPage from './pages/auth/RegisterPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 import ProtectedRoute from './router/ProtectedRoute';
@@ -301,6 +302,11 @@ export default function App() {
       <ToastContainer />
       <Routes>
       {/* Public routes */}
+      <Route path="/terms" element={<PolicyPage kind="terms" />} />
+      <Route path="/privacy" element={<PolicyPage kind="privacy" />} />
+      <Route path="/refund-policy" element={<PolicyPage kind="refund" />} />
+      <Route path="/shipping-policy" element={<PolicyPage kind="shipping" />} />
+      <Route path="/contact" element={<PolicyPage kind="contact" />} />
       <Route path="/login" element={
         isAuthenticated ? <Navigate to={getDefaultRedirect()} replace /> : <LoginPage />
       } />

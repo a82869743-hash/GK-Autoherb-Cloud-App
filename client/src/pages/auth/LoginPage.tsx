@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { Smartphone, Lock, ArrowRight, ShieldCheck, RefreshCw, Sparkles, User, Car } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/axiosInstance';
+import { PolicyLinks } from '../PolicyPage';
 import { useAuthStore } from '../../store/authStore';
 
 const loginSchema = z.object({
@@ -345,6 +346,7 @@ export default function LoginPage() {
             Prefer a password?{' '}
             <Link to="/register" className="text-[#D32F2F] font-bold">Create an account</Link>
           </p>
+          <PolicyLinks className="mt-5" />
         </div>
       </div>
     </div>
