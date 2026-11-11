@@ -1,4 +1,11 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+const GkNative = registerPlugin<{ pushAvailable(): Promise<{ available: boolean }> }>('GkNative');
+
+/** Firebase configured in this app build? (Registering push without it crashes Android.) */
+async function pushReady() {
+  try { return (await GkNative.pushAvailable()).available; } catch { return false; }
+}
 
 /** True inside the GK AutoHerb Android app (Capacitor), false on the website. */
 export const isNativeApp = () => Capacitor.isNativePlatform();
@@ -35,6 +42,7 @@ export async function initNativeApp(navigate: (to: string) => void) {
 
 /** Firebase token for this phone; asks permission when `prompt` is true (must follow a tap). */
 export async function nativePushToken(prompt: boolean): Promise<string | 'denied' | null> {
+  if (!(await pushReady())) return null;
   const { PushNotifications } = await import('@capacitor/push-notifications');
   let perm = await PushNotifications.checkPermissions();
   if (perm.receive !== 'granted' && prompt) perm = await PushNotifications.requestPermissions();

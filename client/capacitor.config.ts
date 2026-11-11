@@ -5,10 +5,12 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.gkautoherb.app',
   appName: 'GK AutoHerb',
-  webDir: 'dist',
+  webDir: 'native-shell', // tiny offline page; the app itself loads the live site
+
   server: {
     url: 'https://gkautobook.cloud',
     androidScheme: 'https',
+    errorPath: 'index.html',
     allowNavigation: ['gkautobook.cloud', '*.gkautobook.cloud', '*.razorpay.com'],
   },
   android: {
