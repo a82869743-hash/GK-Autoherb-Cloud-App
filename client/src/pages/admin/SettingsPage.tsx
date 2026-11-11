@@ -185,8 +185,8 @@ export default function SettingsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {[
                 { key: 'classic', name: 'Classic', desc: 'Photo banner, tile grid, sliding cards', swatch: 'from-[#1a1a1a] to-[#5a1010]' },
-                { key: 'bold', name: 'Bold Studio', desc: 'Dark header, big Book button, large photo cards', swatch: 'from-black to-[#D32F2F]' },
-                { key: 'minimal', name: 'Clean Minimal', desc: 'Light, search first, icon grid and simple list', swatch: 'from-white to-red-100' },
+                { key: 'bold', name: 'Noir Garage', desc: 'Dark cinematic hero, live tracker, signature photo cards, GK Privé card', swatch: 'from-black via-[#1a0505] to-[#D32F2F]' },
+                { key: 'minimal', name: 'Atelier', desc: 'Ivory editorial look, garage card, bento photo grid, numbered menu', swatch: 'from-[#F5F1EA] to-[#C9A86A]' },
               ].map((s) => {
                 const on = (form.customer_home_style || 'classic') === s.key;
                 return (
