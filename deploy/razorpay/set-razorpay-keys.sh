@@ -23,5 +23,6 @@ if [[ -n "$WSEC" && ! "$WSEC" =~ ^[^[:space:]]{8,128}$ ]]; then echo "Webhook se
 read -r -p "Install these on the LIVE server now? (yes/no): " OK
 [[ "$OK" == "yes" ]] || { echo "Cancelled, nothing changed."; exit 0; }
 
-scp -q -i "$KEY" remote-set-keys.sh "$HOST:/root/app/remote-set-keys.sh"
+# strip Windows line endings so bash on the server can run it
+tr -d '\r' < remote-set-keys.sh | ssh -i "$KEY" "$HOST" 'cat > /root/app/remote-set-keys.sh'
 printf '%s\n%s\n%s\n' "$KID" "$KSEC" "$WSEC" | ssh -i "$KEY" "$HOST" 'bash /root/app/remote-set-keys.sh; rc=$?; rm -f /root/app/remote-set-keys.sh; exit $rc'
