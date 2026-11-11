@@ -43,3 +43,7 @@ server/scripts/execute_e2e_journeys.js
 server/scripts/get_users.js
 GK-Autoherb-Frontend-Only/
 Gk auto/
+
+# Firebase server key (secret)
+*firebase-adminsdk*.json
+firebase-service-account.json
