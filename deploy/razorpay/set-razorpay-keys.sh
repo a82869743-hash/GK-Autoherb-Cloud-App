@@ -9,15 +9,20 @@ HOST="root@187.127.151.21"
 
 echo "Razorpay Dashboard -> Account & Settings -> API Keys -> Generate Key"
 echo
+echo "(Press Enter at Key ID to keep the keys already on the server and change only the webhook secret.)"
 read -r -p "Key ID (starts with rzp_live_ or rzp_test_): " KID
-[[ "$KID" =~ ^rzp_(live|test)_[A-Za-z0-9]{8,40}$ ]] || { echo "That does not look like a Razorpay Key ID."; exit 1; }
-read -r -s -p "Key Secret (hidden): " KSEC; echo
-[[ "$KSEC" =~ ^[A-Za-z0-9]{16,64}$ ]] || { echo "That does not look like a Razorpay Key Secret."; exit 1; }
+KSEC=""
+if [[ -n "$KID" ]]; then
+  [[ "$KID" =~ ^rzp_(live|test)_[A-Za-z0-9]{8,40}$ ]] || { echo "That does not look like a Razorpay Key ID."; exit 1; }
+  read -r -s -p "Key Secret (hidden): " KSEC; echo
+  [[ "$KSEC" =~ ^[A-Za-z0-9]{16,64}$ ]] || { echo "That does not look like a Razorpay Key Secret."; exit 1; }
+fi
 echo
 echo "Webhook secret: the text you type in Razorpay -> Webhooks -> Secret."
 echo "Press Enter to keep the one already on the server."
 read -r -s -p "Webhook secret (hidden, optional): " WSEC; echo
 if [[ -n "$WSEC" && ! "$WSEC" =~ ^[^[:space:]]{8,128}$ ]]; then echo "Webhook secret must be 8+ characters, no spaces."; exit 1; fi
+[[ -z "$KID" && -z "$WSEC" ]] && { echo "Nothing to change."; exit 0; }
 
 [[ "$KID" == rzp_test_* ]] && echo "Note: TEST key - no real money will be charged."
 read -r -p "Install these on the LIVE server now? (yes/no): " OK
